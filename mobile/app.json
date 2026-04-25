@@ -5,9 +5,9 @@
     "version": "1.0.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "icon": "./assets/pulseora-icon.png",
+    "icon": "./mobile/assets/pulseora-icon.png",
     "splash": {
-      "image": "./assets/pulseora-splash-icon.png",
+      "image": "./mobile/assets/pulseora-splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#08141f"
     },
@@ -21,7 +21,7 @@
       "versionCode": 2,
       "package": "com.viraflow.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/pulseora-adaptive-foreground.png",
+        "foregroundImage": "./mobile/assets/pulseora-adaptive-foreground.png",
         "backgroundColor": "#08141f"
       }
     },
