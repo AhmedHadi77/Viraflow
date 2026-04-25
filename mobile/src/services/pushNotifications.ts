@@ -1,6 +1,3 @@
-import Constants from "expo-constants";
-import * as Device from "expo-device";
-import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { doc, setDoc } from "firebase/firestore";
 import { getFirebaseClientFirestore, isFirebaseClientConfigured } from "./firebaseClient";
@@ -13,6 +10,30 @@ const ANDROID_CHANNEL_ID = "pulseora-social";
 
 let notificationHandlerConfigured = false;
 
+function getExpoConstants() {
+  try {
+    return require("expo-constants").default as typeof import("expo-constants").default;
+  } catch {
+    return null;
+  }
+}
+
+function getExpoDevice() {
+  try {
+    return require("expo-device") as typeof import("expo-device");
+  } catch {
+    return null;
+  }
+}
+
+function getExpoNotifications() {
+  try {
+    return require("expo-notifications") as typeof import("expo-notifications");
+  } catch {
+    return null;
+  }
+}
+
 export const DEFAULT_PUSH_NOTIFICATIONS_STATUS: PushNotificationsStatus = {
   mode: "unavailable",
   permissionStatus: "undetermined",
@@ -20,7 +41,17 @@ export const DEFAULT_PUSH_NOTIFICATIONS_STATUS: PushNotificationsStatus = {
 };
 
 export async function registerForPushNotificationsAsync(userId: string): Promise<PushNotificationsStatus> {
+  const Device = getExpoDevice();
+  const Notifications = getExpoNotifications();
   configureNotificationHandler();
+
+  if (!Notifications) {
+    return {
+      mode: "local",
+      permissionStatus: "undetermined",
+      message: "Notifications are unavailable in this build, but the rest of Pulseora will keep working.",
+    };
+  }
 
   if (!isFirebaseClientConfigured()) {
     return {
@@ -30,7 +61,7 @@ export async function registerForPushNotificationsAsync(userId: string): Promise
     };
   }
 
-  if (!Device.isDevice) {
+  if (!Device?.isDevice) {
     return {
       mode: "unavailable",
       permissionStatus: "undetermined",
@@ -79,6 +110,11 @@ export async function registerForPushNotificationsAsync(userId: string): Promise
 }
 
 export async function scheduleLocalNotificationFromAppNotification(notification: AppNotification) {
+  const Notifications = getExpoNotifications();
+  if (!Notifications) {
+    return;
+  }
+
   configureNotificationHandler();
   await ensureAndroidNotificationChannel();
   await Notifications.scheduleNotificationAsync({
@@ -97,6 +133,11 @@ function readExpoProjectId() {
 }
 
 function hasAndroidGoogleServicesConfig() {
+  const Constants = getExpoConstants();
+  if (!Constants) {
+    return false;
+  }
+
   const constants = Constants as typeof Constants & {
     manifest?: { extra?: Record<string, unknown> };
     manifest2?: { extra?: Record<string, unknown> };
@@ -121,6 +162,15 @@ async function registerRemotePush(
   projectId: string,
   permissionStatus: PushNotificationsStatus["permissionStatus"]
 ): Promise<PushNotificationsStatus> {
+  const Notifications = getExpoNotifications();
+  if (!Notifications) {
+    return {
+      mode: "local",
+      permissionStatus,
+      message: "Remote push is unavailable in this build. The app will keep working without it.",
+    };
+  }
+
   try {
     const pushToken = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
     await saveDevicePushToken(userId, pushToken, projectId);
@@ -145,6 +195,11 @@ function configureNotificationHandler() {
     return;
   }
 
+  const Notifications = getExpoNotifications();
+  if (!Notifications) {
+    return;
+  }
+
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowBanner: true,
@@ -157,6 +212,7 @@ function configureNotificationHandler() {
 }
 
 async function saveDevicePushToken(userId: string, token: string, projectId: string) {
+  const Constants = getExpoConstants();
   const db = getFirebaseClientFirestore();
   if (!db) {
     throw new Error("Firestore is not configured. Add the EXPO_PUBLIC_FIREBASE_* values to mobile/.env.");
@@ -173,7 +229,7 @@ async function saveDevicePushToken(userId: string, token: string, projectId: str
       token: token.trim(),
       platform: Platform.OS,
       projectId,
-      executionEnvironment: String(Constants.executionEnvironment ?? ""),
+      executionEnvironment: String(Constants?.executionEnvironment ?? ""),
       updatedAt: now,
       createdAt: now,
     },
@@ -183,6 +239,11 @@ async function saveDevicePushToken(userId: string, token: string, projectId: str
 
 async function ensureAndroidNotificationChannel() {
   if (Platform.OS !== "android") {
+    return;
+  }
+
+  const Notifications = getExpoNotifications();
+  if (!Notifications) {
     return;
   }
 

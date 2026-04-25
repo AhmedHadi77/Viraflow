@@ -1,5 +1,4 @@
 import { createNavigationContainerRef, NavigationContainer, DefaultTheme } from "@react-navigation/native";
-import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -7,10 +6,6 @@ import { AppNavigator, RootStackParamList } from "./src/navigation/AppNavigator"
 import { AppProvider } from "./src/providers/AppProvider";
 import { getNotificationNavigationTarget } from "./src/services/notificationRouting";
 import { palette } from "./src/theme";
-
-if (__DEV__) {
-  require("expo-dev-client");
-}
 
 const navigationTheme = {
   ...DefaultTheme,
@@ -28,6 +23,19 @@ const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 export default function App() {
   React.useEffect(() => {
+    const Notifications = (() => {
+      try {
+        return require("expo-notifications") as typeof import("expo-notifications");
+      } catch (error) {
+        console.warn("Pulseora notification module is unavailable in this build.", error);
+        return null;
+      }
+    })();
+
+    if (!Notifications) {
+      return;
+    }
+
     const openNotificationTarget = (data: unknown, attempt = 0) => {
       const target = getNotificationNavigationTarget(typeof data === "object" && data ? (data as Record<string, unknown>) : {});
       if (!target) {

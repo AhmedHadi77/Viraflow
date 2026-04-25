@@ -221,7 +221,10 @@ const STORAGE_KEYS = {
   language: "viraflow.language",
   session: "viraflow.session",
   firebaseUser: "viraflow.firebaseUser",
+  bootVersion: "viraflow.bootVersion",
 } as const;
+
+const APP_BOOT_VERSION = "2026-04-25-safe-startup-1";
 
 interface AppContextValue {
   isBootstrapping: boolean;
@@ -356,11 +359,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     async function bootstrap() {
       try {
-        const [storedLanguage, storedSession, storedFirebaseUser] = await AsyncStorage.multiGet([
+        const [storedLanguage, storedSession, storedFirebaseUser, storedBootVersion] = await AsyncStorage.multiGet([
           STORAGE_KEYS.language,
           STORAGE_KEYS.session,
           STORAGE_KEYS.firebaseUser,
+          STORAGE_KEYS.bootVersion,
         ]);
+
+        if (storedBootVersion[1] !== APP_BOOT_VERSION) {
+          await AsyncStorage.multiRemove([STORAGE_KEYS.session, STORAGE_KEYS.firebaseUser]);
+          await AsyncStorage.setItem(STORAGE_KEYS.bootVersion, APP_BOOT_VERSION);
+          storedSession[1] = null;
+          storedFirebaseUser[1] = null;
+        }
 
         const languageValue = storedLanguage[1] as LanguageOption | null;
         if (languageValue) {
@@ -472,139 +483,162 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
 
     void (async () => {
-      const accessToken =
-        (isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token;
-      if (isCancelled || !accessToken) {
-        return;
-      }
-
-      const socket = connectRealtime(accessToken);
-      if (!socket) {
-        return;
-      }
-
-      const handleDirectMessage = (payload: DirectMessageRealtimeEvent) => {
-        setUsers((current) => upsertRealtimeUser(current, payload.message.sender));
-        setDirectThreads((current) => upsertDirectThread(current, mapApiDirectThreadToMobile(payload.thread)));
-        setDirectMessages((current) => mergeDirectMessages(current, [mapApiDirectMessageToMobile(payload.message)]));
-        if (payload.message.senderId !== session.userId) {
-          markDirectThreadDelivered(payload.thread.id);
-        }
-      };
-
-      const handleMarketplaceMessage = (payload: MarketplaceMessageRealtimeEvent) => {
-        setUsers((current) => upsertRealtimeUser(current, payload.message.sender));
-        setMarketplaceThreads((current) => upsertMarketplaceThread(current, mapApiMarketplaceThreadToMobile(payload.thread)));
-        setMarketplaceMessages((current) => mergeMarketplaceMessages(current, [mapApiMarketplaceMessageToMobile(payload.message)]));
-        if (payload.message.senderId !== session.userId) {
-          markMarketplaceThreadDelivered(payload.thread.id);
-        }
-      };
-
-      const handleCommunityMessage = (payload: CommunityMessageRealtimeEvent) => {
-        setUsers((current) => upsertRealtimeUser(current, payload.message.sender));
-        setCommunityChatMessages((current) => mergeCommunityChatMessages(current, [mapApiCommunityChatMessageToMobile(payload.message)]));
-        if (payload.message.senderId !== session.userId) {
-          markCommunityChatDelivered(payload.communityId);
-        }
-      };
-
-      const handleTyping = (payload: TypingRealtimeEvent) => {
-        if (payload.userId === session.userId) {
+      try {
+        const accessToken =
+          (isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token;
+        if (isCancelled || !accessToken) {
           return;
         }
 
-        if (payload.conversationType === "direct") {
-          setDirectTypingByThread((current) => updateTypingBucket(current, payload.threadId, payload.userId, payload.isTyping));
+        const socket = connectRealtime(accessToken);
+        if (!socket) {
           return;
         }
 
-        if (payload.conversationType === "marketplace") {
-          setMarketplaceTypingByThread((current) => updateTypingBucket(current, payload.threadId, payload.userId, payload.isTyping));
-          return;
-        }
+        const handleDirectMessage = (payload: DirectMessageRealtimeEvent) => {
+          setUsers((current) => upsertRealtimeUser(current, payload.message.sender));
+          setDirectThreads((current) => upsertDirectThread(current, mapApiDirectThreadToMobile(payload.thread)));
+          setDirectMessages((current) => mergeDirectMessages(current, [mapApiDirectMessageToMobile(payload.message)]));
+          if (payload.message.senderId !== session.userId) {
+            markDirectThreadDelivered(payload.thread.id);
+          }
+        };
 
-        setCommunityTypingById((current) => updateTypingBucket(current, payload.communityId, payload.userId, payload.isTyping));
-      };
-
-      const handleRead = (payload: ReadRealtimeEvent) => {
-        if (payload.userId === session.userId) {
-          return;
-        }
-
-        if (payload.conversationType === "direct") {
-          setDirectMessages((current) =>
-            applySeenStateToMessages(applyDeliveredStateToMessages(current, payload.messageIds, payload.userId), payload.messageIds, payload.userId)
-          );
-          return;
-        }
-
-        if (payload.conversationType === "marketplace") {
+        const handleMarketplaceMessage = (payload: MarketplaceMessageRealtimeEvent) => {
+          setUsers((current) => upsertRealtimeUser(current, payload.message.sender));
+          setMarketplaceThreads((current) => upsertMarketplaceThread(current, mapApiMarketplaceThreadToMobile(payload.thread)));
           setMarketplaceMessages((current) =>
-            applySeenStateToMessages(applyDeliveredStateToMessages(current, payload.messageIds, payload.userId), payload.messageIds, payload.userId)
+            mergeMarketplaceMessages(current, [mapApiMarketplaceMessageToMobile(payload.message)])
           );
-          return;
-        }
+          if (payload.message.senderId !== session.userId) {
+            markMarketplaceThreadDelivered(payload.thread.id);
+          }
+        };
 
-        setCommunityChatMessages((current) =>
-          applySeenStateToMessages(applyDeliveredStateToMessages(current, payload.messageIds, payload.userId), payload.messageIds, payload.userId)
-        );
-      };
+        const handleCommunityMessage = (payload: CommunityMessageRealtimeEvent) => {
+          setUsers((current) => upsertRealtimeUser(current, payload.message.sender));
+          setCommunityChatMessages((current) =>
+            mergeCommunityChatMessages(current, [mapApiCommunityChatMessageToMobile(payload.message)])
+          );
+          if (payload.message.senderId !== session.userId) {
+            markCommunityChatDelivered(payload.communityId);
+          }
+        };
 
-      const handleDelivered = (payload: DeliveredRealtimeEvent) => {
-        if (payload.userId === session.userId) {
-          return;
-        }
+        const handleTyping = (payload: TypingRealtimeEvent) => {
+          if (payload.userId === session.userId) {
+            return;
+          }
 
-        if (payload.conversationType === "direct") {
-          setDirectMessages((current) => applyDeliveredStateToMessages(current, payload.messageIds, payload.userId));
-          return;
-        }
+          if (payload.conversationType === "direct") {
+            setDirectTypingByThread((current) => updateTypingBucket(current, payload.threadId, payload.userId, payload.isTyping));
+            return;
+          }
 
-        if (payload.conversationType === "marketplace") {
-          setMarketplaceMessages((current) => applyDeliveredStateToMessages(current, payload.messageIds, payload.userId));
-          return;
-        }
+          if (payload.conversationType === "marketplace") {
+            setMarketplaceTypingByThread((current) =>
+              updateTypingBucket(current, payload.threadId, payload.userId, payload.isTyping)
+            );
+            return;
+          }
 
-        setCommunityChatMessages((current) => applyDeliveredStateToMessages(current, payload.messageIds, payload.userId));
-      };
+          setCommunityTypingById((current) => updateTypingBucket(current, payload.communityId, payload.userId, payload.isTyping));
+        };
 
-      const handlePresenceSnapshot = (payload: PresenceRealtimeEvent[]) => {
-        setPresenceByUserId(
-          payload.reduce<Record<string, UserPresence>>((next, item) => {
-            next[item.userId] = item;
-            return next;
-          }, {})
-        );
-      };
+        const handleRead = (payload: ReadRealtimeEvent) => {
+          if (payload.userId === session.userId) {
+            return;
+          }
 
-      const handlePresenceUpdate = (payload: PresenceRealtimeEvent) => {
-        setPresenceByUserId((current) => ({
-          ...current,
-          [payload.userId]: payload,
-        }));
-      };
+          if (payload.conversationType === "direct") {
+            setDirectMessages((current) =>
+              applySeenStateToMessages(
+                applyDeliveredStateToMessages(current, payload.messageIds, payload.userId),
+                payload.messageIds,
+                payload.userId
+              )
+            );
+            return;
+          }
 
-      socket.on("chat:direct-message", handleDirectMessage);
-      socket.on("chat:marketplace-message", handleMarketplaceMessage);
-      socket.on("chat:community-message", handleCommunityMessage);
-      socket.on("chat:delivered", handleDelivered);
-      socket.on("chat:typing", handleTyping);
-      socket.on("chat:read", handleRead);
-      socket.on("presence:snapshot", handlePresenceSnapshot);
-      socket.on("presence:update", handlePresenceUpdate);
+          if (payload.conversationType === "marketplace") {
+            setMarketplaceMessages((current) =>
+              applySeenStateToMessages(
+                applyDeliveredStateToMessages(current, payload.messageIds, payload.userId),
+                payload.messageIds,
+                payload.userId
+              )
+            );
+            return;
+          }
 
-      cleanupSocket = () => {
-        socket.off("chat:direct-message", handleDirectMessage);
-        socket.off("chat:marketplace-message", handleMarketplaceMessage);
-        socket.off("chat:community-message", handleCommunityMessage);
-        socket.off("chat:delivered", handleDelivered);
-        socket.off("chat:typing", handleTyping);
-        socket.off("chat:read", handleRead);
-        socket.off("presence:snapshot", handlePresenceSnapshot);
-        socket.off("presence:update", handlePresenceUpdate);
+          setCommunityChatMessages((current) =>
+            applySeenStateToMessages(
+              applyDeliveredStateToMessages(current, payload.messageIds, payload.userId),
+              payload.messageIds,
+              payload.userId
+            )
+          );
+        };
+
+        const handleDelivered = (payload: DeliveredRealtimeEvent) => {
+          if (payload.userId === session.userId) {
+            return;
+          }
+
+          if (payload.conversationType === "direct") {
+            setDirectMessages((current) => applyDeliveredStateToMessages(current, payload.messageIds, payload.userId));
+            return;
+          }
+
+          if (payload.conversationType === "marketplace") {
+            setMarketplaceMessages((current) => applyDeliveredStateToMessages(current, payload.messageIds, payload.userId));
+            return;
+          }
+
+          setCommunityChatMessages((current) => applyDeliveredStateToMessages(current, payload.messageIds, payload.userId));
+        };
+
+        const handlePresenceSnapshot = (payload: PresenceRealtimeEvent[]) => {
+          setPresenceByUserId(
+            payload.reduce<Record<string, UserPresence>>((next, item) => {
+              next[item.userId] = item;
+              return next;
+            }, {})
+          );
+        };
+
+        const handlePresenceUpdate = (payload: PresenceRealtimeEvent) => {
+          setPresenceByUserId((current) => ({
+            ...current,
+            [payload.userId]: payload,
+          }));
+        };
+
+        socket.on("chat:direct-message", handleDirectMessage);
+        socket.on("chat:marketplace-message", handleMarketplaceMessage);
+        socket.on("chat:community-message", handleCommunityMessage);
+        socket.on("chat:delivered", handleDelivered);
+        socket.on("chat:typing", handleTyping);
+        socket.on("chat:read", handleRead);
+        socket.on("presence:snapshot", handlePresenceSnapshot);
+        socket.on("presence:update", handlePresenceUpdate);
+
+        cleanupSocket = () => {
+          socket.off("chat:direct-message", handleDirectMessage);
+          socket.off("chat:marketplace-message", handleMarketplaceMessage);
+          socket.off("chat:community-message", handleCommunityMessage);
+          socket.off("chat:delivered", handleDelivered);
+          socket.off("chat:typing", handleTyping);
+          socket.off("chat:read", handleRead);
+          socket.off("presence:snapshot", handlePresenceSnapshot);
+          socket.off("presence:update", handlePresenceUpdate);
+          disconnectRealtime();
+        };
+      } catch (error) {
+        console.warn("Pulseora realtime startup was skipped for safety.", error);
         disconnectRealtime();
-      };
+      }
     })();
 
     return () => {
@@ -618,17 +652,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    return subscribeToFirebaseEngagement({
-      onUsers: (nextUsers) => {
-        setUsers((current) => mergeUsersById(nextUsers, current));
-      },
-      onReels: (nextReels) => {
-        setReels(mergeReelsById(nextReels, seedReels));
-      },
-      onComments: (nextComments) => {
-        setComments(mergeCommentsById(nextComments, seedComments));
-      },
-    });
+    try {
+      return subscribeToFirebaseEngagement({
+        onUsers: (nextUsers) => {
+          setUsers((current) => mergeUsersById(nextUsers, current));
+        },
+        onReels: (nextReels) => {
+          setReels(mergeReelsById(nextReels, seedReels));
+        },
+        onComments: (nextComments) => {
+          setComments(mergeCommentsById(nextComments, seedComments));
+        },
+      });
+    } catch (error) {
+      console.warn("Pulseora engagement sync was skipped for safety.", error);
+      return;
+    }
   }, [session?.token]);
 
   useEffect(() => {
@@ -637,10 +676,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    return subscribeToFirebaseInbox(firebaseUserId, {
-      onSavedPosts: setSavedPosts,
-      onNotifications: setNotifications,
-    });
+    try {
+      return subscribeToFirebaseInbox(firebaseUserId, {
+        onSavedPosts: setSavedPosts,
+        onNotifications: setNotifications,
+      });
+    } catch (error) {
+      console.warn("Pulseora inbox sync was skipped for safety.", error);
+      return;
+    }
   }, [session?.token, session?.userId]);
 
   useEffect(() => {
@@ -649,13 +693,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    return subscribeToFirebaseChat(firebaseUserId, {
-      onDirectThreads: setDirectThreads,
-      onDirectMessages: setDirectMessages,
-      onMarketplaceThreads: setMarketplaceThreads,
-      onMarketplaceMessages: setMarketplaceMessages,
-      onCommunityMessages: setCommunityChatMessages,
-    });
+    try {
+      return subscribeToFirebaseChat(firebaseUserId, {
+        onDirectThreads: setDirectThreads,
+        onDirectMessages: setDirectMessages,
+        onMarketplaceThreads: setMarketplaceThreads,
+        onMarketplaceMessages: setMarketplaceMessages,
+        onCommunityMessages: setCommunityChatMessages,
+      });
+    } catch (error) {
+      console.warn("Pulseora chat sync was skipped for safety.", error);
+      return;
+    }
   }, [session?.token, session?.userId]);
 
   useEffect(() => {
@@ -664,11 +713,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    return subscribeToFirebaseCommunityCommerce(firebaseUserId, {
-      onCommunities: setCommunities,
-      onCommunityPosts: setCommunityPosts,
-      onMarketplaceOrders: setMarketplaceOrders,
-    });
+    try {
+      return subscribeToFirebaseCommunityCommerce(firebaseUserId, {
+        onCommunities: setCommunities,
+        onCommunityPosts: setCommunityPosts,
+        onMarketplaceOrders: setMarketplaceOrders,
+      });
+    } catch (error) {
+      console.warn("Pulseora community sync was skipped for safety.", error);
+      return;
+    }
   }, [session?.token, session?.userId]);
 
   useEffect(() => {
@@ -678,13 +732,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    return subscribeToFirebaseMonetization(firebaseUserId, {
-      onSubscription: (nextSubscription) => {
-        setActiveSubscription(nextSubscription);
-        setUsers((current) => applyPlanTypeToUsers(current, firebaseUserId, nextSubscription));
-      },
-      onBoosts: setReelBoosts,
-    });
+    try {
+      return subscribeToFirebaseMonetization(firebaseUserId, {
+        onSubscription: (nextSubscription) => {
+          setActiveSubscription(nextSubscription);
+          setUsers((current) => applyPlanTypeToUsers(current, firebaseUserId, nextSubscription));
+        },
+        onBoosts: setReelBoosts,
+      });
+    } catch (error) {
+      console.warn("Pulseora monetization sync was skipped for safety.", error);
+      return;
+    }
   }, [session?.token, session?.userId]);
 
   useEffect(() => {

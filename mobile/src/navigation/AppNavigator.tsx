@@ -4,30 +4,10 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
 import { palette } from "../theme";
-import { AIToolsPlaceholderScreen } from "../screens/AIToolsPlaceholderScreen";
-import { BoostReelScreen } from "../screens/BoostReelScreen";
-import { CommunitiesScreen } from "../screens/CommunitiesScreen";
-import { CommunityDetailsScreen } from "../screens/CommunityDetailsScreen";
-import { CreateScreen } from "../screens/CreateScreen";
-import { CreateCommunityScreen } from "../screens/CreateCommunityScreen";
-import { DirectChatScreen } from "../screens/DirectChatScreen";
-import { DirectInboxScreen } from "../screens/DirectInboxScreen";
-import { EditProfileScreen } from "../screens/EditProfileScreen";
-import { HomeScreen } from "../screens/HomeScreen";
 import { LanguageScreen } from "../screens/LanguageScreen";
 import { LoginScreen } from "../screens/LoginScreen";
-import { MarketplaceChatScreen } from "../screens/MarketplaceChatScreen";
-import { MarketplaceCheckoutScreen } from "../screens/MarketplaceCheckoutScreen";
-import { MarketplaceInboxScreen } from "../screens/MarketplaceInboxScreen";
-import { MarketplaceScreen } from "../screens/MarketplaceScreen";
-import { NotificationsPlaceholderScreen } from "../screens/NotificationsPlaceholderScreen";
-import { ProductDetailsScreen } from "../screens/ProductDetailsScreen";
-import { ProfileScreen } from "../screens/ProfileScreen";
-import { ReelDetailsScreen } from "../screens/ReelDetailsScreen";
-import { ReelsScreen } from "../screens/ReelsScreen";
 import { RegisterScreen } from "../screens/RegisterScreen";
 import { SplashScreen } from "../screens/SplashScreen";
-import { SubscriptionScreen } from "../screens/SubscriptionScreen";
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -64,6 +44,8 @@ export type AppTabParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<AppTabParamList>();
 
+const loadScreen = <T,>(loader: () => T): (() => T) => loader;
+
 export function AppNavigator() {
   const { isBootstrapping, language, session } = useAppState();
   const copy = getCopy(language);
@@ -92,26 +74,86 @@ export function AppNavigator() {
       ) : (
         <>
           <Stack.Screen component={MainTabs} name="MainTabs" options={{ headerShown: false }} />
-          <Stack.Screen component={ReelDetailsScreen} name="ReelDetails" options={{ title: copy.reelDetails }} />
-          <Stack.Screen component={BoostReelScreen} name="BoostReel" options={{ title: "Boost reel" }} />
-          <Stack.Screen component={ProductDetailsScreen} name="ProductDetails" options={{ title: copy.productDetails }} />
-          <Stack.Screen component={CommunitiesScreen} name="Communities" options={{ title: "Pages, groups, channels" }} />
-          <Stack.Screen component={CreateCommunityScreen} name="CreateCommunity" options={{ title: "Create community" }} />
-          <Stack.Screen component={CommunityDetailsScreen} name="CommunityDetails" options={{ title: "Community" }} />
-          <Stack.Screen component={DirectInboxScreen} name="DirectInbox" options={{ title: "Direct messages" }} />
-          <Stack.Screen component={DirectChatScreen} name="DirectChat" options={{ title: "Direct chat" }} />
-          <Stack.Screen component={MarketplaceInboxScreen} name="MarketplaceInbox" options={{ title: "Marketplace inbox" }} />
-          <Stack.Screen component={MarketplaceChatScreen} name="MarketplaceChat" options={{ title: "Marketplace chat" }} />
-          <Stack.Screen component={MarketplaceCheckoutScreen} name="MarketplaceCheckout" options={{ title: "Checkout" }} />
-          <Stack.Screen component={EditProfileScreen} name="EditProfile" options={{ title: copy.editProfile }} />
-          <Stack.Screen component={SubscriptionScreen} name="Subscription" options={{ title: copy.subscription }} />
-          <Stack.Screen component={AIToolsPlaceholderScreen} name="AITools" options={{ title: copy.aiTools }} />
           <Stack.Screen
-            component={NotificationsPlaceholderScreen}
+            getComponent={loadScreen(() => require("../screens/ReelDetailsScreen").ReelDetailsScreen)}
+            name="ReelDetails"
+            options={{ title: copy.reelDetails }}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/BoostReelScreen").BoostReelScreen)}
+            name="BoostReel"
+            options={{ title: "Boost reel" }}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/ProductDetailsScreen").ProductDetailsScreen)}
+            name="ProductDetails"
+            options={{ title: copy.productDetails }}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/CommunitiesScreen").CommunitiesScreen)}
+            name="Communities"
+            options={{ title: "Pages, groups, channels" }}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/CreateCommunityScreen").CreateCommunityScreen)}
+            name="CreateCommunity"
+            options={{ title: "Create community" }}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/CommunityDetailsScreen").CommunityDetailsScreen)}
+            name="CommunityDetails"
+            options={{ title: "Community" }}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/DirectInboxScreen").DirectInboxScreen)}
+            name="DirectInbox"
+            options={{ title: "Direct messages" }}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/DirectChatScreen").DirectChatScreen)}
+            name="DirectChat"
+            options={{ title: "Direct chat" }}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/MarketplaceInboxScreen").MarketplaceInboxScreen)}
+            name="MarketplaceInbox"
+            options={{ title: "Marketplace inbox" }}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/MarketplaceChatScreen").MarketplaceChatScreen)}
+            name="MarketplaceChat"
+            options={{ title: "Marketplace chat" }}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/MarketplaceCheckoutScreen").MarketplaceCheckoutScreen)}
+            name="MarketplaceCheckout"
+            options={{ title: "Checkout" }}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/EditProfileScreen").EditProfileScreen)}
+            name="EditProfile"
+            options={{ title: copy.editProfile }}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/SubscriptionScreen").SubscriptionScreen)}
+            name="Subscription"
+            options={{ title: copy.subscription }}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/AIToolsPlaceholderScreen").AIToolsPlaceholderScreen)}
+            name="AITools"
+            options={{ title: copy.aiTools }}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/NotificationsPlaceholderScreen").NotificationsPlaceholderScreen)}
             name="Notifications"
             options={{ title: copy.notifications }}
           />
-          <Stack.Screen component={ProfileScreen} name="PublicProfile" options={{ title: copy.profile }} />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/ProfileScreen").ProfileScreen)}
+            name="PublicProfile"
+            options={{ title: copy.profile }}
+          />
         </>
       )}
     </Stack.Navigator>
@@ -157,11 +199,31 @@ function MainTabs() {
         },
       })}
     >
-      <Tab.Screen component={HomeScreen} name="Home" options={{ title: copy.home }} />
-      <Tab.Screen component={ReelsScreen} name="Reels" options={{ title: copy.reels }} />
-      <Tab.Screen component={CreateScreen} name="Create" options={{ title: copy.create }} />
-      <Tab.Screen component={MarketplaceScreen} name="Marketplace" options={{ title: copy.marketplace }} />
-      <Tab.Screen component={ProfileScreen} name="Profile" options={{ title: copy.profile }} />
+      <Tab.Screen
+        getComponent={loadScreen(() => require("../screens/HomeScreen").HomeScreen)}
+        name="Home"
+        options={{ title: copy.home }}
+      />
+      <Tab.Screen
+        getComponent={loadScreen(() => require("../screens/ReelsScreen").ReelsScreen)}
+        name="Reels"
+        options={{ title: copy.reels }}
+      />
+      <Tab.Screen
+        getComponent={loadScreen(() => require("../screens/CreateScreen").CreateScreen)}
+        name="Create"
+        options={{ title: copy.create }}
+      />
+      <Tab.Screen
+        getComponent={loadScreen(() => require("../screens/MarketplaceScreen").MarketplaceScreen)}
+        name="Marketplace"
+        options={{ title: copy.marketplace }}
+      />
+      <Tab.Screen
+        getComponent={loadScreen(() => require("../screens/ProfileScreen").ProfileScreen)}
+        name="Profile"
+        options={{ title: copy.profile }}
+      />
     </Tab.Navigator>
   );
 }
