@@ -1,8 +1,10 @@
 import admin from "firebase-admin";
 import { env } from "../config/env";
 
+let firebaseInitFailed = false;
+
 function getPrivateKey() {
-  return env.firebasePrivateKey.replace(/\\n/g, "\n");
+  return env.firebasePrivateKey.replace(/^["']|["']$/g, "").replace(/\\n/g, "\n");
 }
 
 export function isFirebaseAdminConfigured() {
@@ -19,14 +21,24 @@ export function getFirebaseAdminApp() {
     return existingApp;
   }
 
-  return admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: env.firebaseProjectId,
-      clientEmail: env.firebaseClientEmail,
-      privateKey: getPrivateKey(),
-    }),
-    storageBucket: env.firebaseStorageBucket || undefined,
-  });
+  if (firebaseInitFailed) {
+    return undefined;
+  }
+
+  try {
+    return admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: env.firebaseProjectId,
+        clientEmail: env.firebaseClientEmail,
+        privateKey: getPrivateKey(),
+      }),
+      storageBucket: env.firebaseStorageBucket || undefined,
+    });
+  } catch (error) {
+    firebaseInitFailed = true;
+    console.error("Firebase Admin initialization failed.", error);
+    return undefined;
+  }
 }
 
 export function getFirebaseAuth() {
