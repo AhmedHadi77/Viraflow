@@ -6,6 +6,8 @@ require("dotenv").config({ path: "./mobile/.env" });
 const mobileConfig = require("./mobile/app.json");
 const googleServicesFilePath = "./google-services.json";
 const hasGoogleServicesFile = fs.existsSync(path.join(__dirname, "google-services.json"));
+const buildProfile = process.env.EAS_BUILD_PROFILE || "";
+const isDevelopmentBuild = buildProfile === "development";
 
 const publicEnvDefaults = {
   EXPO_PUBLIC_API_BASE_URL: "https://viraflow-srrs.onrender.com/api",
@@ -43,12 +45,16 @@ module.exports = {
     },
   },
   plugins: [
-    [
-      "expo-dev-client",
-      {
-        launchMode: "launcher",
-      },
-    ],
+    ...(isDevelopmentBuild
+      ? [
+          [
+            "expo-dev-client",
+            {
+              launchMode: "launcher",
+            },
+          ],
+        ]
+      : []),
     ...(hasGoogleServicesFile
       ? [
           [
