@@ -300,6 +300,15 @@ export async function fetchApiBootstrap(token: string) {
   };
 }
 
+export async function fetchApiMe(token: string) {
+  const response = await request<{ user: ApiUserPayload }>("/auth/me", {
+    method: "GET",
+    token,
+  });
+
+  return response.user;
+}
+
 export async function fetchApiCatalog() {
   const [reels, products, communities, stories, boosts] = await Promise.all([
     request<{ reels: ApiReelPayload[] }>("/reels", { method: "GET" }),

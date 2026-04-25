@@ -34,6 +34,7 @@ import {
   createSubscriptionCheckoutSessionWithApi,
   createStoryWithApi,
   derivePlanType,
+  fetchApiMe,
   deliverNotificationWithApi,
   fetchApiBootstrap,
   fetchApiCatalog,
@@ -385,6 +386,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (!refreshedToken) {
             await AsyncStorage.multiRemove([STORAGE_KEYS.session, STORAGE_KEYS.firebaseUser]);
           } else {
+            if (isAppApiConfigured()) {
+              const verified = await fetchApiMe(refreshedToken)
+                .then(() => true)
+                .catch(() => false);
+
+              if (!verified) {
+                await AsyncStorage.multiRemove([STORAGE_KEYS.session, STORAGE_KEYS.firebaseUser]);
+                await logoutFromFirebaseProfile().catch(() => undefined);
+                setSession(null);
+                setUsers(seedUsers);
+                return;
+              }
+            }
+
             const nextSession = {
               ...parsedSession,
               token: refreshedToken,
@@ -1524,6 +1539,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           userId: response.user.id,
         };
 
+        if (isAppApiConfigured()) {
+          await fetchApiMe(nextSession.token);
+        }
+
         setSession(nextSession);
         setUsers((current) => withOwnedContent(upsertUser(current, response.user), reels, products));
         setStories(seedStories);
@@ -1622,6 +1641,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           token: response.token,
           userId: response.user.id,
         };
+
+        if (isAppApiConfigured()) {
+          await fetchApiMe(nextSession.token);
+        }
 
         setSession(nextSession);
         setUsers((current) => withOwnedContent(upsertUser(current, response.user), reels, products));
