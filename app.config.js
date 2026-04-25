@@ -42,15 +42,23 @@ module.exports = {
       ...(projectId ? { projectId } : {}),
     },
   },
-  plugins: hasGoogleServicesFile
-    ? [
-        [
-          "expo-notifications",
-          {
-            defaultChannel: "pulseora-social",
-            color: "#36E0A1",
-          },
-        ],
-      ]
-    : [],
+  plugins: [
+    [
+      "expo-dev-client",
+      {
+        launchMode: "launcher",
+      },
+    ],
+    ...(hasGoogleServicesFile
+      ? [
+          [
+            "expo-notifications",
+            {
+              defaultChannel: "pulseora-social",
+              color: "#36E0A1",
+            },
+          ],
+        ]
+      : []),
+  ],
 };
