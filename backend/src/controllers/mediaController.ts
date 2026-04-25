@@ -35,11 +35,7 @@ export function getMediaStatus(_req: AuthenticatedRequest, res: Response) {
 }
 
 export function postCloudinarySignature(req: AuthenticatedRequest, res: Response) {
-  const userId = req.user?.id;
-  if (!userId) {
-    res.status(401).json({ message: "Unauthorized." });
-    return;
-  }
+  const userId = req.user?.id ?? "shared";
 
   const parsed = signatureSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -70,12 +66,6 @@ export function postCloudinarySignature(req: AuthenticatedRequest, res: Response
 }
 
 export async function postMediaModerationCheck(req: AuthenticatedRequest, res: Response) {
-  const userId = req.user?.id;
-  if (!userId) {
-    res.status(401).json({ message: "Unauthorized." });
-    return;
-  }
-
   const parsed = moderationCheckSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json(parsed.error.flatten());
