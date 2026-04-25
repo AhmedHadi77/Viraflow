@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "560785384791",
+    "project_id": "viraflow-ad4b2",
+    "storage_bucket": "viraflow-ad4b2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:560785384791:android:3702dc07f111d297ae4a12",
+        "android_client_info": {
+          "package_name": "com.viraflow.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "560785384791-o7a534ss8l5q3kq619ikv3sn95havitm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD7ncl1WrIgcTxN-wcGKjJmyzU_4eYsjhk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "560785384791-o7a534ss8l5q3kq619ikv3sn95havitm.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
