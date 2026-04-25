@@ -11,6 +11,7 @@ export const env = {
   firebaseClientEmail: process.env.FIREBASE_CLIENT_EMAIL ?? "",
   firebasePrivateKey: process.env.FIREBASE_PRIVATE_KEY ?? "",
   firebaseStorageBucket: process.env.FIREBASE_STORAGE_BUCKET ?? "",
+  firebaseWebApiKey: process.env.FIREBASE_WEB_API_KEY ?? "AIzaSyAljVqvu5c2cq9m9uTBuvQZ1oYFFjkI5B8",
   cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME ?? "",
   cloudinaryApiKey: process.env.CLOUDINARY_API_KEY ?? "",
   cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET ?? "",

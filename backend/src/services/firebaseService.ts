@@ -83,22 +83,48 @@ export async function verifyFirebaseUserToken(token: string | undefined): Promis
   }
 
   const auth = getFirebaseAuth();
-  if (!auth) {
+  if (auth) {
+    try {
+      const decoded = await auth.verifyIdToken(token);
+      return {
+        id: decoded.uid,
+        email: decoded.email,
+        name: decoded.name,
+        picture: decoded.picture,
+        token: decoded,
+      };
+    } catch (error) {
+      console.warn("Firebase Admin token verification failed. Falling back to accounts:lookup.", readErrorMessage(error));
+    }
+  }
+
+  const fallbackUser = await lookupFirebaseUserByIdToken(token);
+  if (!fallbackUser) {
     return undefined;
   }
 
-  try {
-    const decoded = await auth.verifyIdToken(token);
-    return {
-      id: decoded.uid,
-      email: decoded.email,
-      name: decoded.name,
-      picture: decoded.picture,
-      token: decoded,
-    };
-  } catch {
-    return undefined;
-  }
+  return {
+    id: fallbackUser.id,
+    email: fallbackUser.email,
+    name: fallbackUser.name,
+    picture: fallbackUser.picture,
+    token: {
+      uid: fallbackUser.id,
+      email: fallbackUser.email,
+      name: fallbackUser.name,
+      picture: fallbackUser.picture,
+      aud: env.firebaseProjectId || "viraflow-ad4b2",
+      auth_time: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      firebase: {
+        identities: {},
+        sign_in_provider: fallbackUser.provider ?? "password",
+      },
+      iat: Math.floor(Date.now() / 1000),
+      iss: `https://securetoken.google.com/${env.firebaseProjectId || "viraflow-ad4b2"}`,
+      sub: fallbackUser.id,
+    } as admin.auth.DecodedIdToken,
+  };
 }
 
 export async function getUserIdFromFirebaseToken(token: string | undefined) {
@@ -144,4 +170,69 @@ function readString(value: unknown, fallback: string) {
 
 function readStringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+}
+
+interface LookupFirebaseUser {
+  id: string;
+  email?: string;
+  name?: string;
+  picture?: string;
+  provider?: string;
+}
+
+async function lookupFirebaseUserByIdToken(token: string): Promise<LookupFirebaseUser | undefined> {
+  if (!env.firebaseWebApiKey) {
+    return undefined;
+  }
+
+  try {
+    const response = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(env.firebaseWebApiKey)}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          idToken: token,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
+      console.warn("Firebase accounts:lookup token verification failed.", payload.error?.message ?? response.statusText);
+      return undefined;
+    }
+
+    const payload = (await response.json()) as {
+      users?: Array<{
+        localId?: string;
+        email?: string;
+        displayName?: string;
+        photoUrl?: string;
+        providerUserInfo?: Array<{ providerId?: string }>;
+      }>;
+    };
+
+    const user = payload.users?.[0];
+    if (!user?.localId) {
+      return undefined;
+    }
+
+    return {
+      id: user.localId,
+      email: user.email,
+      name: user.displayName,
+      picture: user.photoUrl,
+      provider: user.providerUserInfo?.[0]?.providerId,
+    };
+  } catch (error) {
+    console.warn("Firebase accounts:lookup request failed.", readErrorMessage(error));
+    return undefined;
+  }
+}
+
+function readErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
