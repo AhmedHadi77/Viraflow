@@ -82,7 +82,6 @@ import {
   fetchFirebaseDirectThread,
   fetchFirebaseMarketplaceThread,
   getFirebaseChatErrorMessage,
-  isFirebaseChatConfigured,
   markFirebaseCommunityMessagesDelivered,
   markFirebaseCommunityMessagesRead,
   markFirebaseDirectMessagesDelivered,
@@ -103,7 +102,6 @@ import {
   fetchFirebaseCommunityActivity,
   fetchFirebaseCommunityCommerceSnapshot,
   getFirebaseCommunityCommerceErrorMessage,
-  isFirebaseCommunityCommerceConfigured,
   subscribeToFirebaseCommunityCommerce,
 } from "../services/firebaseCommunityCommerce";
 import {
@@ -119,7 +117,6 @@ import {
   addFirebaseReelComment,
   fetchFirebaseEngagementSnapshot,
   getFirebaseEngagementErrorMessage,
-  isFirebaseEngagementConfigured,
   repostFirebaseReel,
   subscribeToFirebaseEngagement,
   toggleFirebaseFollow,
@@ -129,7 +126,6 @@ import {
   createFirebaseNotification,
   fetchFirebaseInboxSnapshot,
   getFirebaseInboxErrorMessage,
-  isFirebaseInboxConfigured,
   markAllFirebaseNotificationsRead,
   subscribeToFirebaseInbox,
   toggleFirebaseSavedPost,
@@ -139,7 +135,6 @@ import {
   createFirebaseReelBoost,
   fetchFirebaseMonetizationSnapshot,
   getFirebaseMonetizationErrorMessage,
-  isFirebaseMonetizationConfigured,
   subscribeToFirebaseMonetization,
 } from "../services/firebaseMonetization";
 import {
@@ -225,6 +220,7 @@ const STORAGE_KEYS = {
 } as const;
 
 const APP_BOOT_VERSION = "2026-04-25-safe-startup-1";
+const SESSION_REFRESH_MESSAGE = "Your session expired. Please log in again.";
 
 interface AppContextValue {
   isBootstrapping: boolean;
@@ -385,23 +381,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         );
 
         if (parsedSession && shouldUseFirebaseSession) {
-          setSession(parsedSession);
-
-          if (parsedFirebaseUser?.id === parsedSession.userId) {
-            setUsers((current) => withOwnedContent(upsertUser(current, parsedFirebaseUser), reels, products));
+          const refreshedToken = await resolveAccessToken(parsedSession);
+          if (!refreshedToken) {
+            await AsyncStorage.multiRemove([STORAGE_KEYS.session, STORAGE_KEYS.firebaseUser]);
           } else {
-            try {
-              const firebaseProfile = await getFirebaseProfileById(parsedSession.userId);
-              if (firebaseProfile) {
-                setUsers((current) => withOwnedContent(upsertUser(current, firebaseProfile), reels, products));
-                await AsyncStorage.setItem(STORAGE_KEYS.firebaseUser, JSON.stringify(firebaseProfile));
-              }
-            } catch {
-              // Keep the cached session; Firebase Auth may restore a token after boot on slow devices.
-            }
-          }
+            const nextSession = {
+              ...parsedSession,
+              token: refreshedToken,
+            };
 
-          await hydrateCatalogFromFirebase(parsedFirebaseUser ?? undefined);
+            setSession(nextSession);
+            await AsyncStorage.setItem(STORAGE_KEYS.session, JSON.stringify(nextSession));
+
+            if (parsedFirebaseUser?.id === parsedSession.userId) {
+              setUsers((current) => withOwnedContent(upsertUser(current, parsedFirebaseUser), reels, products));
+            } else {
+              try {
+                const firebaseProfile = await getFirebaseProfileById(parsedSession.userId);
+                if (firebaseProfile) {
+                  setUsers((current) => withOwnedContent(upsertUser(current, firebaseProfile), reels, products));
+                  await AsyncStorage.setItem(STORAGE_KEYS.firebaseUser, JSON.stringify(firebaseProfile));
+                }
+              } catch {
+                // Keep the cached session; Firebase Auth may restore a token after boot on slow devices.
+              }
+            }
+
+            await hydrateCatalogFromFirebase(parsedFirebaseUser ?? undefined);
+          }
         } else if (parsedSession && (isAppApiConfigured() || seedUsers.some((item) => item.id === parsedSession.userId))) {
           setSession(parsedSession);
         }
@@ -470,6 +477,66 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const currentUser = users.find((item) => item.id === session?.userId) ?? null;
 
+  async function persistSessionSnapshot(nextSession: AuthSession) {
+    setSession((current) =>
+      current?.userId === nextSession.userId && current.token === nextSession.token ? current : nextSession
+    );
+    await AsyncStorage.setItem(STORAGE_KEYS.session, JSON.stringify(nextSession));
+  }
+
+  async function resolveAccessToken(
+    currentSession: AuthSession | null,
+    options?: { allowStoredFallback?: boolean }
+  ) {
+    if (!currentSession?.token) {
+      return null;
+    }
+
+    if (!isDemoAccessToken(currentSession.token) && isFirebaseProfilesConfigured()) {
+      const refreshedToken = await getCurrentFirebaseIdToken(true).catch(() => null);
+
+      if (refreshedToken) {
+        if (refreshedToken !== currentSession.token) {
+          await persistSessionSnapshot({
+            token: refreshedToken,
+            userId: currentSession.userId,
+          });
+        }
+
+        return refreshedToken;
+      }
+
+      return options?.allowStoredFallback ? currentSession.token : null;
+    }
+
+    return currentSession.token;
+  }
+
+  async function requireApiAccessToken(
+    currentSession: AuthSession | null,
+    missingMessage = "Backend session missing. Please log in again."
+  ) {
+    if (!currentSession?.token) {
+      return {
+        token: null,
+        message: missingMessage,
+      };
+    }
+
+    const token = await resolveAccessToken(currentSession);
+    if (!token) {
+      return {
+        token: null,
+        message: SESSION_REFRESH_MESSAGE,
+      };
+    }
+
+    return {
+      token,
+      message: null,
+    };
+  }
+
   useEffect(() => {
     if (!session?.token || !isAppApiConfigured() || !isRealtimeConfigured()) {
       setPresenceByUserId({});
@@ -484,13 +551,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     void (async () => {
       try {
-        const accessToken =
-          (isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token;
-        if (isCancelled || !accessToken) {
+        const accessTokenResult = await requireApiAccessToken(session);
+        if (isCancelled || !accessTokenResult.token) {
           return;
         }
 
-        const socket = connectRealtime(accessToken);
+        const socket = connectRealtime(accessTokenResult.token);
         if (!socket) {
           return;
         }
@@ -943,7 +1009,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function publishFirebaseNotification(input: Parameters<typeof createFirebaseNotification>[0]) {
-    const accessToken = (await getCurrentFirebaseIdToken().catch(() => null)) ?? session?.token ?? null;
+    const accessToken = await resolveAccessToken(session);
 
     if (accessToken && isAppApiConfigured()) {
       const response = await deliverNotificationWithApi(accessToken, input);
@@ -1055,7 +1121,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const response = await fetchCommunityActivityWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, communityId);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const response = await fetchCommunityActivityWithApi(accessTokenResult.token, communityId);
       setCommunities((current) =>
         [mapApiCommunityToMobile(response.community), ...current.filter((item) => item.id !== communityId)].sort((left, right) =>
           right.createdAt.localeCompare(left.createdAt)
@@ -1102,7 +1172,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const nextNotifications = await fetchNotificationsWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return;
+      }
+      const nextNotifications = await fetchNotificationsWithApi(accessTokenResult.token);
       setNotifications(nextNotifications.map(mapApiNotificationToMobile));
     } catch {
       // Keep the current inbox state when refresh fails.
@@ -1155,7 +1229,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const inbox = await fetchDirectInboxWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return;
+      }
+      const inbox = await fetchDirectInboxWithApi(accessTokenResult.token);
       setDirectThreads(inbox.threads.map(mapApiDirectThreadToMobile));
       setDirectMessages((current) =>
         mergeDirectMessages(
@@ -1204,7 +1282,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const inbox = await fetchMarketplaceInboxWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return;
+      }
+      const inbox = await fetchMarketplaceInboxWithApi(accessTokenResult.token);
       setMarketplaceThreads(inbox.threads.map(mapApiMarketplaceThreadToMobile));
       setMarketplaceMessages((current) =>
         mergeMarketplaceMessages(
@@ -1724,7 +1806,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const updatedReel = await toggleLikeWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, reelId);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const updatedReel = await toggleLikeWithApi(accessTokenResult.token, reelId);
       const nextReel = mapApiReelToMobile(updatedReel, reels.find((item) => item.id === updatedReel.id));
       setReels((current) => upsertReel(current, nextReel));
       return { ok: true };
@@ -1770,7 +1856,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const updatedReel = await repostReelWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, reelId);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const updatedReel = await repostReelWithApi(accessTokenResult.token, reelId);
       const nextReel = mapApiReelToMobile(updatedReel, reels.find((item) => item.id === updatedReel.id));
       setReels((current) => upsertReel(current, nextReel));
       return { ok: true };
@@ -1834,7 +1924,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const created = await createCommentWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, reelId, text);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const created = await createCommentWithApi(accessTokenResult.token, reelId, text);
       const newComment: ReelComment = {
         id: created.id,
         reelId: created.reelId,
@@ -1893,7 +1987,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const response = await toggleFollowWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, targetUserId);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const response = await toggleFollowWithApi(accessTokenResult.token, targetUserId);
       setUsers((current) =>
         applyFollowState(current, currentUser.id, targetUserId, response.result.following, response.targetUser)
       );
@@ -1938,7 +2036,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const nextNotifications = await markAllNotificationsReadWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const nextNotifications = await markAllNotificationsReadWithApi(accessTokenResult.token);
       setNotifications(nextNotifications.map(mapApiNotificationToMobile));
       return { ok: true };
     } catch (error) {
@@ -1976,7 +2078,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const response = await toggleSaveReelWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, reelId);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const response = await toggleSaveReelWithApi(accessTokenResult.token, reelId);
       const nextSavedPosts = response.saved
         ? upsertSavedPost(savedPosts, response.savedPost ? mapApiSavedPostToMobile(response.savedPost) : undefined)
         : savedPosts.filter((item) => !(item.entityType === "reel" && item.entityId === reelId && item.userId === currentUser.id));
@@ -2017,7 +2123,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const response = await toggleSaveProductWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, productId);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const response = await toggleSaveProductWithApi(accessTokenResult.token, productId);
       const nextSavedPosts = response.saved
         ? upsertSavedPost(savedPosts, response.savedPost ? mapApiSavedPostToMobile(response.savedPost) : undefined)
         : savedPosts.filter((item) => !(item.entityType === "product" && item.entityId === productId && item.userId === currentUser.id));
@@ -2071,7 +2181,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const updated = await updateProductListingStatusWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, productId, listingStatus);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const updated = await updateProductListingStatusWithApi(accessTokenResult.token, productId, listingStatus);
       const nextProduct = mapApiProductToMobile(updated, products.find((item) => item.id === updated.id));
       setProducts((current) => current.map((item) => (item.id === nextProduct.id ? nextProduct : item)));
       return { ok: true };
@@ -2132,7 +2246,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const response = await startDirectChatWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, targetUserId);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const response = await startDirectChatWithApi(accessTokenResult.token, targetUserId);
       const nextThread = mapApiDirectThreadToMobile(response.thread);
       setDirectThreads((current) => upsertDirectThread(current, nextThread));
       setDirectMessages((current) =>
@@ -2193,7 +2311,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const response = await fetchDirectThreadWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, threadId);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const response = await fetchDirectThreadWithApi(accessTokenResult.token, threadId);
       const nextThread = mapApiDirectThreadToMobile(response.thread);
       setDirectThreads((current) => upsertDirectThread(current, nextThread));
       setDirectMessages((current) =>
@@ -2292,7 +2414,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const response = await sendDirectMessageWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, threadId, text);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const response = await sendDirectMessageWithApi(accessTokenResult.token, threadId, text);
       const nextThread = mapApiDirectThreadToMobile(response.thread);
       const nextMessage = mapApiDirectMessageToMobile(
         response.message,
@@ -2362,7 +2488,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const response = await startMarketplaceChatWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, productId);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const response = await startMarketplaceChatWithApi(accessTokenResult.token, productId);
       const nextThread = mapApiMarketplaceThreadToMobile(response.thread);
       setMarketplaceThreads((current) => upsertMarketplaceThread(current, nextThread));
       setMarketplaceMessages((current) =>
@@ -2409,7 +2539,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const response = await fetchMarketplaceThreadWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, threadId);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const response = await fetchMarketplaceThreadWithApi(accessTokenResult.token, threadId);
       const nextThread = mapApiMarketplaceThreadToMobile(response.thread);
       setMarketplaceThreads((current) => upsertMarketplaceThread(current, nextThread));
       setMarketplaceMessages((current) =>
@@ -2506,7 +2640,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const response = await sendMarketplaceMessageWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, threadId, text);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const response = await sendMarketplaceMessageWithApi(accessTokenResult.token, threadId, text);
       const nextThread = mapApiMarketplaceThreadToMobile(response.thread);
       const nextMessage = mapApiMarketplaceMessageToMobile(
         response.message,
@@ -2625,7 +2763,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const response = await createMarketplaceOrderWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, payload);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const response = await createMarketplaceOrderWithApi(accessTokenResult.token, payload);
       const nextOrder = mapApiMarketplaceOrderToMobile(response.order);
       const nextThread = mapApiMarketplaceThreadToMobile(response.thread);
       setMarketplaceOrders((current) => upsertMarketplaceOrder(current, nextOrder));
@@ -2660,7 +2802,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const token = (await getCurrentFirebaseIdToken().catch(() => null)) ?? session.token;
+        const token = await resolveAccessToken(session);
+        if (!token) {
+          return { ok: false, message: SESSION_REFRESH_MESSAGE };
+        }
         const imageUrl = await uploadImageSourceForFirebaseContent({
           token,
           source: payload.imageUrl,
@@ -2704,7 +2849,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const created = await createStoryWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, payload);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const created = await createStoryWithApi(accessTokenResult.token, payload);
       const nextStory = mapApiStoryToMobile(created);
       setStories((current) => [nextStory, ...filterActiveStories(current.filter((item) => item.id !== nextStory.id))]);
       return { ok: true };
@@ -2732,7 +2881,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const token = (await getCurrentFirebaseIdToken().catch(() => null)) ?? session.token;
+        const token = await resolveAccessToken(session);
+        if (!token) {
+          return { ok: false, message: SESSION_REFRESH_MESSAGE };
+        }
         const uploadedVideo = await uploadVideoSourceForFirebaseContent({
           token,
           source: payload.videoUrl,
@@ -2807,7 +2959,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const created = await createReelWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, payload);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const created = await createReelWithApi(accessTokenResult.token, payload);
       const nextReel = mapApiReelToMobile(created, reels.find((item) => item.id === created.id));
       const nextReels = [nextReel, ...reels.filter((item) => item.id !== nextReel.id)];
       setReels(nextReels);
@@ -2854,7 +3010,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const response = await createSubscriptionCheckoutSessionWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, planType);
+        const accessTokenResult = await requireApiAccessToken(session);
+        if (!accessTokenResult.token) {
+          return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+        }
+        const response = await createSubscriptionCheckoutSessionWithApi(accessTokenResult.token, planType);
         await openCheckoutUrl(response.checkoutUrl);
         return {
           ok: true,
@@ -2937,7 +3097,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const response = await createBoostCheckoutSessionWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, payload);
+        const accessTokenResult = await requireApiAccessToken(session);
+        if (!accessTokenResult.token) {
+          return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+        }
+        const response = await createBoostCheckoutSessionWithApi(accessTokenResult.token, payload);
         await openCheckoutUrl(response.checkoutUrl);
         return {
           ok: true,
@@ -3017,7 +3181,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const token = (await getCurrentFirebaseIdToken().catch(() => null)) ?? session.token;
+        const token = await resolveAccessToken(session);
+        if (!token) {
+          return { ok: false, message: SESSION_REFRESH_MESSAGE };
+        }
         const imageUrls = await Promise.all(
           payload.imageUrls.map((imageUrl, index) =>
             uploadImageSourceForFirebaseContent({
@@ -3087,7 +3254,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const created = await createProductWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, payload);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const created = await createProductWithApi(accessTokenResult.token, payload);
       const nextProduct = mapApiProductToMobile(created, products.find((item) => item.id === created.id));
       const nextProducts = [nextProduct, ...products.filter((item) => item.id !== nextProduct.id)];
       setProducts(nextProducts);
@@ -3134,7 +3305,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const token = (await getCurrentFirebaseIdToken().catch(() => null)) ?? session.token;
+        const token = await resolveAccessToken(session);
+        if (!token) {
+          return { ok: false, message: SESSION_REFRESH_MESSAGE };
+        }
         const coverImage = await uploadImageSourceForFirebaseContent({
           token,
           source: payload.coverImage,
@@ -3180,7 +3354,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const created = await createCommunityWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, payload);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const created = await createCommunityWithApi(accessTokenResult.token, payload);
       const nextCommunity = mapApiCommunityToMobile(created);
       setCommunities((current) => [nextCommunity, ...current.filter((item) => item.id !== nextCommunity.id)]);
       return { ok: true };
@@ -3213,7 +3391,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const token = (await getCurrentFirebaseIdToken().catch(() => null)) ?? session.token;
+        const token = await resolveAccessToken(session);
+        if (!token) {
+          return { ok: false, message: SESSION_REFRESH_MESSAGE };
+        }
         const imageUrl = payload.imageUrl?.trim()
           ? await uploadImageSourceForFirebaseContent({
               token,
@@ -3264,7 +3445,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const response = await createCommunityPostWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, payload);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const response = await createCommunityPostWithApi(accessTokenResult.token, payload);
       const nextPost = mapApiCommunityPostToMobile(response.post, users.find((user) => user.id === response.post.authorId));
       setCommunityPosts((current) => mergeCommunityPosts(current, [nextPost]));
       return { ok: true };
@@ -3331,7 +3516,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const response = await sendCommunityChatMessageWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, communityId, text);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const response = await sendCommunityChatMessageWithApi(accessTokenResult.token, communityId, text);
       const nextMessage = mapApiCommunityChatMessageToMobile(
         response.message,
         users.find((user) => user.id === response.message.senderId)
@@ -3359,7 +3548,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       try {
         let nextProfileImage = payload.profileImage.trim() || currentUser.profileImage;
-        let nextToken = (await getCurrentFirebaseIdToken().catch(() => null)) ?? session.token;
+        const accessTokenResult = await requireApiAccessToken(session, "Firebase session missing. Please log in again.");
+        if (!accessTokenResult.token) {
+          return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+        }
+        let nextToken = accessTokenResult.token;
 
         if (isDataUrl(nextProfileImage)) {
           if (!isMediaApiConfigured()) {
@@ -3433,7 +3626,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const updatedProfile = await updateProfileWithApi((isFirebaseBackedSession(session) ? await getCurrentFirebaseIdToken().catch(() => null) : null) ?? session.token, payload);
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const updatedProfile = await updateProfileWithApi(accessTokenResult.token, payload);
       const nextUser = mapApiUserToMobile(updatedProfile, {
         existing: currentUser,
         planType: currentUser.planType,
@@ -3702,14 +3899,7 @@ function isDemoAccessToken(token: string) {
 
 function isFirebaseBackedSession(session: AuthSession | null) {
   return Boolean(
-    session?.token &&
-      isFirebaseContentConfigured() &&
-      isFirebaseCommunityCommerceConfigured() &&
-      isFirebaseEngagementConfigured() &&
-      isFirebaseChatConfigured() &&
-      isFirebaseMonetizationConfigured() &&
-      isFirebaseInboxConfigured() &&
-      !isDemoAccessToken(session.token)
+    session?.token && isFirebaseProfilesConfigured() && !isDemoAccessToken(session.token)
   );
 }
 

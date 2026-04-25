@@ -131,13 +131,27 @@ export async function getFirebaseProfileById(userId: string) {
   );
 }
 
-export async function getCurrentFirebaseIdToken() {
+export async function getCurrentFirebaseIdToken(forceRefresh = true) {
   const auth = getFirebaseClientAuth();
-  if (!auth?.currentUser) {
+  if (!auth) {
     return null;
   }
 
-  return auth.currentUser.getIdToken();
+  if (!auth.currentUser) {
+    const authStateReady = (auth as typeof auth & { authStateReady?: () => Promise<void> }).authStateReady;
+
+    if (typeof authStateReady === "function") {
+      await authStateReady.call(auth).catch(() => undefined);
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+
+  if (!auth.currentUser) {
+    return null;
+  }
+
+  return auth.currentUser.getIdToken(forceRefresh);
 }
 
 export async function updateFirebaseUserProfile(userId: string, payload: UpdateProfilePayload): Promise<User> {

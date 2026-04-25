@@ -1,7 +1,15 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import * as FirebaseAuth from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getPublicEnv } from "./publicEnv";
+
+const { getAuth, initializeAuth } = FirebaseAuth;
+const getReactNativePersistence = (
+  FirebaseAuth as typeof FirebaseAuth & {
+    getReactNativePersistence?: (storage: typeof AsyncStorage) => unknown;
+  }
+).getReactNativePersistence;
 
 const firebaseConfig = {
   apiKey: getPublicEnv("EXPO_PUBLIC_FIREBASE_API_KEY"),
@@ -26,7 +34,21 @@ export function getFirebaseClientApp() {
 
 export function getFirebaseClientAuth() {
   const app = getFirebaseClientApp();
-  return app ? getAuth(app) : undefined;
+  if (!app) {
+    return undefined;
+  }
+
+  try {
+    if (!getReactNativePersistence) {
+      return getAuth(app);
+    }
+
+    return initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage) as never,
+    });
+  } catch {
+    return getAuth(app);
+  }
 }
 
 export function getFirebaseClientFirestore() {
