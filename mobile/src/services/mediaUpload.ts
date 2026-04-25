@@ -1,8 +1,6 @@
-const API_BASE_URL =
-  (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.EXPO_PUBLIC_API_BASE_URL?.replace(
-    /\/$/,
-    ""
-  ) ?? "";
+import { getPublicApiBaseUrl } from "./publicEnv";
+
+const API_BASE_URL = getPublicApiBaseUrl();
 
 export type MediaResourceType = "image" | "video" | "raw";
 export type MediaFolder = "profile" | "stories" | "reels" | "products" | "ai" | "communities";

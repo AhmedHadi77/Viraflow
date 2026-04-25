@@ -29,7 +29,7 @@ export function LanguageScreen() {
   return (
     <Screen scrollable contentContainerStyle={styles.content}>
       <LinearGradient colors={["rgba(255,122,47,0.16)", "rgba(54,224,161,0.10)", "rgba(255,255,255,0.02)"]} style={styles.hero}>
-        <Text style={styles.brand}>ViraFlow</Text>
+        <Text style={styles.brand}>Pulseora</Text>
         <Text style={styles.kicker}>Creator commerce, designed to move fast.</Text>
         <SectionTitle title={copy.chooseLanguage} subtitle={copy.chooseLanguageBody} />
         <View style={styles.heroStats}>

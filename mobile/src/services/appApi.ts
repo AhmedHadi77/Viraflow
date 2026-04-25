@@ -25,12 +25,9 @@ import {
   UpdateProfilePayload,
   User,
 } from "../types/models";
+import { getPublicApiBaseUrl } from "./publicEnv";
 
-const API_BASE_URL =
-  (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.EXPO_PUBLIC_API_BASE_URL?.replace(
-    /\/$/,
-    ""
-  ) ?? "";
+const API_BASE_URL = getPublicApiBaseUrl();
 
 export interface ApiUserPayload {
   id: string;
@@ -613,6 +610,27 @@ export async function fetchNotificationsWithApi(token: string) {
   return response.notifications;
 }
 
+export async function deliverNotificationWithApi(
+  token: string,
+  payload: {
+    userId: string;
+    type: AppNotification["type"];
+    title: string;
+    body: string;
+    entityType?: AppNotification["entityType"];
+    entityId?: string;
+    conversationId?: string;
+    conversationType?: AppNotification["conversationType"];
+    dedupeId?: string;
+  }
+) {
+  return request<{ notification: ApiNotificationPayload | null; deliveredCount: number }>("/notifications/deliver", {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
 export async function markAllNotificationsReadWithApi(token: string) {
   const response = await request<{ notifications: ApiNotificationPayload[] }>("/notifications/read-all", {
     method: "POST",
@@ -704,7 +722,7 @@ export function mapApiUserToMobile(
     id: apiUser.id,
     name: apiUser.name,
     username: apiUser.username,
-    email: apiUser.email || options?.existing?.email || `${apiUser.username}@viraflow.app`,
+      email: apiUser.email || options?.existing?.email || `${apiUser.username}@pulseora.app`,
     profileImage: apiUser.profileImage,
     bio: apiUser.bio,
     headline: apiUser.headline,
@@ -1010,6 +1028,6 @@ async function request<T>(
       throw error;
     }
 
-    throw new AppApiError("Could not reach the ViraFlow backend. Start the API and try again.");
+    throw new AppApiError("Could not reach the Pulseora backend. Start the API and try again.");
   }
 }

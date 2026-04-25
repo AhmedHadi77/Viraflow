@@ -8,21 +8,24 @@
     "backend"
   ],
   "dependencies": {
-    "babel-preset-expo": "~55.0.8",
-    "expo": "~55.0.15",
-    "expo-constants": "~55.0.14",
-    "expo-device": "~55.0.15",
-    "expo-notifications": "~55.0.19",
-    "expo-video-thumbnails": "~55.0.14",
-    "react": "19.2.0",
-    "react-native": "0.83.4",
-    "react-native-safe-area-context": "5.6.2",
-    "react-native-screens": "4.23.0"
+    "babel-preset-expo": "~54.0.10",
+    "expo": "~54.0.33",
+    "expo-constants": "~18.0.13",
+    "expo-device": "~8.0.10",
+    "expo-notifications": "~0.32.16",
+    "expo-video-thumbnails": "~10.0.8",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0"
   },
   "scripts": {
     "start": "expo start",
     "mobile:start": "npm --workspace mobile run start",
     "backend:dev": "npm --workspace backend run dev",
     "backend:build": "npm --workspace backend run build"
+  },
+  "devDependencies": {
+    "@expo/ngrok": "^4.1.0"
   }
 }

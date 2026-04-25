@@ -107,7 +107,7 @@ export function CreateScreen({
     const durationSeconds = typeof asset.duration === "number" ? Math.max(1, Math.round(asset.duration / 1000)) : undefined;
     setVideoUrl(asset.uri);
     setVideoMimeType(asset.mimeType || "video/mp4");
-    setVideoFileName(asset.fileName || `viraflow-reel-${Date.now()}.mp4`);
+        setVideoFileName(asset.fileName || `pulseora-reel-${Date.now()}.mp4`);
     setVideoDurationSeconds(durationSeconds);
     setThumbnailUrl("");
   }

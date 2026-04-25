@@ -112,7 +112,7 @@ subscriptions/{userId}
 reelBoosts/{boostId}
 ```
 
-Use simple signed-in rules while testing. These rules are intentionally MVP/dev friendly so likes, reposts, follows, comments, saved posts, notifications, and chat work from the mobile app without paid Cloud Functions yet:
+Use the tighter signed-in rules below for the current production-oriented setup. Notification records and Expo push delivery now go through the trusted backend, while the mobile app only reads its own notifications and stores its own device token:
 
 ```js
 rules_version = '2';
@@ -164,12 +164,20 @@ service cloud.firestore {
 
     match /notifications/{notificationId} {
       allow read: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if false;
+      allow update: if request.auth != null &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.diff(resource.data).changedKeys().hasOnly(["readAt"]);
     }
 
     match /devicePushTokens/{tokenId} {
-      allow read, create, update: if request.auth != null;
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
     }
 
     match /directThreads/{threadId} {
@@ -231,7 +239,7 @@ service cloud.firestore {
 }
 ```
 
-Before production, tighten these rules so only safe fields can be updated by other users, or move engagement writes and push delivery behind trusted backend/Cloud Function endpoints. The `devicePushTokens` rule above is deliberately MVP-friendly so client-side Expo push delivery works during testing.
+Before production, keep notification creation and push delivery behind trusted backend or Cloud Function endpoints only. The mobile app should never read another user's push tokens or create notifications for another user directly.
 
 ## Completed Real Slices
 
@@ -262,3 +270,41 @@ Keep hardening the Firebase launch path:
 - `expo-notifications` local notifications work in Expo Go.
 - Remote push notifications on Android need a development build and a valid Expo project ID.
 - Add `EXPO_PUBLIC_EXPO_PROJECT_ID` to `mobile/.env` when you are ready to test remote push.
+- The Expo manifest should also carry the same EAS project ID so `Constants.expoConfig?.extra?.eas?.projectId` resolves correctly in development builds.
+- Android remote push also needs Expo/EAS FCM v1 credentials uploaded for the `com.viraflow.app` application identifier.
+
+### Android Remote Push Checklist
+
+1. Add `EXPO_PUBLIC_EXPO_PROJECT_ID` to `mobile/.env`.
+2. Sign in to Expo/EAS and link the project:
+
+```bash
+npx eas-cli@latest login
+npx eas-cli@latest project:init
+```
+
+3. In Firebase Console, open the same Firebase project used by ViraFlow and create or reuse a Service Account key from:
+   - `Project settings` -> `Service accounts` -> `Generate new private key`
+4. Upload the JSON key to EAS for Android push:
+
+```bash
+npx eas-cli@latest credentials
+```
+
+Then choose:
+
+- `Android`
+- `production`
+- `Google Service Account`
+- `Manage your Google Service Account Key for Push Notifications (FCM V1)`
+- `Upload a new service account key`
+
+5. Build and install a real Android development build:
+
+```bash
+npx eas-cli@latest build --platform android --profile development
+```
+
+6. Open the development build on a real phone, sign in, and confirm the device stores an Expo push token in Firestore under `devicePushTokens`.
+
+Expo's official setup guide confirms that Android remote push needs both a development build and FCM credentials configured through EAS. Source: https://docs.expo.dev/push-notifications/using-fcm and https://docs.expo.dev/push-notifications/fcm-credentials

@@ -24,7 +24,7 @@ export const seedUsers: User[] = [
     id: "user-1",
     name: "Layla Noor",
     username: "laylanoor",
-    email: "layla@viraflow.app",
+    email: "layla@pulseora.app",
     profileImage:
       "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80",
     bio: "Fashion creator sharing fast styling edits and sellable looks.",
@@ -40,7 +40,7 @@ export const seedUsers: User[] = [
     id: "user-2",
     name: "Omar Kassim",
     username: "omarkassim",
-    email: "omar@viraflow.app",
+    email: "omar@pulseora.app",
     profileImage:
       "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80",
     bio: "Growth marketer turning content into sales.",
@@ -56,7 +56,7 @@ export const seedUsers: User[] = [
     id: "user-3",
     name: "Sofia Meret",
     username: "sofiameret",
-    email: "sofia@viraflow.app",
+    email: "sofia@pulseora.app",
     profileImage:
       "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=400&q=80",
     bio: "Productivity creator and digital template seller.",

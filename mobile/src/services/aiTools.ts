@@ -18,13 +18,10 @@ import {
   AIVideoJob,
   AIVideoRequest,
 } from "../types/models";
+import { getPublicApiBaseUrl } from "./publicEnv";
 import { assertSafeAiContent } from "../utils/contentSafety";
 
-const API_BASE_URL =
-  (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.EXPO_PUBLIC_API_BASE_URL?.replace(
-    /\/$/,
-    ""
-  );
+const API_BASE_URL = getPublicApiBaseUrl();
 const demoVideoJobs = new Map<string, { createdAt: number; request: AIVideoRequest }>();
 
 export async function fetchAiStatus(token?: string) {

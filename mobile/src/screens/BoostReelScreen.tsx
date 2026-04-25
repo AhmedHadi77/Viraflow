@@ -56,7 +56,7 @@ export function BoostReelScreen({ navigation, route }: { navigation: any; route:
   return (
     <Screen scrollable>
       <LinearGradient colors={["rgba(255,122,47,0.18)", "rgba(54,224,161,0.12)", "rgba(255,255,255,0.02)"]} style={styles.hero}>
-        <Text style={styles.kicker}>ViraFlow Ads</Text>
+        <Text style={styles.kicker}>Pulseora Ads</Text>
         <SectionTitle
           title="Boost System"
           subtitle="Put paid reach behind your best reel, buy more views, and turn strong content into a growth engine."

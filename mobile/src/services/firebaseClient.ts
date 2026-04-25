@@ -1,6 +1,7 @@
 import { getApp, getApps, initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getPublicEnv } from "./publicEnv";
 
 const firebaseConfig = {
   apiKey: getPublicEnv("EXPO_PUBLIC_FIREBASE_API_KEY"),
@@ -31,8 +32,4 @@ export function getFirebaseClientAuth() {
 export function getFirebaseClientFirestore() {
   const app = getFirebaseClientApp();
   return app ? getFirestore(app) : undefined;
-}
-
-function getPublicEnv(key: string) {
-  return (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.[key] ?? "";
 }

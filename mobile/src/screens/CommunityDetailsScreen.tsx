@@ -167,7 +167,7 @@ export function CommunityDetailsScreen({ navigation, route }: { navigation: any;
       <View style={styles.ownerCard}>
         <Text style={styles.ownerLabel}>Owner</Text>
         <Text style={styles.ownerName}>{owner?.name ?? "Creator"}</Text>
-        <Text style={styles.ownerHandle}>@{owner?.username ?? "viraflow"}</Text>
+        <Text style={styles.ownerHandle}>@{owner?.username ?? "pulseora"}</Text>
       </View>
 
       <View style={styles.composeCard}>

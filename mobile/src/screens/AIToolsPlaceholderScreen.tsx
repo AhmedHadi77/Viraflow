@@ -214,7 +214,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
 
   async function handleGenerateViralEngine() {
     if (!enginePrompt.trim()) {
-      Alert.alert("Missing prompt", "Tell ViraFlow what kind of viral reel you want first.");
+      Alert.alert("Missing prompt", "Tell Pulseora what kind of viral reel you want first.");
       return;
     }
     setEngineLoading(true);
@@ -311,7 +311,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
-      Alert.alert("Video access needed", "Allow photo library access so ViraFlow can analyze your video.");
+      Alert.alert("Video access needed", "Allow photo library access so Pulseora can analyze your video.");
       return;
     }
 
@@ -341,7 +341,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
 
   async function handleAnalyzeFailureVideo() {
     if (!failureVideoUri || !failureVideoName) {
-      Alert.alert("Upload a video", "Pick the underperforming video first so ViraFlow can audit it.");
+      Alert.alert("Upload a video", "Pick the underperforming video first so Pulseora can audit it.");
       return;
     }
 
@@ -373,7 +373,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
-      Alert.alert("Photo access needed", "Allow photo library access so ViraFlow can create avatar styles from your image.");
+      Alert.alert("Photo access needed", "Allow photo library access so Pulseora can create avatar styles from your image.");
       return;
     }
 
@@ -403,7 +403,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
 
   async function handleCreateAvatar() {
     if (!avatarSourceDataUrl) {
-      Alert.alert("Upload a photo", "Pick a photo first so ViraFlow can build your avatar package.");
+      Alert.alert("Upload a photo", "Pick a photo first so Pulseora can build your avatar package.");
       return;
     }
 
@@ -491,7 +491,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
   return (
     <Screen scrollable>
       <LinearGradient colors={["rgba(255,122,47,0.18)", "rgba(54,224,161,0.14)", "rgba(255,255,255,0.02)"]} style={styles.hero}>
-        <Text style={styles.kicker}>ViraFlow AI Studio</Text>
+            <Text style={styles.kicker}>Pulseora AI Studio</Text>
         <SectionTitle
           title="One prompt into viral content"
           subtitle="Generate the script, AI voice, captions, video prompt, and a viral score package for creators who want to move faster and monetize better."
@@ -525,7 +525,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
         <View style={styles.panel}>
           <SectionTitle
             title="Viral AI content engine"
-            subtitle='Type one prompt like "Make viral gym reel" and ViraFlow will build the full content package around it.'
+                subtitle='Type one prompt like "Make viral gym reel" and Pulseora will build the full content package around it.'
           />
           {isAiDemoMode ? (
             <DemoModeNotice
@@ -753,7 +753,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
         <View style={styles.panel}>
           <SectionTitle
             title="Why Did This Fail?"
-            subtitle="Upload an underperforming video and ViraFlow will analyze the hook, retention, and captions."
+            subtitle="Upload an underperforming video and Pulseora will analyze the hook, retention, and captions."
           />
           {isAiDemoMode ? (
             <DemoModeNotice
@@ -781,7 +781,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
           {failureFrames.length > 0 ? (
             <View style={styles.card}>
               <Text style={styles.sectionMini}>Frame thumbnails</Text>
-              <Text style={styles.note}>ViraFlow samples key frames before running the audit so you can quickly spot slow openings or late payoffs.</Text>
+              <Text style={styles.note}>Pulseora samples key frames before running the audit so you can quickly spot slow openings or late payoffs.</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.frameRow}>
                 {failureFrames.map((frame) => (
                   <View key={frame.id} style={styles.frameCard}>
@@ -1241,7 +1241,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
         <Text style={styles.footerTitle}>Production note</Text>
         <Text style={styles.body}>
           {isAiDemoMode
-            ? "ViraFlow AI is currently in clear demo mode on this device. You can keep testing the full creator flow for free, but image and video outputs are sample previews until live AI is connected."
+            ? "Pulseora AI is currently in clear demo mode on this device. You can keep testing the full creator flow for free, but image and video outputs are sample previews until live AI is connected."
             : "Live AI is connected. Keep your backend running and the app pointed at the real API base URL so image and video generation stay live on your phone."}
         </Text>
         <PrimaryButton label={copy.subscription} onPress={() => navigation.navigate("Subscription")} variant="ghost" />

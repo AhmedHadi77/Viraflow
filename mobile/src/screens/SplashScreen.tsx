@@ -6,10 +6,10 @@ export function SplashScreen() {
   return (
     <Screen contentContainerStyle={styles.content}>
       <View style={styles.badge}>
-        <Text style={styles.badgeText}>VF</Text>
+        <Text style={styles.badgeText}>P</Text>
       </View>
       <View style={styles.copyWrap}>
-        <Text style={styles.title}>ViraFlow</Text>
+        <Text style={styles.title}>Pulseora</Text>
         <Text style={styles.subtitle}>Create. Go viral. Make money.</Text>
       </View>
       <ActivityIndicator color={palette.primary} size="large" />

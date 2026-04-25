@@ -214,7 +214,7 @@ function normalizeNotificationDoc(id: string, data: Record<string, unknown>): Ap
     id,
     userId: readString(data.userId, ""),
     type: normalizeNotificationType(readString(data.type, "system")),
-    title: readString(data.title, "ViraFlow update"),
+    title: readString(data.title, "Pulseora update"),
     body: readString(data.body, ""),
     actorId: readOptionalString(data.actorId),
     actorName: readOptionalString(data.actorName),

@@ -2,21 +2,21 @@ import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
-import { collection, doc, getDocs, limit, query, setDoc, where } from "firebase/firestore";
+import { doc, setDoc } from "firebase/firestore";
 import { getFirebaseClientFirestore, isFirebaseClientConfigured } from "./firebaseClient";
 import { buildNotificationNavigationData } from "./notificationRouting";
+import { getPublicEnv } from "./publicEnv";
 import { AppNotification, PushNotificationsStatus } from "../types/models";
 
 const DEVICE_PUSH_TOKENS_COLLECTION = "devicePushTokens";
-const EXPO_PUSH_API_URL = "https://exp.host/--/api/v2/push/send";
-const ANDROID_CHANNEL_ID = "viraflow-social";
+const ANDROID_CHANNEL_ID = "pulseora-social";
 
 let notificationHandlerConfigured = false;
 
 export const DEFAULT_PUSH_NOTIFICATIONS_STATUS: PushNotificationsStatus = {
   mode: "unavailable",
   permissionStatus: "undetermined",
-  message: "Notifications are not connected yet.",
+  message: "Push notifications are not connected yet.",
 };
 
 export async function registerForPushNotificationsAsync(userId: string): Promise<PushNotificationsStatus> {
@@ -52,7 +52,7 @@ export async function registerForPushNotificationsAsync(userId: string): Promise
     return {
       mode: "unavailable",
       permissionStatus,
-      message: "Notification permission is turned off for ViraFlow.",
+      message: "Notification permission is turned off for Pulseora.",
     };
   }
 
@@ -61,70 +61,21 @@ export async function registerForPushNotificationsAsync(userId: string): Promise
     return {
       mode: "local",
       permissionStatus,
-      message: "Local notifications are ready. Add EXPO_PUBLIC_EXPO_PROJECT_ID and use a development build to enable remote push.",
+      message: "Local notifications are ready. Add EXPO_PUBLIC_EXPO_PROJECT_ID to enable remote push.",
     };
   }
 
-  try {
-    const pushToken = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-    await saveDevicePushToken(userId, pushToken, projectId);
-
-    return {
-      mode: "remote",
-      permissionStatus,
-      token: pushToken,
-      message: "Remote push notifications are connected on this device.",
-    };
-  } catch {
+  if (Platform.OS === "android" && !hasAndroidGoogleServicesConfig()) {
     return {
       mode: "local",
       permissionStatus,
-      message: "Local notifications are ready in this build. Remote push will work after you run a development build with your Expo project ID.",
+      message: "Local notifications are ready. Add google-services.json to the project root and rebuild Android to enable remote push.",
     };
   }
-}
 
-export async function sendPushNotificationToUser(userId: string, notification: AppNotification) {
-  const db = getFirebaseClientFirestore();
-  if (!db || !userId.trim()) {
-    return 0;
-  }
-
-  const snapshot = await getDocs(
-    query(collection(db, DEVICE_PUSH_TOKENS_COLLECTION), where("userId", "==", userId.trim()), limit(12))
-  );
-  const tokens = snapshot.docs
-    .map((item) => readPushToken(item.data().token))
-    .filter((token): token is string => Boolean(token));
-
-  if (tokens.length === 0) {
-    return 0;
-  }
-
-  const messages = tokens.map((token) => ({
-    to: token,
-    sound: "default",
-    title: notification.title,
-    body: notification.body,
-    data: buildNotificationNavigationData(notification),
-    channelId: ANDROID_CHANNEL_ID,
-  }));
-
-  const response = await fetch(EXPO_PUSH_API_URL, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Accept-Encoding": "gzip, deflate",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(messages),
-  });
-
-  if (!response.ok) {
-    throw new Error("Expo Push API could not deliver this notification.");
-  }
-
-  return tokens.length;
+  return {
+    ...(await registerRemotePush(userId, projectId, permissionStatus)),
+  };
 }
 
 export async function scheduleLocalNotificationFromAppNotification(notification: AppNotification) {
@@ -139,6 +90,54 @@ export async function scheduleLocalNotificationFromAppNotification(notification:
     },
     trigger: null,
   });
+}
+
+function readExpoProjectId() {
+  return getPublicEnv("EXPO_PUBLIC_EXPO_PROJECT_ID") || "";
+}
+
+function hasAndroidGoogleServicesConfig() {
+  const constants = Constants as typeof Constants & {
+    manifest?: { extra?: Record<string, unknown> };
+    manifest2?: { extra?: Record<string, unknown> };
+  };
+
+  const extra =
+    constants.expoConfig?.extra ??
+    constants.manifest2?.extra ??
+    constants.manifest?.extra ??
+    {};
+
+  const buildFlags = extra.buildFlags;
+  if (!buildFlags || typeof buildFlags !== "object") {
+    return false;
+  }
+
+  return Boolean((buildFlags as Record<string, unknown>).androidGoogleServicesConfigured);
+}
+
+async function registerRemotePush(
+  userId: string,
+  projectId: string,
+  permissionStatus: PushNotificationsStatus["permissionStatus"]
+): Promise<PushNotificationsStatus> {
+  try {
+    const pushToken = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+    await saveDevicePushToken(userId, pushToken, projectId);
+
+    return {
+      mode: "remote",
+      permissionStatus,
+      token: pushToken,
+      message: "Remote push notifications are connected on this device.",
+    };
+  } catch (error) {
+    return {
+      mode: "local",
+      permissionStatus,
+      message: buildPushSetupErrorMessage(error),
+    };
+  }
 }
 
 function configureNotificationHandler() {
@@ -188,25 +187,12 @@ async function ensureAndroidNotificationChannel() {
   }
 
   await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
-    name: "ViraFlow social activity",
+    name: "Pulseora social activity",
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 120, 250],
     lightColor: "#36E0A1",
     sound: "default",
   });
-}
-
-function readExpoProjectId() {
-  return (
-    getPublicEnv("EXPO_PUBLIC_EXPO_PROJECT_ID") ||
-    Constants.expoConfig?.extra?.eas?.projectId ||
-    Constants.easConfig?.projectId ||
-    ""
-  );
-}
-
-function getPublicEnv(key: string) {
-  return (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.[key] ?? "";
 }
 
 function normalizePushTokenId(userId: string, token: string) {
@@ -223,6 +209,11 @@ function normalizePermissionStatus(value: string): PushNotificationsStatus["perm
   return "undetermined";
 }
 
-function readPushToken(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+function buildPushSetupErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (message.toLowerCase().includes("default firebase app")) {
+    return "Remote push setup still needs google-services.json added to the project root and a rebuilt Android app.";
+  }
+
+  return "Local notifications are ready. Remote push needs google-services.json plus a rebuilt Android app.";
 }

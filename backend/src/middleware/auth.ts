@@ -1,20 +1,13 @@
 import { NextFunction, Request, Response } from "express";
-import { getUserIdFromFirebaseToken } from "../services/firebaseService";
+import { verifyFirebaseUserToken } from "../services/firebaseService";
 
 export interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
+    email?: string;
+    name?: string;
+    picture?: string;
   };
-}
-
-export function getUserIdFromAccessToken(token: string | undefined) {
-  const prefix = "viraflow-token-";
-
-  if (!token?.startsWith(prefix)) {
-    return undefined;
-  }
-
-  return token.replace(prefix, "");
 }
 
 export async function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -26,14 +19,17 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
   }
 
   const token = authorization.replace("Bearer ", "");
-  const userId = getUserIdFromAccessToken(token) ?? (await getUserIdFromFirebaseToken(token));
-  if (!userId) {
+  const user = await verifyFirebaseUserToken(token);
+  if (!user) {
     res.status(401).json({ message: "Invalid token." });
     return;
   }
 
   req.user = {
-    id: userId,
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    picture: user.picture,
   };
 
   next();

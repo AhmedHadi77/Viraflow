@@ -6,6 +6,10 @@ build
 .env
 backend/.env
 mobile/.env
+*-firebase-adminsdk-*.json
+firebase-service-account.json
+google-services.json
+GoogleService-Info.plist
 .DS_Store
 *.log
 coverage

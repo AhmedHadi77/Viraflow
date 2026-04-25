@@ -2,7 +2,7 @@ import { LanguageOption } from "../types/models";
 
 const translations = {
   en: {
-    appName: "ViraFlow",
+    appName: "Pulseora",
     tagline: "Create. Go viral. Make money.",
     chooseLanguage: "Choose your language",
     chooseLanguageBody: "Start with the language you want to use for the app experience.",
@@ -66,7 +66,7 @@ const translations = {
     planBenefits: "Included in plan",
     saveChanges: "Save changes",
     logout: "Logout",
-    mixedFeedTitle: "Today on ViraFlow",
+    mixedFeedTitle: "Today on Pulseora",
     mixedFeedBody: "Creator growth, marketplace offers, and viral-ready content all in one place.",
     recommendedForYou: "Recommended for you",
     marketplaceBoost: "Marketplace boost",
@@ -154,7 +154,7 @@ const translations = {
     postComment: "نشر التعليق",
   },
   fr: {
-    appName: "ViraFlow",
+    appName: "Pulseora",
     tagline: "Creer. Devenir viral. Gagner.",
     chooseLanguage: "Choisissez votre langue",
     chooseLanguageBody: "Commencez avec la langue de votre experience dans l'application.",
@@ -218,7 +218,7 @@ const translations = {
     planBenefits: "Inclus dans l'offre",
     saveChanges: "Enregistrer",
     logout: "Se deconnecter",
-    mixedFeedTitle: "Aujourd'hui sur ViraFlow",
+    mixedFeedTitle: "Aujourd'hui sur Pulseora",
     mixedFeedBody: "Croissance createur, business et contenu viral dans une seule app.",
     recommendedForYou: "Pour vous",
     marketplaceBoost: "Boost marketplace",
@@ -230,7 +230,7 @@ const translations = {
     postComment: "Publier",
   },
   es: {
-    appName: "ViraFlow",
+    appName: "Pulseora",
     tagline: "Crea. Hazte viral. Gana dinero.",
     chooseLanguage: "Elige tu idioma",
     chooseLanguageBody: "Comienza con el idioma que quieres usar en la app.",
@@ -294,7 +294,7 @@ const translations = {
     planBenefits: "Incluye",
     saveChanges: "Guardar cambios",
     logout: "Salir",
-    mixedFeedTitle: "Hoy en ViraFlow",
+    mixedFeedTitle: "Hoy en Pulseora",
     mixedFeedBody: "Crecimiento creador, marketplace y contenido viral en una sola app.",
     recommendedForYou: "Para ti",
     marketplaceBoost: "Impulso marketplace",
@@ -312,4 +312,3 @@ export type CopyKey = keyof typeof translations.en;
 export function getCopy(language: LanguageOption | null) {
   return translations[language ?? "en"];
 }
-

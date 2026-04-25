@@ -28,7 +28,7 @@ export function CommunitiesScreen({ navigation }: { navigation: any }) {
       <View style={styles.heroCard}>
         <SectionTitle
           title="Pages, groups, and channels"
-          subtitle="Create branded spaces, private communities, and broadcast channels inside ViraFlow."
+          subtitle="Create branded spaces, private communities, and broadcast channels inside Pulseora."
         />
         <View style={styles.heroStats}>
           <HeroStat label="Total spaces" value={communities.length} />

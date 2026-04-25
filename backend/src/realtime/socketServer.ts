@@ -14,7 +14,7 @@ import {
   markMarketplaceThreadDelivered,
   markMarketplaceThreadRead,
 } from "../data/mockDb";
-import { getUserIdFromAccessToken } from "../middleware/auth";
+import { getFirestore, verifyFirebaseUserToken } from "../services/firebaseService";
 import { CommunityChatMessage, DirectChatMessage, DirectChatThread, MarketplaceChatMessage, MarketplaceChatThread } from "../types/models";
 import {
   buildCommunityChatMessagePayload,
@@ -83,6 +83,10 @@ function emitDeliveredRealtime(
   emitToUsersExcept(userIds, skipUserId, "chat:delivered", payload);
 }
 
+function listPresenceUserIds() {
+  return [...new Set([...listUsers().map((user) => user.id), ...lastSeenByUserId.keys(), ...activeConnectionCounts.keys()])];
+}
+
 function buildPresencePayload(userId: string) {
   return {
     userId,
@@ -112,14 +116,19 @@ export function attachSocketServer(server: HttpServer) {
           : undefined;
 
     const normalizedToken = rawToken?.startsWith("Bearer ") ? rawToken.replace("Bearer ", "") : rawToken;
-    const userId = getUserIdFromAccessToken(normalizedToken);
-    if (!userId) {
-      next(new Error("Unauthorized"));
-      return;
-    }
+    void verifyFirebaseUserToken(normalizedToken)
+      .then((user) => {
+        if (!user) {
+          next(new Error("Unauthorized"));
+          return;
+        }
 
-    socket.data.userId = userId;
-    next();
+        socket.data.userId = user.id;
+        next();
+      })
+      .catch(() => {
+        next(new Error("Unauthorized"));
+      });
   });
 
   io.on("connection", (socket) => {
@@ -131,36 +140,17 @@ export function attachSocketServer(server: HttpServer) {
 
     socket.join(getUserRoom(userId));
     activeConnectionCounts.set(userId, (activeConnectionCounts.get(userId) ?? 0) + 1);
-    socket.emit("presence:snapshot", listUsers().map((user) => buildPresencePayload(user.id)));
+    lastSeenByUserId.set(userId, lastSeenByUserId.get(userId) ?? new Date().toISOString());
+    socket.emit("presence:snapshot", listPresenceUserIds().map((id) => buildPresencePayload(id)));
     emitPresenceUpdate(userId);
 
-    socket.on("chat:typing", (payload: TypingEventPayload) => {
-      if (payload.conversationType === "direct") {
-        const thread = getDirectThreadById(payload.threadId);
-        if (!thread || !thread.participantIds.includes(userId)) {
-          return;
-        }
-
-        emitTypingIndicatorRealtime(thread.participantIds, userId, { ...payload, userId });
+    socket.on("chat:typing", async (payload: TypingEventPayload) => {
+      const participantIds = await resolveTypingParticipants(userId, payload);
+      if (!participantIds || participantIds.length === 0) {
         return;
       }
 
-      if (payload.conversationType === "marketplace") {
-        const thread = getMarketplaceThreadById(payload.threadId);
-        if (!thread || (thread.buyerId !== userId && thread.sellerId !== userId)) {
-          return;
-        }
-
-        emitTypingIndicatorRealtime([thread.buyerId, thread.sellerId], userId, { ...payload, userId });
-        return;
-      }
-
-      const community = getCommunityById(payload.communityId);
-      if (!community || community.kind !== "group" || !canContributeToCommunity(userId, community)) {
-        return;
-      }
-
-      emitTypingIndicatorRealtime([community.ownerId, ...community.memberIds], userId, { ...payload, userId });
+      emitTypingIndicatorRealtime(participantIds, userId, { ...payload, userId });
     });
 
     socket.on("chat:delivered", (payload: DeliveredEventPayload) => {
@@ -285,4 +275,122 @@ export function emitCommunityMessageRealtime(communityId: string, message: Commu
     communityId,
     message: buildCommunityChatMessagePayload(message),
   });
+}
+
+async function resolveTypingParticipants(userId: string, payload: TypingEventPayload) {
+  if (payload.conversationType === "direct") {
+    return (await readParticipantIdsFromFirestore("directThreads", payload.threadId, userId)) ?? readDirectParticipantsFromMockDb(payload.threadId, userId);
+  }
+
+  if (payload.conversationType === "marketplace") {
+    return (
+      (await readMarketplaceParticipantsFromFirestore(payload.threadId, userId)) ??
+      readMarketplaceParticipantsFromMockDb(payload.threadId, userId)
+    );
+  }
+
+  return (await readCommunityParticipantsFromFirestore(payload.communityId, userId)) ?? readCommunityParticipantsFromMockDb(payload.communityId, userId);
+}
+
+async function readParticipantIdsFromFirestore(collectionName: string, docId: string, userId: string) {
+  const db = getFirestore();
+  if (!db) {
+    return undefined;
+  }
+
+  const snapshot = await db.collection(collectionName).doc(docId).get();
+  if (!snapshot.exists) {
+    return undefined;
+  }
+
+  const participantIds = uniqueIds(readStringArray(snapshot.data()?.participantIds));
+  if (!participantIds.includes(userId)) {
+    return undefined;
+  }
+
+  return participantIds;
+}
+
+async function readMarketplaceParticipantsFromFirestore(threadId: string, userId: string) {
+  const db = getFirestore();
+  if (!db) {
+    return undefined;
+  }
+
+  const snapshot = await db.collection("marketplaceThreads").doc(threadId).get();
+  if (!snapshot.exists) {
+    return undefined;
+  }
+
+  const data = snapshot.data() ?? {};
+  const participantIds = uniqueIds([
+    ...readStringArray(data.participantIds),
+    readString(data.buyerId),
+    readString(data.sellerId),
+  ]);
+  if (!participantIds.includes(userId)) {
+    return undefined;
+  }
+
+  return participantIds;
+}
+
+async function readCommunityParticipantsFromFirestore(communityId: string, userId: string) {
+  const db = getFirestore();
+  if (!db) {
+    return undefined;
+  }
+
+  const snapshot = await db.collection("communities").doc(communityId).get();
+  if (!snapshot.exists) {
+    return undefined;
+  }
+
+  const data = snapshot.data() ?? {};
+  const kind = readString(data.kind);
+  const participantIds = uniqueIds([readString(data.ownerId), ...readStringArray(data.memberIds)]);
+  if (kind !== "group" || !participantIds.includes(userId)) {
+    return undefined;
+  }
+
+  return participantIds;
+}
+
+function readDirectParticipantsFromMockDb(threadId: string, userId: string) {
+  const thread = getDirectThreadById(threadId);
+  if (!thread || !thread.participantIds.includes(userId)) {
+    return undefined;
+  }
+
+  return thread.participantIds;
+}
+
+function readMarketplaceParticipantsFromMockDb(threadId: string, userId: string) {
+  const thread = getMarketplaceThreadById(threadId);
+  if (!thread || (thread.buyerId !== userId && thread.sellerId !== userId)) {
+    return undefined;
+  }
+
+  return [thread.buyerId, thread.sellerId];
+}
+
+function readCommunityParticipantsFromMockDb(communityId: string, userId: string) {
+  const community = getCommunityById(communityId);
+  if (!community || community.kind !== "group" || !canContributeToCommunity(userId, community)) {
+    return undefined;
+  }
+
+  return uniqueIds([community.ownerId, ...community.memberIds]);
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function readStringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+}
+
+function uniqueIds(values: Array<string | undefined>) {
+  return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))];
 }

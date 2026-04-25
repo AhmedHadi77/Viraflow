@@ -70,7 +70,7 @@ export function CreateCommunityScreen({ navigation }: { navigation: any }) {
       return;
     }
 
-    Alert.alert("Created", `Your ${kind} is now live inside ViraFlow.`);
+    Alert.alert("Created", `Your ${kind} is now live inside Pulseora.`);
     navigation.navigate("Communities");
   }
 

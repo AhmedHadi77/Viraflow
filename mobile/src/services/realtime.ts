@@ -6,12 +6,9 @@ import {
   ApiMarketplaceChatMessagePayload,
   ApiMarketplaceChatThreadPayload,
 } from "./appApi";
+import { getPublicApiBaseUrl } from "./publicEnv";
 
-const API_BASE_URL =
-  (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.EXPO_PUBLIC_API_BASE_URL?.replace(
-    /\/$/,
-    ""
-  ) ?? "";
+const API_BASE_URL = getPublicApiBaseUrl();
 
 function getSocketBaseUrl() {
   if (!API_BASE_URL) {

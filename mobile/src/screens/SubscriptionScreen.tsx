@@ -32,7 +32,7 @@ export function SubscriptionScreen() {
       result.subscription ? "Premium activated" : "Checkout opened",
       result.message ??
         (result.subscription
-          ? `${selected} plan is now active on your ViraFlow account.`
+          ? `${selected} plan is now active on your Pulseora account.`
           : `Secure Stripe checkout opened for the ${selected} plan.`)
     );
   }
@@ -78,7 +78,7 @@ export function SubscriptionScreen() {
       <View style={styles.exportCard}>
         <Text style={styles.exportTitle}>Pay per export</Text>
         <Text style={styles.exportBody}>
-          Need a one-off render instead of a plan? ViraFlow can also charge per premium export so creators can buy only the final assets they want.
+          Need a one-off render instead of a plan? Pulseora can also charge per premium export so creators can buy only the final assets they want.
         </Text>
       </View>
       <PrimaryButton

@@ -63,7 +63,7 @@ export async function registerWithFirebaseProfile(
     username,
     email,
     profileImage: DEFAULT_PROFILE_IMAGE,
-    bio: "New creator on ViraFlow.",
+    bio: "New creator on Pulseora.",
     headline: "Creator in progress",
     language: language ?? "en",
     planType: "free",
@@ -101,7 +101,7 @@ export async function loginWithFirebaseProfile(email: string, password: string):
     profile = buildFallbackProfile({
       id: credential.user.uid,
       email: credential.user.email ?? email.trim().toLowerCase(),
-      name: credential.user.displayName ?? "ViraFlow Creator",
+      name: credential.user.displayName ?? "Pulseora Creator",
       profileImage: credential.user.photoURL ?? DEFAULT_PROFILE_IMAGE,
     });
     await setDoc(profileRef, profile, { merge: true });
@@ -152,7 +152,7 @@ export async function updateFirebaseUserProfile(userId: string, payload: UpdateP
       })
     : buildFallbackProfile({
         id: userId,
-        email: auth.currentUser?.email ?? `${normalizeUsername(payload.username)}@viraflow.app`,
+        email: auth.currentUser?.email ?? `${normalizeUsername(payload.username)}@pulseora.app`,
         name: payload.name,
         profileImage: payload.profileImage,
       });
@@ -240,11 +240,11 @@ function buildFallbackProfile(input: { id: string; email: string; name: string; 
 
   return {
     id: input.id,
-    name: input.name.trim() || "ViraFlow Creator",
+    name: input.name.trim() || "Pulseora Creator",
     username: normalizeUsername(usernameSeed),
     email: input.email.trim().toLowerCase(),
     profileImage: input.profileImage?.trim() || DEFAULT_PROFILE_IMAGE,
-    bio: "New creator on ViraFlow.",
+    bio: "New creator on Pulseora.",
     headline: "Creator in progress",
     language: "en",
     planType: "free",
@@ -260,8 +260,8 @@ function buildFallbackProfile(input: { id: string; email: string; name: string; 
 function normalizeFirestoreProfile(raw: Partial<FirestoreUserProfile> & { id: string }): FirestoreUserProfile {
   const fallback = buildFallbackProfile({
     id: raw.id,
-    email: raw.email || `${raw.username || raw.id}@viraflow.app`,
-    name: raw.name || "ViraFlow Creator",
+    email: raw.email || `${raw.username || raw.id}@pulseora.app`,
+    name: raw.name || "Pulseora Creator",
     profileImage: raw.profileImage,
   });
 

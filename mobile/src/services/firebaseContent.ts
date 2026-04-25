@@ -190,7 +190,7 @@ function normalizeStoryDoc(id: string, data: Record<string, unknown>): Story {
 }
 
 function normalizeReelDoc(id: string, data: Record<string, unknown>): Reel {
-  const caption = readString(data.caption, "New ViraFlow reel");
+  const caption = readString(data.caption, "New Pulseora reel");
   const likedBy = readStringArray(data.likedBy);
 
   return {
@@ -233,11 +233,11 @@ function normalizeUserDoc(id: string, data: Record<string, unknown>): User {
 
   return {
     id,
-    name: readString(data.name, "ViraFlow Creator"),
+    name: readString(data.name, "Pulseora Creator"),
     username,
-    email: readString(data.email, `${username}@viraflow.app`),
+    email: readString(data.email, `${username}@pulseora.app`),
     profileImage: readString(data.profileImage, FALLBACK_PROFILE_IMAGE),
-    bio: readString(data.bio, "New creator on ViraFlow."),
+    bio: readString(data.bio, "New creator on Pulseora."),
     headline: readString(data.headline, "Creator in progress"),
     language: normalizeLanguage(readString(data.language, "en")),
     planType: normalizePlan(readString(data.planType, "free")),
