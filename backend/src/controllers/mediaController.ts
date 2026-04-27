@@ -35,7 +35,11 @@ export function getMediaStatus(_req: AuthenticatedRequest, res: Response) {
 }
 
 export function postCloudinarySignature(req: AuthenticatedRequest, res: Response) {
-  const userId = req.user?.id ?? "shared";
+  const userId = req.user?.id;
+  if (!userId) {
+    res.status(401).json({ message: "Unauthorized." });
+    return;
+  }
 
   const parsed = signatureSchema.safeParse(req.body);
   if (!parsed.success) {

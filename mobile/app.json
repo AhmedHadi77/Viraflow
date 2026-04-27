@@ -4,6 +4,7 @@
     "slug": "viraflow",
     "version": "1.0.3",
     "orientation": "portrait",
+    "newArchEnabled": true,
     "userInterfaceStyle": "light",
     "icon": "./mobile/assets/pulseora-icon.png",
     "splash": {

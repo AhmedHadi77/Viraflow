@@ -99,6 +99,7 @@ export function ReelDetailsScreen({ navigation, route }: { navigation: any; rout
         creator={reelCreator}
         currentUserId={currentUser?.id}
         boostLabel={boost?.status === "active" ? "Boost live" : undefined}
+        playVideo
         onComment={() => undefined}
         onLike={() => {
           void handleLike();
@@ -106,6 +107,9 @@ export function ReelDetailsScreen({ navigation, route }: { navigation: any; rout
         onOpen={() => undefined}
         onRepost={() => {
           void handleRepost();
+        }}
+        onSave={() => {
+          void handleSave();
         }}
         onToggleFollow={
           reelCreator.id === currentUser?.id
@@ -115,6 +119,7 @@ export function ReelDetailsScreen({ navigation, route }: { navigation: any; rout
               }
         }
         reel={activeReel}
+        saved={saved}
       />
 
       {isOwnReel ? (
@@ -147,15 +152,7 @@ export function ReelDetailsScreen({ navigation, route }: { navigation: any; rout
             <PrimaryButton label="Boost my reel" onPress={() => navigation.navigate("BoostReel", { reelId: activeReel.id })} />
           )}
         </View>
-      ) : (
-        <PrimaryButton
-          label={saved ? "Saved reel" : "Save reel"}
-          onPress={() => {
-            void handleSave();
-          }}
-          variant="ghost"
-        />
-      )}
+      ) : null}
 
       <SectionTitle title={copy.reelDetails} subtitle={copy.commentPlaceholder} />
       <InputField label={copy.comment} onChangeText={setCommentText} placeholder={copy.commentPlaceholder} value={commentText} multiline />

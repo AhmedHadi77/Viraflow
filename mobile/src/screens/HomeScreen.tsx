@@ -1,19 +1,17 @@
+import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { LinearGradient } from "expo-linear-gradient";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { ProductCard } from "../components/ProductCard";
 import { ReelCard } from "../components/ReelCard";
 import { Screen } from "../components/Screen";
-import { SectionTitle } from "../components/SectionTitle";
-import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
 import { Story } from "../types/models";
 import { palette, radii, spacing } from "../theme";
 
 export function HomeScreen({ navigation }: { navigation: any }) {
   const {
-    language,
     currentUser,
+    notifications,
     users,
     stories,
     reels,
@@ -21,18 +19,24 @@ export function HomeScreen({ navigation }: { navigation: any }) {
     communities,
     getUserById,
     getCommentsForReel,
+    isReelSaved,
+    toggleSaveReel,
     getBoostForReel,
+    getTotalDirectUnreadCount,
     toggleLike,
     repostReel,
     toggleFollow,
     createStory,
   } = useAppState();
-  const copy = getCopy(language);
   const rootNavigation = navigation.getParent?.() ?? navigation;
-  const creators = users.filter((item) => item.id !== currentUser?.id).slice(0, 3);
+  const creators = users.filter((item) => item.id !== currentUser?.id).slice(0, 8);
   const latestStories = getLatestStories(stories);
   const currentUserStory = currentUser ? latestStories.find((story) => story.userId === currentUser.id) : undefined;
   const otherStories = latestStories.filter((story) => story.userId !== currentUser?.id);
+  const sortedReels = [...reels].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  const featuredProducts = [...products].sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, 3);
+  const unreadNotifications = notifications.filter((item) => item.userId === currentUser?.id && !item.readAt).length;
+  const totalDirectUnreadCount = getTotalDirectUnreadCount();
 
   async function handleLike(reelId: string) {
     const result = await toggleLike(reelId);
@@ -55,6 +59,13 @@ export function HomeScreen({ navigation }: { navigation: any }) {
     }
   }
 
+  async function handleSave(reelId: string) {
+    const result = await toggleSaveReel(reelId);
+    if (!result.ok) {
+      Alert.alert("Save unavailable", result.message ?? "This reel could not be saved right now.");
+    }
+  }
+
   async function handleAddStory() {
     if (!currentUser) {
       Alert.alert("Login required", "You need to be logged in to post a story.");
@@ -71,7 +82,7 @@ export function HomeScreen({ navigation }: { navigation: any }) {
       mediaTypes: ["images"],
       allowsEditing: true,
       aspect: [9, 16],
-      quality: 0.5,
+      quality: 0.55,
       base64: true,
     });
 
@@ -96,19 +107,23 @@ export function HomeScreen({ navigation }: { navigation: any }) {
   }
 
   return (
-    <Screen scrollable>
-      <LinearGradient colors={["rgba(255,122,47,0.18)", "rgba(54,224,161,0.12)", "rgba(255,255,255,0.02)"]} style={styles.heroCard}>
-        <Text style={styles.eyebrow}>Welcome back, {currentUser?.name?.split(" ")[0] ?? "Creator"}</Text>
-        <Text style={styles.heroTitle}>{copy.mixedFeedTitle}</Text>
-        <Text style={styles.heroBody}>{copy.mixedFeedBody}</Text>
-        <View style={styles.heroStats}>
-          <Badge label={copy.creatorStudio} value={`${reels.length} reels`} />
-          <Badge label={copy.marketplaceBoost} value={`${products.length} offers`} />
-          <Badge label={copy.recommendedForYou} value={`${creators.length} creators`} />
+    <Screen scrollable contentContainerStyle={styles.content}>
+      <View style={styles.topBar}>
+        <Text style={styles.brand}>Pulseora</Text>
+        <View style={styles.topActions}>
+          <IconBubble
+            badge={totalDirectUnreadCount > 0 ? String(totalDirectUnreadCount) : undefined}
+            icon="paper-plane-outline"
+            onPress={() => rootNavigation.navigate("DirectInbox")}
+          />
+          <IconBubble
+            badge={unreadNotifications > 0 ? String(unreadNotifications) : undefined}
+            icon="heart-outline"
+            onPress={() => rootNavigation.navigate("Notifications")}
+          />
         </View>
-      </LinearGradient>
+      </View>
 
-      <SectionTitle title="Stories" subtitle="Post a quick update and keep your audience warm between reels." />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storyRow}>
         {currentUser ? (
           <Pressable
@@ -119,15 +134,16 @@ export function HomeScreen({ navigation }: { navigation: any }) {
           >
             <View style={styles.storyAvatarWrap}>
               <Image source={{ uri: currentUserStory?.imageUrl || currentUser.profileImage }} style={styles.storyAvatar} />
-              <View style={styles.addBadge}>
-                <Text style={styles.addBadgeLabel}>+</Text>
+              <View style={styles.storyAddBadge}>
+                <Ionicons color="#05080d" name="add" size={14} />
               </View>
             </View>
-            <Text numberOfLines={1} style={styles.storyName}>
+            <Text numberOfLines={1} style={styles.storyLabel}>
               Your story
             </Text>
           </Pressable>
         ) : null}
+
         {otherStories.map((story) => {
           const creator = getUserById(story.userId);
           if (!creator) {
@@ -140,71 +156,59 @@ export function HomeScreen({ navigation }: { navigation: any }) {
               onPress={() => rootNavigation.navigate("PublicProfile", { userId: creator.id })}
               style={styles.storyCard}
             >
-              <View style={styles.storyAvatarRing}>
+              <View style={styles.storyRing}>
                 <Image source={{ uri: story.imageUrl }} style={styles.storyAvatar} />
               </View>
-              <Text numberOfLines={1} style={styles.storyName}>
-                {creator.name.split(" ")[0]}
+              <Text numberOfLines={1} style={styles.storyLabel}>
+                {creator.username}
               </Text>
             </Pressable>
           );
         })}
       </ScrollView>
 
-      <SectionTitle title={copy.trendingCreators} subtitle={copy.tagline} />
-      <View style={styles.creatorList}>
+      <View style={styles.quickComposer}>
+        <Image source={{ uri: currentUser?.profileImage }} style={styles.quickComposerAvatar} />
+        <Pressable onPress={() => navigation.navigate("Create", { initialMode: "reel" })} style={styles.quickComposerInput}>
+          <Text style={styles.quickComposerText}>Start a reel, share a drop, or post to your audience...</Text>
+        </Pressable>
+        <Pressable onPress={() => navigation.navigate("Create", { initialMode: "reel" })} style={styles.quickComposerAction}>
+          <Ionicons color={palette.text} name="play-circle-outline" size={20} />
+        </Pressable>
+        <Pressable onPress={() => navigation.navigate("Create", { initialMode: "product" })} style={styles.quickComposerAction}>
+          <Ionicons color={palette.text} name="bag-handle-outline" size={19} />
+        </Pressable>
+      </View>
+
+      <View style={styles.sectionRow}>
+        <Text style={styles.sectionTitle}>Creators to watch</Text>
+        <Pressable onPress={() => rootNavigation.navigate("Communities")}>
+          <Text style={styles.sectionLink}>Spaces</Text>
+        </Pressable>
+      </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.creatorRow}>
         {creators.map((creator) => (
           <Pressable
             key={creator.id}
             onPress={() => rootNavigation.navigate("PublicProfile", { userId: creator.id })}
-            style={styles.creatorCard}
+            style={styles.creatorChip}
           >
-            <Image source={{ uri: creator.profileImage }} style={styles.creatorAvatar} />
-            <View style={styles.creatorCopy}>
-              <Text style={styles.creatorName}>{creator.name}</Text>
-              <Text style={styles.creatorMeta}>@{creator.username}</Text>
-              <Text style={styles.creatorMeta}>{creator.headline}</Text>
-            </View>
-            <View style={styles.creatorSignal}>
-              <Text style={styles.creatorSignalValue}>{creator.followers.length}</Text>
-              <Text style={styles.creatorSignalLabel}>fans</Text>
+            <Image source={{ uri: creator.profileImage }} style={styles.creatorChipAvatar} />
+            <View style={styles.creatorChipCopy}>
+              <Text numberOfLines={1} style={styles.creatorChipName}>
+                {creator.name}
+              </Text>
+              <Text numberOfLines={1} style={styles.creatorChipMeta}>
+                @{creator.username}
+              </Text>
             </View>
           </Pressable>
         ))}
-      </View>
+      </ScrollView>
 
-      <SectionTitle title="Pages, groups and channels" subtitle="Community spaces creators are building right now." />
-      <View style={styles.stack}>
-        {communities.slice(0, 3).map((community) => {
-          const owner = getUserById(community.ownerId);
-
-          return (
-            <Pressable
-              key={community.id}
-              onPress={() => rootNavigation.navigate("CommunityDetails", { communityId: community.id })}
-              style={styles.communityCard}
-            >
-              <Image source={{ uri: community.coverImage }} style={styles.communityCover} />
-              <View style={styles.communityBody}>
-                <View style={styles.communityBadge}>
-                  <Text style={styles.communityBadgeLabel}>{community.kind}</Text>
-                </View>
-                <Text style={styles.communityTitle}>{community.name}</Text>
-                <Text numberOfLines={2} style={styles.communityDescription}>
-                  {community.description}
-                </Text>
-                <Text style={styles.communityMeta}>
-                  {community.category} | {owner?.name ?? "Creator"}
-                </Text>
-              </View>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      <SectionTitle title={copy.recommendedReels} />
-      <View style={styles.stack}>
-        {reels.slice(0, 2).map((reel) => {
+      <View style={styles.feed}>
+        {sortedReels.map((reel, index) => {
           const creator = getUserById(reel.userId);
           const boost = getBoostForReel(reel.id);
           if (!creator) {
@@ -212,49 +216,82 @@ export function HomeScreen({ navigation }: { navigation: any }) {
           }
 
           return (
-            <ReelCard
-              key={reel.id}
-              commentCount={getCommentsForReel(reel.id).length}
-              creator={creator}
-              currentUserId={currentUser?.id}
-              boostLabel={boost?.status === "active" ? "Boost live" : undefined}
-              onComment={() => rootNavigation.navigate("ReelDetails", { reelId: reel.id })}
-              onLike={() => {
-                void handleLike(reel.id);
-              }}
-              onOpen={() => rootNavigation.navigate("ReelDetails", { reelId: reel.id })}
-              onRepost={() => {
-                void handleRepost(reel.id);
-              }}
-              onToggleFollow={
-                creator.id === currentUser?.id
-                  ? undefined
-                  : () => {
-                      void handleFollow(creator.id);
-                    }
-              }
-              reel={reel}
-            />
-          );
-        })}
-      </View>
+            <View key={reel.id} style={styles.feedBlock}>
+              <ReelCard
+                boostLabel={boost?.status === "active" ? "Boost live" : undefined}
+                commentCount={getCommentsForReel(reel.id).length}
+                creator={creator}
+                currentUserId={currentUser?.id}
+                onComment={() => rootNavigation.navigate("ReelDetails", { reelId: reel.id })}
+                onLike={() => {
+                  void handleLike(reel.id);
+                }}
+                onOpen={() => rootNavigation.navigate("ReelViewer", { reelId: reel.id })}
+                onRepost={() => {
+                  void handleRepost(reel.id);
+                }}
+                onSave={() => {
+                  void handleSave(reel.id);
+                }}
+                onToggleFollow={
+                  creator.id === currentUser?.id
+                    ? undefined
+                    : () => {
+                        void handleFollow(creator.id);
+                      }
+                }
+                playVideo={index === 0}
+                reel={reel}
+                saved={isReelSaved(reel.id)}
+              />
 
-      <SectionTitle title={copy.suggestedProducts} />
-      <View style={styles.stack}>
-        {products.slice(0, 2).map((product) => {
-          const seller = getUserById(product.userId);
-          if (!seller) {
-            return null;
-          }
+              {index === 1 && featuredProducts.length > 0 ? (
+                <View style={styles.inlineStrip}>
+                  <View style={styles.sectionRow}>
+                    <Text style={styles.sectionTitle}>Marketplace picks</Text>
+                    <Pressable onPress={() => navigation.navigate("Marketplace")}>
+                      <Text style={styles.sectionLink}>See all</Text>
+                    </Pressable>
+                  </View>
 
-          return (
-            <ProductCard
-              key={product.id}
-              onPress={() => rootNavigation.navigate("ProductDetails", { productId: product.id })}
-              onSellerPress={() => rootNavigation.navigate("PublicProfile", { userId: seller.id })}
-              product={product}
-              seller={seller}
-            />
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.productRow}>
+                    {featuredProducts.map((product) => {
+                      const seller = getUserById(product.userId);
+                      if (!seller) {
+                        return null;
+                      }
+
+                      return (
+                        <View key={product.id} style={styles.productCardWrap}>
+                          <ProductCard
+                            onPress={() => rootNavigation.navigate("ProductDetails", { productId: product.id })}
+                            onSellerPress={() => rootNavigation.navigate("PublicProfile", { userId: seller.id })}
+                            product={product}
+                            seller={seller}
+                          />
+                        </View>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              ) : null}
+
+              {index === 2 && communities[0] ? (
+                <Pressable
+                  onPress={() => rootNavigation.navigate("CommunityDetails", { communityId: communities[0].id })}
+                  style={styles.communitySpotlight}
+                >
+                  <Image source={{ uri: communities[0].coverImage }} style={styles.communitySpotlightImage} />
+                  <View style={styles.communitySpotlightOverlay}>
+                    <Text style={styles.communitySpotlightKicker}>{communities[0].kind}</Text>
+                    <Text style={styles.communitySpotlightTitle}>{communities[0].name}</Text>
+                    <Text numberOfLines={2} style={styles.communitySpotlightBody}>
+                      {communities[0].description}
+                    </Text>
+                  </View>
+                </Pressable>
+              ) : null}
+            </View>
           );
         })}
       </View>
@@ -279,66 +316,76 @@ function getLatestStories(stories: Story[]) {
   });
 }
 
-function Badge({ label, value }: { label: string; value: string }) {
+function IconBubble({
+  icon,
+  badge,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  badge?: string;
+  onPress: () => void;
+}) {
   return (
-    <View style={styles.badge}>
-      <Text style={styles.badgeValue}>{value}</Text>
-      <Text style={styles.badgeLabel}>{label}</Text>
-    </View>
+    <Pressable onPress={onPress} style={styles.iconBubble}>
+      <Ionicons color={palette.text} name={icon} size={22} />
+      {badge ? (
+        <View style={styles.iconBadge}>
+          <Text style={styles.iconBadgeLabel}>{badge}</Text>
+        </View>
+      ) : null}
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  heroCard: {
-    borderColor: palette.borderStrong,
-    borderRadius: radii.xl,
-    borderWidth: 1,
-    gap: spacing.md,
-    padding: spacing.xl,
+  content: {
+    paddingBottom: 96,
+    paddingTop: spacing.sm,
   },
-  eyebrow: {
-    color: palette.accentSoft,
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
+  topBar: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
-  heroTitle: {
+  brand: {
     color: palette.text,
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: "900",
-    letterSpacing: -0.5,
+    letterSpacing: -0.7,
   },
-  heroBody: {
-    color: palette.textSoft,
-    fontSize: 15,
-    lineHeight: 23,
-  },
-  heroStats: {
+  topActions: {
+    alignItems: "center",
     flexDirection: "row",
     gap: spacing.sm,
   },
-  badge: {
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderColor: "rgba(255,255,255,0.10)",
-    borderRadius: radii.lg,
+  iconBubble: {
+    alignItems: "center",
+    backgroundColor: "#0b1218",
+    borderColor: "rgba(255,255,255,0.08)",
+    borderRadius: 20,
     borderWidth: 1,
-    flex: 1,
-    gap: 4,
-    padding: spacing.md,
+    height: 40,
+    justifyContent: "center",
+    position: "relative",
+    width: 40,
   },
-  badgeValue: {
-    color: palette.text,
-    fontSize: 15,
-    fontWeight: "900",
+  iconBadge: {
+    alignItems: "center",
+    backgroundColor: "#ff4d67",
+    borderColor: "#05080d",
+    borderRadius: 10,
+    borderWidth: 2,
+    justifyContent: "center",
+    minWidth: 20,
+    paddingHorizontal: 5,
+    position: "absolute",
+    right: -4,
+    top: -4,
   },
-  badgeLabel: {
-    color: palette.muted,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  creatorList: {
-    gap: spacing.md,
+  iconBadgeLabel: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "800",
   },
   storyRow: {
     gap: spacing.md,
@@ -346,141 +393,178 @@ const styles = StyleSheet.create({
   },
   storyCard: {
     alignItems: "center",
-    gap: spacing.sm,
-    width: 88,
+    gap: spacing.xs,
+    width: 84,
   },
   storyAvatarWrap: {
     position: "relative",
   },
-  storyAvatarRing: {
-    borderColor: palette.accentSoft,
-    borderRadius: 40,
-    borderWidth: 2,
+  storyRing: {
+    borderColor: "rgba(255,122,47,0.85)",
+    borderRadius: 38,
+    borderWidth: 2.5,
     padding: 3,
   },
   storyAvatar: {
-    width: 74,
-    height: 74,
-    borderRadius: 37,
-    backgroundColor: palette.surface,
+    backgroundColor: "#111820",
+    borderRadius: 34,
+    height: 68,
+    width: 68,
   },
-  addBadge: {
+  storyAddBadge: {
     alignItems: "center",
-    backgroundColor: palette.primary,
-    borderColor: palette.background,
-    borderRadius: 12,
+    backgroundColor: palette.text,
+    borderColor: "#05080d",
+    borderRadius: 11,
     borderWidth: 2,
-    bottom: 0,
-    height: 24,
+    bottom: -2,
+    height: 22,
     justifyContent: "center",
     position: "absolute",
-    right: 0,
-    width: 24,
+    right: -2,
+    width: 22,
   },
-  addBadgeLabel: {
-    color: "#071118",
-    fontSize: 16,
-    fontWeight: "900",
-    lineHeight: 18,
-  },
-  storyName: {
+  storyLabel: {
     color: palette.text,
     fontSize: 12,
     fontWeight: "700",
     textAlign: "center",
   },
-  creatorCard: {
+  quickComposer: {
     alignItems: "center",
-    backgroundColor: palette.surface,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.xl,
+    backgroundColor: "#0a1117",
+    borderColor: "rgba(255,255,255,0.07)",
+    borderRadius: 24,
     borderWidth: 1,
     flexDirection: "row",
-    gap: spacing.md,
-    padding: spacing.lg,
+    gap: spacing.sm,
+    padding: spacing.sm,
   },
-  creatorAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  quickComposerAvatar: {
+    borderRadius: 20,
+    height: 40,
+    width: 40,
   },
-  creatorCopy: {
+  quickComposerInput: {
+    backgroundColor: "#101820",
+    borderColor: "rgba(255,255,255,0.06)",
+    borderRadius: radii.pill,
+    borderWidth: 1,
     flex: 1,
-    gap: 2,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
   },
-  creatorName: {
+  quickComposerText: {
+    color: palette.muted,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  quickComposerAction: {
+    alignItems: "center",
+    backgroundColor: "#101820",
+    borderRadius: 18,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  sectionRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  sectionTitle: {
     color: palette.text,
     fontSize: 16,
     fontWeight: "900",
   },
-  creatorMeta: {
+  sectionLink: {
     color: palette.muted,
     fontSize: 13,
+    fontWeight: "800",
   },
-  creatorSignal: {
+  creatorRow: {
+    gap: spacing.sm,
+    paddingRight: spacing.md,
+  },
+  creatorChip: {
     alignItems: "center",
-    backgroundColor: palette.glass,
-    borderColor: palette.border,
-    borderRadius: radii.lg,
+    backgroundColor: "#0a1117",
+    borderColor: "rgba(255,255,255,0.07)",
+    borderRadius: 22,
     borderWidth: 1,
-    paddingHorizontal: spacing.md,
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
+    width: 188,
   },
-  creatorSignalValue: {
+  creatorChipAvatar: {
+    borderRadius: 22,
+    height: 44,
+    width: 44,
+  },
+  creatorChipCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  creatorChipName: {
     color: palette.text,
-    fontSize: 15,
-    fontWeight: "900",
+    fontSize: 13,
+    fontWeight: "800",
   },
-  creatorSignalLabel: {
+  creatorChipMeta: {
     color: palette.muted,
-    fontSize: 11,
-    fontWeight: "700",
-    textTransform: "uppercase",
+    fontSize: 12,
+    fontWeight: "600",
   },
-  stack: {
-    gap: spacing.lg,
+  feed: {
+    gap: spacing.xl,
   },
-  communityCard: {
-    backgroundColor: palette.surface,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.xl,
-    borderWidth: 1,
+  feedBlock: {
+    gap: spacing.md,
+  },
+  inlineStrip: {
+    gap: spacing.sm,
+  },
+  productRow: {
+    gap: spacing.md,
+    paddingRight: spacing.sm,
+  },
+  productCardWrap: {
+    width: 286,
+  },
+  communitySpotlight: {
+    borderRadius: 28,
     overflow: "hidden",
   },
-  communityCover: {
+  communitySpotlightImage: {
+    height: 220,
     width: "100%",
-    height: 170,
   },
-  communityBody: {
-    gap: spacing.sm,
+  communitySpotlightOverlay: {
+    backgroundColor: "rgba(4,7,11,0.72)",
+    bottom: 0,
+    gap: spacing.xs,
+    left: 0,
     padding: spacing.lg,
+    position: "absolute",
+    right: 0,
   },
-  communityBadge: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(54,224,161,0.14)",
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-  },
-  communityBadgeLabel: {
-    color: palette.primary,
+  communitySpotlightKicker: {
+    color: palette.accentSoft,
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 0.4,
     textTransform: "uppercase",
   },
-  communityTitle: {
+  communitySpotlightTitle: {
     color: palette.text,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "900",
   },
-  communityDescription: {
+  communitySpotlightBody: {
     color: palette.textSoft,
     fontSize: 14,
-    lineHeight: 22,
-  },
-  communityMeta: {
-    color: palette.muted,
-    fontSize: 13,
+    lineHeight: 20,
   },
 });

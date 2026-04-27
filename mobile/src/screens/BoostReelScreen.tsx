@@ -50,7 +50,7 @@ export function BoostReelScreen({ navigation, route }: { navigation: any; route:
           ? `${selectedPlan.title} is now running. Your reel is getting more reach and more views.`
           : `${selectedPlan.title} checkout opened. This boost will go live after payment is confirmed.`)
     );
-    navigation.replace("ReelDetails", { reelId: activeReel.id });
+    navigation.replace("ReelViewer", { reelId: activeReel.id });
   }
 
   return (
@@ -82,7 +82,7 @@ export function BoostReelScreen({ navigation, route }: { navigation: any; route:
           <Text style={styles.body}>This reel already has an active ad push running, so the app is protecting you from duplicate spend.</Text>
           <Text style={styles.note}>Campaign ends: {new Date(boost.endsAt).toLocaleString()}</Text>
           <Text style={styles.note}>Audience: {boost.targetAudience}</Text>
-          <PrimaryButton label="Back to reel" onPress={() => navigation.replace("ReelDetails", { reelId: activeReel.id })} variant="ghost" />
+          <PrimaryButton label="Back to reel" onPress={() => navigation.replace("ReelViewer", { reelId: activeReel.id })} variant="ghost" />
         </View>
       ) : null}
 

@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { MaterialTopTabBarProps, createMaterialTopTabNavigator } from "@react-navigation/material-top-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { Pressable, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
 import { palette } from "../theme";
@@ -15,6 +17,7 @@ export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
   MainTabs: undefined;
+  ReelViewer: { reelId: string };
   ReelDetails: { reelId: string };
   BoostReel: { reelId: string };
   ProductDetails: { productId: string };
@@ -42,7 +45,7 @@ export type AppTabParamList = {
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
-const Tab = createBottomTabNavigator<AppTabParamList>();
+const Tab = createMaterialTopTabNavigator<AppTabParamList>();
 
 const loadScreen = <T,>(loader: () => T): (() => T) => loader;
 
@@ -74,6 +77,11 @@ export function AppNavigator() {
       ) : (
         <>
           <Stack.Screen component={MainTabs} name="MainTabs" options={{ headerShown: false }} />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/ReelViewerScreen").ReelViewerScreen)}
+            name="ReelViewer"
+            options={{ headerShown: false }}
+          />
           <Stack.Screen
             getComponent={loadScreen(() => require("../screens/ReelDetailsScreen").ReelDetailsScreen)}
             name="ReelDetails"
@@ -166,38 +174,14 @@ function MainTabs() {
 
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarActiveTintColor: palette.primary,
-        tabBarInactiveTintColor: palette.muted,
-        tabBarStyle: {
-          backgroundColor: palette.surface,
-          borderTopColor: "transparent",
-          borderRadius: 28,
-          bottom: 30,
-          height: 74,
-          left: 16,
-          paddingBottom: 12,
-          paddingTop: 8,
-          position: "absolute",
-          right: 16,
-        },
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: "800",
-        },
-        tabBarIcon: ({ color, size }) => {
-          const iconByRoute: Record<keyof AppTabParamList, keyof typeof Ionicons.glyphMap> = {
-            Home: "home-outline",
-            Reels: "play-circle-outline",
-            Create: "add-circle-outline",
-            Marketplace: "bag-handle-outline",
-            Profile: "person-outline",
-          };
-
-          return <Ionicons color={color} name={iconByRoute[route.name as keyof AppTabParamList]} size={size} />;
-        },
-      })}
+      tabBarPosition="bottom"
+      screenOptions={{
+        swipeEnabled: true,
+        animationEnabled: true,
+        lazy: true,
+        lazyPreloadDistance: 1,
+      }}
+      tabBar={(props) => <PulseoraTabBar {...props} />}
     >
       <Tab.Screen
         getComponent={loadScreen(() => require("../screens/HomeScreen").HomeScreen)}
@@ -227,3 +211,143 @@ function MainTabs() {
     </Tab.Navigator>
   );
 }
+
+function PulseoraTabBar({ descriptors, navigation, state }: MaterialTopTabBarProps) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View style={[styles.tabBarOuter, { paddingBottom: Math.max(insets.bottom, 10) + 6 }]}>
+      <View style={styles.tabBarShell}>
+        {state.routes.map((route, index) => {
+          const focused = state.index === index;
+          const options = descriptors[route.key]?.options;
+          const iconByRoute: Record<
+            keyof AppTabParamList,
+            { active: keyof typeof Ionicons.glyphMap; idle: keyof typeof Ionicons.glyphMap }
+          > = {
+            Home: { active: "home", idle: "home-outline" },
+            Reels: { active: "play-circle", idle: "play-circle-outline" },
+            Create: { active: "add-circle", idle: "add-circle-outline" },
+            Marketplace: { active: "storefront", idle: "storefront-outline" },
+            Profile: { active: "person", idle: "person-outline" },
+          };
+          const icon = focused
+            ? iconByRoute[route.name as keyof AppTabParamList].active
+            : iconByRoute[route.name as keyof AppTabParamList].idle;
+          const isCreate = route.name === "Create";
+
+          const onPress = () => {
+            const event = navigation.emit({
+              type: "tabPress",
+              target: route.key,
+              canPreventDefault: true,
+            });
+
+            if (!focused && !event.defaultPrevented) {
+              navigation.navigate(route.name, route.params);
+            }
+          };
+
+          const onLongPress = () => {
+            navigation.emit({
+              type: "tabLongPress",
+              target: route.key,
+            });
+          };
+
+          return (
+            <Pressable
+              accessibilityLabel={options?.tabBarAccessibilityLabel}
+              accessibilityRole="button"
+              accessibilityState={focused ? { selected: true } : {}}
+              key={route.key}
+              onLongPress={onLongPress}
+              onPress={onPress}
+              style={({ pressed }) => [
+                styles.tabButton,
+                isCreate ? styles.createTabButton : null,
+                focused ? styles.tabButtonActive : null,
+                focused && isCreate ? styles.createTabButtonActive : null,
+                pressed && !focused ? styles.tabButtonPressed : null,
+              ]}
+              testID={options?.tabBarButtonTestID}
+            >
+              <Ionicons
+                color={focused ? (isCreate ? "#04070b" : palette.text) : palette.mutedSoft}
+                name={icon}
+                size={isCreate ? 28 : 24}
+              />
+              {focused && !isCreate ? <View style={styles.activePill} /> : null}
+              <View accessible={false} style={styles.screenReaderOnly} />
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  tabBarOuter: {
+    backgroundColor: palette.backgroundDeep,
+    paddingHorizontal: 14,
+    paddingTop: 8,
+  },
+  tabBarShell: {
+    alignItems: "center",
+    backgroundColor: "#05080d",
+    borderColor: "rgba(255,255,255,0.08)",
+    borderRadius: 26,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 14,
+    },
+    shadowOpacity: 0.34,
+    shadowRadius: 28,
+  },
+  tabButton: {
+    alignItems: "center",
+    backgroundColor: "transparent",
+    borderRadius: 18,
+    gap: 5,
+    height: 52,
+    justifyContent: "center",
+    minWidth: 54,
+    paddingHorizontal: 14,
+  },
+  tabButtonActive: {
+    backgroundColor: "#0c1219",
+    borderColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+  },
+  createTabButton: {
+    borderColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1,
+    minWidth: 58,
+  },
+  createTabButtonActive: {
+    backgroundColor: palette.text,
+    borderColor: palette.text,
+  },
+  tabButtonPressed: {
+    opacity: 0.84,
+  },
+  activePill: {
+    backgroundColor: palette.text,
+    borderRadius: 999,
+    height: 4,
+    width: 16,
+  },
+  screenReaderOnly: {
+    height: 0,
+    opacity: 0,
+    position: "absolute",
+    width: 0,
+  },
+});

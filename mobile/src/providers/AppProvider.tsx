@@ -2871,15 +2871,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return { ok: false, message: "Backend session missing. Please log in again." };
     }
 
-    try {
-      const accessTokenResult = await requireApiAccessToken(session);
-      if (!accessTokenResult.token) {
-        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
-      }
-      const created = await createStoryWithApi(accessTokenResult.token, payload);
-      const nextStory = mapApiStoryToMobile(created);
-      setStories((current) => [nextStory, ...filterActiveStories(current.filter((item) => item.id !== nextStory.id))]);
-      return { ok: true };
+      try {
+        const accessTokenResult = await requireApiAccessToken(session);
+        if (!accessTokenResult.token) {
+          return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+        }
+        const imageUrl = await uploadImageSourceForFirebaseContent({
+          token: accessTokenResult.token,
+          source: payload.imageUrl,
+          folder: "stories",
+          publicIdPrefix: normalizeUploadPrefix(`${currentUser.username}-story`),
+          label: "story image",
+        });
+        const created = await createStoryWithApi(accessTokenResult.token, {
+          ...payload,
+          imageUrl,
+        });
+        const nextStory = mapApiStoryToMobile(created);
+        setStories((current) => [nextStory, ...filterActiveStories(current.filter((item) => item.id !== nextStory.id))]);
+        return { ok: true };
     } catch (error) {
       return { ok: false, message: getApiErrorMessage(error) };
     }
@@ -2981,15 +2991,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return { ok: false, message: "Backend session missing. Please log in again." };
     }
 
-    try {
-      const accessTokenResult = await requireApiAccessToken(session);
-      if (!accessTokenResult.token) {
-        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
-      }
-      const created = await createReelWithApi(accessTokenResult.token, payload);
-      const nextReel = mapApiReelToMobile(created, reels.find((item) => item.id === created.id));
-      const nextReels = [nextReel, ...reels.filter((item) => item.id !== nextReel.id)];
-      setReels(nextReels);
+      try {
+        const accessTokenResult = await requireApiAccessToken(session);
+        if (!accessTokenResult.token) {
+          return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+        }
+        const uploadedVideo = await uploadVideoSourceForFirebaseContent({
+          token: accessTokenResult.token,
+          source: payload.videoUrl,
+          mimeType: payload.videoMimeType,
+          fileName: payload.videoFileName,
+          durationSeconds: payload.videoDurationSeconds,
+          publicIdPrefix: normalizeUploadPrefix(`${currentUser.username}-reel`),
+        });
+        const thumbnailUrl = payload.thumbnailUrl.trim()
+          ? await uploadImageSourceForFirebaseContent({
+              token: accessTokenResult.token,
+              source: payload.thumbnailUrl,
+              folder: "reels",
+              publicIdPrefix: normalizeUploadPrefix(`${currentUser.username}-reel-thumb`),
+              label: "reel thumbnail",
+              mimeType: payload.thumbnailMimeType,
+              fileName: payload.thumbnailFileName,
+            })
+          : uploadedVideo.thumbnailUrl;
+        const created = await createReelWithApi(accessTokenResult.token, {
+          ...payload,
+          videoUrl: uploadedVideo.videoUrl,
+          thumbnailUrl,
+        });
+        const nextReel = mapApiReelToMobile(created, reels.find((item) => item.id === created.id));
+        const nextReels = [nextReel, ...reels.filter((item) => item.id !== nextReel.id)];
+        setReels(nextReels);
       setUsers((current) => {
         const creatorSource =
           created.creator ??
@@ -3276,15 +3309,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return { ok: false, message: "Backend session missing. Please log in again." };
     }
 
-    try {
-      const accessTokenResult = await requireApiAccessToken(session);
-      if (!accessTokenResult.token) {
-        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
-      }
-      const created = await createProductWithApi(accessTokenResult.token, payload);
-      const nextProduct = mapApiProductToMobile(created, products.find((item) => item.id === created.id));
-      const nextProducts = [nextProduct, ...products.filter((item) => item.id !== nextProduct.id)];
-      setProducts(nextProducts);
+      try {
+        const accessTokenResult = await requireApiAccessToken(session);
+        if (!accessTokenResult.token) {
+          return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+        }
+        const imageUrls = await Promise.all(
+          payload.imageUrls.map((imageUrl, index) =>
+            uploadImageSourceForFirebaseContent({
+              token: accessTokenResult.token,
+              source: imageUrl,
+              folder: "products",
+              publicIdPrefix: normalizeUploadPrefix(`${currentUser.username}-product-${index + 1}`),
+              label: `product image ${index + 1}`,
+            })
+          )
+        );
+        const created = await createProductWithApi(accessTokenResult.token, {
+          ...payload,
+          imageUrls,
+        });
+        const nextProduct = mapApiProductToMobile(created, products.find((item) => item.id === created.id));
+        const nextProducts = [nextProduct, ...products.filter((item) => item.id !== nextProduct.id)];
+        setProducts(nextProducts);
       setUsers((current) => {
         const sellerSource =
           created.seller ??
@@ -3376,15 +3423,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return { ok: false, message: "Backend session missing. Please log in again." };
     }
 
-    try {
-      const accessTokenResult = await requireApiAccessToken(session);
-      if (!accessTokenResult.token) {
-        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
-      }
-      const created = await createCommunityWithApi(accessTokenResult.token, payload);
-      const nextCommunity = mapApiCommunityToMobile(created);
-      setCommunities((current) => [nextCommunity, ...current.filter((item) => item.id !== nextCommunity.id)]);
-      return { ok: true };
+      try {
+        const accessTokenResult = await requireApiAccessToken(session);
+        if (!accessTokenResult.token) {
+          return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+        }
+        const coverImage = await uploadImageSourceForFirebaseContent({
+          token: accessTokenResult.token,
+          source: payload.coverImage,
+          folder: "communities",
+          publicIdPrefix: normalizeUploadPrefix(`${currentUser.username}-${payload.kind}`),
+          label: "community cover image",
+        });
+        const created = await createCommunityWithApi(accessTokenResult.token, {
+          ...payload,
+          coverImage,
+        });
+        const nextCommunity = mapApiCommunityToMobile(created);
+        setCommunities((current) => [nextCommunity, ...current.filter((item) => item.id !== nextCommunity.id)]);
+        return { ok: true };
     } catch (error) {
       return { ok: false, message: getApiErrorMessage(error) };
     }
@@ -3467,15 +3524,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return { ok: false, message: "Backend session missing. Please log in again." };
     }
 
-    try {
-      const accessTokenResult = await requireApiAccessToken(session);
-      if (!accessTokenResult.token) {
-        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
-      }
-      const response = await createCommunityPostWithApi(accessTokenResult.token, payload);
-      const nextPost = mapApiCommunityPostToMobile(response.post, users.find((user) => user.id === response.post.authorId));
-      setCommunityPosts((current) => mergeCommunityPosts(current, [nextPost]));
-      return { ok: true };
+      try {
+        const accessTokenResult = await requireApiAccessToken(session);
+        if (!accessTokenResult.token) {
+          return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+        }
+        const imageUrl = payload.imageUrl?.trim()
+          ? await uploadImageSourceForFirebaseContent({
+              token: accessTokenResult.token,
+              source: payload.imageUrl,
+              folder: "communities",
+              publicIdPrefix: normalizeUploadPrefix(`${currentUser.username}-community-post`),
+              label: "community post image",
+            })
+          : undefined;
+        const response = await createCommunityPostWithApi(accessTokenResult.token, {
+          ...payload,
+          imageUrl,
+        });
+        const nextPost = mapApiCommunityPostToMobile(response.post, users.find((user) => user.id === response.post.authorId));
+        setCommunityPosts((current) => mergeCommunityPosts(current, [nextPost]));
+        return { ok: true };
     } catch (error) {
       return { ok: false, message: getApiErrorMessage(error) };
     }
@@ -3648,15 +3717,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return { ok: false, message: "Backend session missing. Please log in again." };
     }
 
-    try {
-      const accessTokenResult = await requireApiAccessToken(session);
-      if (!accessTokenResult.token) {
-        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
-      }
-      const updatedProfile = await updateProfileWithApi(accessTokenResult.token, payload);
-      const nextUser = mapApiUserToMobile(updatedProfile, {
-        existing: currentUser,
-        planType: currentUser.planType,
+      try {
+        const accessTokenResult = await requireApiAccessToken(session);
+        if (!accessTokenResult.token) {
+          return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+        }
+        const profileImage = payload.profileImage.trim()
+          ? await uploadImageSourceForFirebaseContent({
+              token: accessTokenResult.token,
+              source: payload.profileImage,
+              folder: "profile",
+              publicIdPrefix: normalizeUploadPrefix(payload.username || currentUser.username),
+              label: "profile photo",
+            })
+          : "";
+        const updatedProfile = await updateProfileWithApi(accessTokenResult.token, {
+          ...payload,
+          profileImage,
+        });
+        const nextUser = mapApiUserToMobile(updatedProfile, {
+          existing: currentUser,
+          planType: currentUser.planType,
         followers: currentUser.followers,
         following: currentUser.following,
         reelIds: currentUser.reelIds,

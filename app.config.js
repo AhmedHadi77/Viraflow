@@ -45,6 +45,10 @@ module.exports = {
     },
   },
   plugins: [
+    "expo-font",
+    "expo-asset",
+    "expo-audio",
+    "expo-video",
     ...(isDevelopmentBuild
       ? [
           [

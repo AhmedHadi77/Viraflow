@@ -1,15 +1,24 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useMemo, useRef, useState } from "react";
-import { Alert, FlatList, Image, Pressable, StyleSheet, Text, useWindowDimensions, View, ViewToken } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Alert,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  ViewToken,
+  useWindowDimensions,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ReelCard } from "../components/ReelCard";
 import { useAppState } from "../providers/AppProvider";
-import { palette, spacing } from "../theme";
+import { palette } from "../theme";
+import { Reel } from "../types/models";
 
-export function ReelsScreen({ navigation }: { navigation: any }) {
+export function ReelViewerScreen({ navigation, route }: { navigation: any; route: { params: { reelId: string } } }) {
   const {
     currentUser,
-    users,
     reels,
     getUserById,
     getCommentsForReel,
@@ -20,12 +29,24 @@ export function ReelsScreen({ navigation }: { navigation: any }) {
     repostReel,
     toggleFollow,
   } = useAppState();
-  const rootNavigation = navigation.getParent?.() ?? navigation;
   const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
-  const [activeReelId, setActiveReelId] = useState(reels[0]?.id);
-  const creators = useMemo(() => users.filter((item) => item.id !== currentUser?.id).slice(0, 3), [currentUser?.id, users]);
-  const pageHeight = Math.max(520, height - insets.top - insets.bottom - 108);
+  const { height, width } = useWindowDimensions();
+  const flatListRef = useRef<FlatList<Reel>>(null);
+  const initialIndex = Math.max(
+    0,
+    reels.findIndex((item) => item.id === route.params.reelId)
+  );
+  const [activeReelId, setActiveReelId] = useState(reels[initialIndex]?.id ?? route.params.reelId);
+  const viewerHeight = Math.max(520, height);
+  const topInset = insets.top + 18;
+  const bottomInset = Math.max(insets.bottom, 16) + 18;
+
+  const activeReel = useMemo(() => reels.find((item) => item.id === activeReelId) ?? reels[initialIndex], [activeReelId, initialIndex, reels]);
+  const activeCreator = activeReel ? getUserById(activeReel.userId) : null;
+
+  useEffect(() => {
+    setActiveReelId(reels[initialIndex]?.id ?? route.params.reelId);
+  }, [initialIndex, reels, route.params.reelId]);
 
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 70,
@@ -66,40 +87,36 @@ export function ReelsScreen({ navigation }: { navigation: any }) {
     }
   }
 
+  if (!reels.length) {
+    return (
+      <View style={styles.emptyState}>
+        <Text style={styles.emptyText}>No reels yet.</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <SafeAreaView edges={["top"]} style={styles.headerSafeArea}>
-        <View style={styles.header}>
-          <Pressable onPress={() => navigation.navigate("Create", { initialMode: "reel" })} style={styles.headerIcon}>
-            <Ionicons color={palette.text} name="add" size={28} />
-          </Pressable>
-
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>Reels</Text>
-            <Text style={styles.headerSubtitle}>Friends</Text>
-            <View style={styles.avatarCluster}>
-              {creators.map((creator) => (
-                <Image key={creator.id} source={{ uri: creator.profileImage }} style={styles.clusterAvatar} />
-              ))}
-            </View>
-          </View>
-
-          <Pressable onPress={() => rootNavigation.navigate("Notifications")} style={styles.headerIcon}>
-            <Ionicons color={palette.text} name="options-outline" size={22} />
-          </Pressable>
-        </View>
-      </SafeAreaView>
-
       <FlatList
-        contentContainerStyle={{
-          paddingBottom: insets.bottom + 88,
-          paddingTop: 12,
-        }}
+        bounces={false}
         data={reels}
         decelerationRate="fast"
+        getItemLayout={(_, index) => ({
+          index,
+          length: viewerHeight,
+          offset: viewerHeight * index,
+        })}
+        initialNumToRender={3}
+        initialScrollIndex={initialIndex}
         keyExtractor={(item) => item.id}
+        onScrollToIndexFailed={({ index }) => {
+          setTimeout(() => {
+            flatListRef.current?.scrollToIndex({ index, animated: false });
+          }, 150);
+        }}
         onViewableItemsChanged={onViewableItemsChanged}
         pagingEnabled
+        ref={flatListRef}
         renderItem={({ item }) => {
           const creator = getUserById(item.userId);
           const boost = getBoostForReel(item.id);
@@ -108,19 +125,21 @@ export function ReelsScreen({ navigation }: { navigation: any }) {
           }
 
           return (
-            <View style={[styles.page, { height: pageHeight }]}>
+            <View style={{ height: viewerHeight, width }}>
               <ReelCard
                 boostLabel={boost?.status === "active" ? "Boost live" : undefined}
+                bottomInset={bottomInset}
                 commentCount={getCommentsForReel(item.id).length}
                 creator={creator}
                 currentUserId={currentUser?.id}
+                fullScreen
                 immersive
-                immersiveHeight={pageHeight}
-                onComment={() => rootNavigation.navigate("ReelDetails", { reelId: item.id })}
+                immersiveHeight={viewerHeight}
+                onComment={() => navigation.navigate("ReelDetails", { reelId: item.id })}
                 onLike={() => {
                   void handleLike(item.id);
                 }}
-                onOpen={() => rootNavigation.navigate("ReelViewer", { reelId: item.id })}
+                onOpen={() => undefined}
                 onRepost={() => {
                   void handleRepost(item.id);
                 }}
@@ -137,14 +156,31 @@ export function ReelsScreen({ navigation }: { navigation: any }) {
                 playVideo={activeReelId === item.id}
                 reel={item}
                 saved={isReelSaved(item.id)}
+                topInset={topInset}
               />
             </View>
           );
         }}
         showsVerticalScrollIndicator={false}
         snapToAlignment="start"
+        snapToInterval={viewerHeight}
         viewabilityConfig={viewabilityConfig}
       />
+
+      <View pointerEvents="box-none" style={[styles.overlayHeader, { paddingTop: insets.top + 8 }]}>
+        <Pressable onPress={() => navigation.goBack()} style={styles.overlayButton}>
+          <Ionicons color={palette.text} name="chevron-back" size={24} />
+        </Pressable>
+
+        <View style={styles.overlayCenter}>
+          <Text style={styles.overlayTitle}>Reels</Text>
+          {activeCreator ? <Text style={styles.overlaySubtitle}>@{activeCreator.username}</Text> : null}
+        </View>
+
+        <Pressable onPress={() => navigation.navigate("Create", { initialMode: "reel" })} style={styles.overlayButton}>
+          <Ionicons color={palette.text} name="add" size={24} />
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -154,51 +190,51 @@ const styles = StyleSheet.create({
     backgroundColor: "#020406",
     flex: 1,
   },
-  headerSafeArea: {
-    backgroundColor: "#020406",
-  },
-  header: {
+  overlayHeader: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.xs,
+    left: 0,
+    paddingHorizontal: 16,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    zIndex: 5,
   },
-  headerIcon: {
+  overlayButton: {
     alignItems: "center",
-    height: 40,
+    backgroundColor: "rgba(6,9,13,0.46)",
+    borderColor: "rgba(255,255,255,0.12)",
+    borderRadius: 22,
+    borderWidth: 1,
+    height: 44,
     justifyContent: "center",
-    width: 40,
+    width: 44,
   },
-  headerCenter: {
+  overlayCenter: {
     alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.sm,
+    flex: 1,
+    paddingHorizontal: 12,
   },
-  headerTitle: {
+  overlayTitle: {
     color: palette.text,
-    fontSize: 19,
+    fontSize: 18,
     fontWeight: "900",
   },
-  headerSubtitle: {
+  overlaySubtitle: {
     color: palette.textSoft,
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: "700",
+    marginTop: 2,
   },
-  avatarCluster: {
-    flexDirection: "row",
-    marginLeft: 2,
+  emptyState: {
+    alignItems: "center",
+    backgroundColor: "#020406",
+    flex: 1,
+    justifyContent: "center",
   },
-  clusterAvatar: {
-    borderColor: "#020406",
-    borderRadius: 12,
-    borderWidth: 2,
-    height: 24,
-    marginLeft: -6,
-    width: 24,
-  },
-  page: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+  emptyText: {
+    color: palette.muted,
+    fontSize: 15,
   },
 });
