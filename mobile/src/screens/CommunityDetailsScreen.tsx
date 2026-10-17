@@ -1,14 +1,18 @@
 import * as ImagePicker from "expo-image-picker";
+import { useCopy } from "../utils/useCopy";
+import { communityKindLabel, fill, visibilityLabel } from "../utils/labels";
+import { formatDateTime } from "../utils/timeFormatting";
 import { useEffect, useState } from "react";
-import { Alert, Image, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, Text, View } from "react-native";
 import { InputField } from "../components/InputField";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { SectionTitle } from "../components/SectionTitle";
 import { useAppState } from "../providers/AppProvider";
-import { palette, radii, spacing } from "../theme";
+import { palette, radii, spacing, createThemedStyles } from "../theme";
 
 export function CommunityDetailsScreen({ navigation, route }: { navigation: any; route: { params: { communityId: string } } }) {
+  const copy = useCopy();
   const {
     currentUser,
     getCommunityById,
@@ -18,6 +22,7 @@ export function CommunityDetailsScreen({ navigation, route }: { navigation: any;
     getCommunityTypingUsers,
     openCommunityActivity,
     createCommunityPost,
+    deleteCommunityPost,
     markCommunityChatRead,
     sendCommunityChatMessage,
     setCommunityTyping,
@@ -33,7 +38,7 @@ export function CommunityDetailsScreen({ navigation, route }: { navigation: any;
     void (async () => {
       const result = await openCommunityActivity(route.params.communityId);
       if (!result.ok) {
-        Alert.alert("Community unavailable", result.message ?? "This community could not be loaded right now.");
+        Alert.alert(copy.cdUnavailable, result.message ?? copy.cdLoadFailed);
       }
     })();
   }, [route.params.communityId]);
@@ -76,7 +81,7 @@ export function CommunityDetailsScreen({ navigation, route }: { navigation: any;
   if (!activeCommunity) {
     return (
       <Screen contentContainerStyle={styles.emptyWrap}>
-        <Text style={styles.emptyText}>Community not found.</Text>
+        <Text style={styles.emptyText}>{copy.cdNotFound}</Text>
       </Screen>
     );
   }
@@ -96,7 +101,7 @@ export function CommunityDetailsScreen({ navigation, route }: { navigation: any;
   async function handlePickPostImage() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert("Photo access needed", "Allow photo library access so you can attach an image to your post.");
+      Alert.alert(copy.photoAccessTitle, copy.cdPhotoAccessBody);
       return;
     }
 
@@ -113,7 +118,7 @@ export function CommunityDetailsScreen({ navigation, route }: { navigation: any;
 
     const asset = result.assets[0];
     if (!asset.base64) {
-      Alert.alert("Image issue", "The selected image could not be prepared. Try another image.");
+      Alert.alert(copy.imageIssueTitle, copy.imageIssueBody);
       return;
     }
 
@@ -129,19 +134,37 @@ export function CommunityDetailsScreen({ navigation, route }: { navigation: any;
     });
 
     if (!result.ok) {
-      Alert.alert("Post unavailable", result.message ?? "This post could not be published right now.");
+      Alert.alert(copy.csPostUnavailable, result.message ?? copy.cdPostFailed);
       return;
     }
 
     setPostText("");
     setPostImage("");
-    Alert.alert("Post published", `Your post is now live inside ${resolvedCommunity.name}.`);
+    Alert.alert(copy.csPostPublished, fill(copy.cdPostLive, { name: resolvedCommunity.name }));
+  }
+
+  async function handleDeleteCommunityPost(postId: string) {
+    Alert.alert(copy.deletePostTitle, copy.cdDeleteBody, [
+      { text: copy.cancel, style: "cancel" },
+      {
+        text: copy.delete,
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            const result = await deleteCommunityPost(resolvedCommunity.id, postId);
+            if (!result.ok) {
+              Alert.alert(copy.deleteUnavailableTitle, result.message ?? copy.cdDeleteFailed);
+            }
+          })();
+        },
+      },
+    ]);
   }
 
   async function handleSendChat() {
     const result = await sendCommunityChatMessage(resolvedCommunity.id, chatDraft);
     if (!result.ok) {
-      Alert.alert("Group chat unavailable", result.message ?? "This message could not be sent right now.");
+      Alert.alert(copy.cdChatUnavailable, result.message ?? copy.messageUnavailableBody);
       return;
     }
 
@@ -152,12 +175,12 @@ export function CommunityDetailsScreen({ navigation, route }: { navigation: any;
   return (
     <Screen scrollable>
       <Image source={{ uri: activeCommunity.coverImage }} style={styles.coverImage} />
-      <SectionTitle title={activeCommunity.name} subtitle={activeCommunity.kind} />
+      <SectionTitle title={activeCommunity.name} subtitle={communityKindLabel(activeCommunity.kind, copy)} />
 
       <View style={styles.metaRow}>
-        <MetaCard label="Category" value={activeCommunity.category} />
-        <MetaCard label="Visibility" value={activeCommunity.visibility} />
-        <MetaCard label="Members" value={String(activeCommunity.memberIds.length)} />
+        <MetaCard label={copy.category} value={activeCommunity.category} />
+        <MetaCard label={copy.visibility} value={visibilityLabel(activeCommunity.visibility, copy)} />
+        <MetaCard label={copy.members} value={String(activeCommunity.memberIds.length)} />
       </View>
 
       <View style={styles.descriptionCard}>
@@ -165,22 +188,22 @@ export function CommunityDetailsScreen({ navigation, route }: { navigation: any;
       </View>
 
       <View style={styles.ownerCard}>
-        <Text style={styles.ownerLabel}>Owner</Text>
-        <Text style={styles.ownerName}>{owner?.name ?? "Creator"}</Text>
+        <Text style={styles.ownerLabel}>{copy.owner}</Text>
+        <Text style={styles.ownerName}>{owner?.name ?? copy.creatorFallback}</Text>
         <Text style={styles.ownerHandle}>@{owner?.username ?? "pulseora"}</Text>
       </View>
 
       <View style={styles.composeCard}>
-        <SectionTitle title="Create post" subtitle={`Publish updates directly inside this ${activeCommunity.kind}.`} />
+        <SectionTitle title={copy.cdCreatePost} subtitle={fill(copy.cdPublishInside, { kind: communityKindLabel(activeCommunity.kind, copy).toLowerCase() })} />
         <InputField
-          label="Post text"
+          label={copy.cdPostText}
           onChangeText={setPostText}
-          placeholder="Share an update, ask a question, or publish a quick announcement..."
+          placeholder={copy.cdPostPh}
           value={postText}
           multiline
         />
         <PrimaryButton
-          label={postImage ? "Change post image" : "Add image"}
+          label={postImage ? copy.cdChangeImage : copy.cdAddImage}
           onPress={() => {
             void handlePickPostImage();
           }}
@@ -188,18 +211,18 @@ export function CommunityDetailsScreen({ navigation, route }: { navigation: any;
         />
         {postImage ? <Image source={{ uri: postImage }} style={styles.postImagePreview} /> : null}
         <PrimaryButton
-          label="Publish post"
+          label={copy.csPublishPost}
           onPress={() => {
             void handleCreatePost();
           }}
         />
       </View>
 
-      <SectionTitle title="Posts" subtitle={`Updates published inside ${activeCommunity.name}.`} />
+      <SectionTitle title={copy.posts} subtitle={fill(copy.cdUpdatesInside, { name: activeCommunity.name })} />
       {posts.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>No posts yet</Text>
-          <Text style={styles.emptyBody}>Be the first person to publish inside this community.</Text>
+          <Text style={styles.emptyTitle}>{copy.cdNoPosts}</Text>
+          <Text style={styles.emptyBody}>{copy.cdNoPostsBody}</Text>
         </View>
       ) : (
         <View style={styles.postList}>
@@ -209,8 +232,13 @@ export function CommunityDetailsScreen({ navigation, route }: { navigation: any;
                 <Image source={{ uri: post.authorAvatar }} style={styles.postAvatar} />
                 <View style={styles.postMeta}>
                   <Text style={styles.postAuthor}>{post.authorName}</Text>
-                  <Text style={styles.postTime}>{new Date(post.createdAt).toLocaleString()}</Text>
+                  <Text style={styles.postTime}>{formatDateTime(post.createdAt)}</Text>
                 </View>
+                {post.authorId === currentUser?.id ? (
+                  <Pressable onPress={() => void handleDeleteCommunityPost(post.id)} style={styles.postDeleteButton}>
+                    <Text style={styles.postDeleteLabel}>{copy.delete}</Text>
+                  </Pressable>
+                ) : null}
               </View>
               <Text style={styles.postText}>{post.text}</Text>
               {post.imageUrl ? <Image source={{ uri: post.imageUrl }} style={styles.postImage} /> : null}
@@ -221,17 +249,17 @@ export function CommunityDetailsScreen({ navigation, route }: { navigation: any;
 
       {activeCommunity.kind === "group" ? (
         <>
-          <SectionTitle title="Group chat" subtitle="Real-time style discussion space for group members." />
+          <SectionTitle title={copy.cdGroupChat} subtitle={copy.cdGroupChatBody} />
           <View style={styles.chatComposerCard}>
             <InputField
-              label="Message"
+              label={copy.message}
               onChangeText={setChatDraft}
-              placeholder="Ask the group something or share fast feedback..."
+              placeholder={copy.cdGroupPh}
               value={chatDraft}
               multiline
             />
             <PrimaryButton
-              label="Send group message"
+              label={copy.cdSendGroup}
               onPress={() => {
                 void handleSendChat();
               }}
@@ -240,8 +268,8 @@ export function CommunityDetailsScreen({ navigation, route }: { navigation: any;
           {typingUsers.length > 0 ? <Text style={styles.statusText}>{formatTypingUsers(typingUsers.map((user) => user.name))}</Text> : null}
           {chatMessages.length === 0 ? (
             <View style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>No group chat messages yet</Text>
-              <Text style={styles.emptyBody}>Start the discussion and bring the group to life.</Text>
+              <Text style={styles.emptyTitle}>{copy.cdNoChat}</Text>
+              <Text style={styles.emptyBody}>{copy.cdNoChatBody}</Text>
             </View>
           ) : (
             <View style={styles.chatList}>
@@ -264,7 +292,7 @@ export function CommunityDetailsScreen({ navigation, route }: { navigation: any;
                       {!ownMessage ? <Text style={styles.chatSender}>{message.senderName}</Text> : null}
                       <Text style={[styles.chatText, ownMessage ? styles.chatTextOwn : null]}>{message.text}</Text>
                       <Text style={[styles.chatTime, ownMessage ? styles.chatTimeOwn : null]}>
-                        {new Date(message.createdAt).toLocaleString()}
+                        {formatDateTime(message.createdAt)}
                       </Text>
                       {ownMessage && message.id === lastOwnChatMessage?.id ? (
                         <Text style={styles.chatReadReceipt}>{deliveryStatus}</Text>
@@ -279,7 +307,7 @@ export function CommunityDetailsScreen({ navigation, route }: { navigation: any;
       ) : null}
 
       <PrimaryButton
-        label={isOwner ? "Create another space" : "Open owner profile"}
+        label={isOwner ? copy.cdCreateAnother : copy.cdOpenOwner}
         onPress={() =>
           isOwner ? navigation.navigate("CreateCommunity") : navigation.navigate("PublicProfile", { userId: activeCommunity.ownerId })
         }
@@ -298,7 +326,7 @@ function MetaCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
   emptyWrap: {
     alignItems: "center",
     justifyContent: "center",
@@ -422,6 +450,19 @@ const styles = StyleSheet.create({
   postTime: {
     color: palette.muted,
     fontSize: 12,
+  },
+  postDeleteButton: {
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderColor: palette.border,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+  },
+  postDeleteLabel: {
+    color: palette.danger,
+    fontSize: 12,
+    fontWeight: "800",
   },
   postText: {
     color: palette.text,

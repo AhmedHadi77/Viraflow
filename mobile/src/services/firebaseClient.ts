@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getApp, getApps, initializeApp } from "firebase/app";
 import * as FirebaseAuth from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { Firestore, getFirestore, initializeFirestore } from "firebase/firestore";
 import { getPublicEnv } from "./publicEnv";
 
 const { getAuth, initializeAuth } = FirebaseAuth;
@@ -51,7 +51,24 @@ export function getFirebaseClientAuth() {
   }
 }
 
+let firestoreInstance: Firestore | undefined;
+
 export function getFirebaseClientFirestore() {
+  if (firestoreInstance) {
+    return firestoreInstance;
+  }
+
   const app = getFirebaseClientApp();
-  return app ? getFirestore(app) : undefined;
+  if (!app) {
+    return undefined;
+  }
+
+  try {
+    // Optional profile fields (for example bannedAt) can be undefined; drop them instead of failing the write.
+    firestoreInstance = initializeFirestore(app, { ignoreUndefinedProperties: true });
+  } catch {
+    firestoreInstance = getFirestore(app);
+  }
+
+  return firestoreInstance;
 }

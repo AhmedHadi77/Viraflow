@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "560785384791-sta25adstm28sa3ikg1dsbepvde0fu74.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.viraflow.app",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
           "client_id": "560785384791-o7a534ss8l5q3kq619ikv3sn95havitm.apps.googleusercontent.com",
           "client_type": 3
         }

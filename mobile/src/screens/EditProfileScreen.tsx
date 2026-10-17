@@ -1,13 +1,17 @@
 import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
-import { Alert, Image, StyleSheet, View } from "react-native";
+import { Alert, Image, View } from "react-native";
 import { InputField } from "../components/InputField";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { SectionTitle } from "../components/SectionTitle";
 import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
-import { palette, radii, spacing } from "../theme";
+import { palette, radii, spacing, createThemedStyles } from "../theme";
+import {
+  getUsernameValidationMessage,
+  getWebsiteValidationMessage,
+} from "../utils/profileValidation";
 
 export function EditProfileScreen({ navigation }: { navigation: any }) {
   const { language, currentUser, updateProfile } = useAppState();
@@ -16,13 +20,28 @@ export function EditProfileScreen({ navigation }: { navigation: any }) {
   const [username, setUsername] = useState(currentUser?.username ?? "");
   const [headline, setHeadline] = useState(currentUser?.headline ?? "");
   const [bio, setBio] = useState(currentUser?.bio ?? "");
+  const [website, setWebsite] = useState(currentUser?.website ?? "");
   const [profileImage, setProfileImage] = useState(currentUser?.profileImage ?? "");
+  const [isSaving, setIsSaving] = useState(false);
+  const validationMessages = {
+    usernameRuleHint: copy.usernameRuleHint,
+    websiteRuleHint: copy.websiteRuleHint,
+    chooseUsernameValidation: copy.chooseUsernameValidation,
+    usernameLengthValidation: copy.usernameLengthValidation,
+    usernameCharactersValidation: copy.usernameCharactersValidation,
+    usernameEdgeValidation: copy.usernameEdgeValidation,
+    usernamePunctuationValidation: copy.usernamePunctuationValidation,
+    websiteSchemeValidation: copy.websiteSchemeValidation,
+    websiteInvalidValidation: copy.websiteInvalidValidation,
+  };
+  const usernameValidationMessage = username ? getUsernameValidationMessage(username, validationMessages) : null;
+  const websiteValidationMessage = website ? getWebsiteValidationMessage(website, validationMessages) : null;
 
   async function handlePickProfilePhoto() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
-      Alert.alert("Photo access needed", "Allow photo library access so you can choose your profile photo.");
+      Alert.alert(copy.profilePhotoAccessTitle, copy.profilePhotoAccessBody);
       return;
     }
 
@@ -39,19 +58,31 @@ export function EditProfileScreen({ navigation }: { navigation: any }) {
     }
 
     const asset = result.assets[0];
-    if (!asset.base64) {
-      Alert.alert("Image issue", "The selected photo could not be prepared. Try another image.");
-      return;
-    }
-
     const mimeType = asset.mimeType || "image/jpeg";
-    setProfileImage(`data:${mimeType};base64,${asset.base64}`);
+    setProfileImage(asset.base64 ? `data:${mimeType};base64,${asset.base64}` : asset.uri);
   }
 
   async function handleSave() {
-    const result = await updateProfile({ name, username, headline, bio, profileImage });
+    if (!name.trim()) {
+      Alert.alert(copy.nameRequiredTitle, copy.nameRequiredBody);
+      return;
+    }
+
+    if (usernameValidationMessage) {
+      Alert.alert(copy.usernameUnavailableTitle, usernameValidationMessage);
+      return;
+    }
+
+    if (websiteValidationMessage) {
+      Alert.alert(copy.websiteUnavailableTitle, websiteValidationMessage);
+      return;
+    }
+
+    setIsSaving(true);
+    const result = await updateProfile({ name, username, headline, bio, website, profileImage });
+    setIsSaving(false);
     if (!result.ok) {
-      Alert.alert("Content blocked", result.message ?? "This profile update was blocked.");
+      Alert.alert(copy.profileUnavailableTitle, result.message ?? copy.profileSaveFailedBody);
       return;
     }
 
@@ -65,19 +96,38 @@ export function EditProfileScreen({ navigation }: { navigation: any }) {
       <View style={styles.form}>
         <View style={styles.photoCard}>
           <Image source={{ uri: profileImage || currentUser?.profileImage }} style={styles.photoPreview} />
-          <PrimaryButton label="Upload profile photo" onPress={() => void handlePickProfilePhoto()} variant="ghost" />
+          <PrimaryButton label={copy.uploadProfilePhoto} onPress={() => void handlePickProfilePhoto()} variant="ghost" />
         </View>
-        <InputField label={copy.fullName} onChangeText={setName} value={name} />
-        <InputField label={copy.username} onChangeText={setUsername} value={username} />
-        <InputField label="Headline" onChangeText={setHeadline} value={headline} />
-        <InputField label="Bio" multiline onChangeText={setBio} value={bio} />
-        <PrimaryButton label={copy.saveChanges} onPress={handleSave} />
+        <InputField autoCapitalize="words" autoCorrect={false} label={copy.fullName} onChangeText={setName} value={name} />
+        <InputField
+          autoCapitalize="none"
+          autoCorrect={false}
+          errorText={usernameValidationMessage}
+          helperText={copy.usernameRuleHint}
+          label={copy.username}
+          onChangeText={setUsername}
+          value={username}
+        />
+        <InputField label={copy.headline} onChangeText={setHeadline} value={headline} />
+        <InputField label={copy.bioLabel} multiline onChangeText={setBio} value={bio} />
+        <InputField
+          autoCapitalize="none"
+          autoCorrect={false}
+          errorText={websiteValidationMessage}
+          helperText={copy.websiteRuleHint}
+          keyboardType="url"
+          label={copy.website}
+          onChangeText={setWebsite}
+          placeholder={copy.websitePlaceholder}
+          value={website}
+        />
+        <PrimaryButton label={isSaving ? copy.savingProfile : copy.saveChanges} onPress={handleSave} />
       </View>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
   form: {
     gap: spacing.md,
   },

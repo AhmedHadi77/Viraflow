@@ -1,13 +1,31 @@
-import { useEffect } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Alert, Image, Pressable, Text, View } from "react-native";
+import { InputField } from "../components/InputField";
 import { Screen } from "../components/Screen";
 import { SectionTitle } from "../components/SectionTitle";
+import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
-import { palette, radii, spacing } from "../theme";
+import { palette, radii, spacing, createThemedStyles } from "../theme";
+import { formatRelativeTime, formatLocaleDate } from "../utils/timeFormatting";
+import { DEFAULT_PROFILE_IMAGE } from "../data/defaultMedia";
 
 export function DirectInboxScreen({ navigation }: { navigation: any }) {
-  const { currentUser, directThreads, getUserById, getDirectUnreadCount, getTotalDirectUnreadCount, getUserPresence, refreshDirectInbox } =
+  const {
+    language,
+    currentUser,
+    directThreads,
+    users,
+    canDirectMessageUser,
+    getUserById,
+    getDirectUnreadCount,
+    getTotalDirectUnreadCount,
+    getUserPresence,
+    refreshDirectInbox,
+    startDirectChat,
+  } =
     useAppState();
+  const copy = getCopy(language);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     void refreshDirectInbox();
@@ -18,38 +36,120 @@ export function DirectInboxScreen({ navigation }: { navigation: any }) {
     return unsubscribe;
   }, [navigation]);
 
-  const userThreads = currentUser ? directThreads.filter((thread) => thread.participantIds.includes(currentUser.id)) : [];
+  const userThreads = useMemo(() => {
+    if (!currentUser) {
+      return [];
+    }
+
+    return directThreads
+      .filter((thread) => thread.participantIds.includes(currentUser.id))
+      .sort((left, right) => new Date(right.lastMessageAt).getTime() - new Date(left.lastMessageAt).getTime());
+  }, [currentUser, directThreads]);
   const totalUnreadCount = getTotalDirectUnreadCount();
+  const searchResults = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    if (!normalizedQuery || !currentUser) {
+      return [];
+    }
+
+    return users
+      .filter((user) => user.id !== currentUser.id)
+      .filter(
+        (user) =>
+          user.name.toLowerCase().includes(normalizedQuery) ||
+          user.username.toLowerCase().includes(normalizedQuery) ||
+          user.headline.toLowerCase().includes(normalizedQuery)
+      )
+      .slice(0, 8);
+  }, [currentUser, searchQuery, users]);
+
+  async function handleStartChat(targetUserId: string) {
+    const result = await startDirectChat(targetUserId);
+    if (!result.ok) {
+      Alert.alert(copy.directChatUnavailableTitle, result.message ?? copy.directChatUnavailableBody);
+      return;
+    }
+
+    if (result.threadId) {
+      navigation.navigate("DirectChat", { threadId: result.threadId });
+    }
+  }
 
   return (
     <Screen scrollable>
       <View style={styles.heroCard}>
         <SectionTitle
-          title="Direct messages"
+          title={copy.directInboxTitle}
           subtitle={
             userThreads.length > 0
-              ? `${userThreads.length} mutual-follow conversations are open right now, with ${totalUnreadCount} unread messages.`
-              : "Chat unlocks only after both users follow each other."
+              ? `${userThreads.length} ${copy.directInboxSubtitleActive} ${totalUnreadCount} ${copy.unreadMessages.toLowerCase()}.`
+              : copy.directInboxSubtitleEmpty
           }
         />
         <View style={styles.heroStats}>
           <View style={styles.heroStat}>
             <Text style={styles.heroValue}>{userThreads.length}</Text>
-            <Text style={styles.heroLabel}>Unlocked chats</Text>
+            <Text style={styles.heroLabel}>{copy.unlockedChats}</Text>
           </View>
           <View style={styles.heroStat}>
             <Text style={styles.heroValue}>{totalUnreadCount}</Text>
-            <Text style={styles.heroLabel}>Unread</Text>
+            <Text style={styles.heroLabel}>{copy.unreadMessages}</Text>
           </View>
         </View>
       </View>
 
+      <View style={styles.searchCard}>
+        <SectionTitle
+          title={copy.startNewChat}
+          subtitle={copy.directSearchSubtitle}
+        />
+        <InputField
+          label={copy.searchUsersLabel}
+          onChangeText={setSearchQuery}
+          placeholder={copy.searchUsersPlaceholder}
+          value={searchQuery}
+        />
+        {searchResults.length > 0 ? (
+          <View style={styles.searchResults}>
+            {searchResults.map((user) => {
+              const unlocked = canDirectMessageUser(user.id);
+              return (
+                <Pressable
+                  key={user.id}
+                  onPress={() => {
+                    void handleStartChat(user.id);
+                  }}
+                  style={styles.searchResultCard}
+                >
+                  <Image source={{ uri: user.profileImage }} style={styles.searchAvatar} />
+                  <View style={styles.searchBody}>
+                    <Text style={styles.searchName}>{user.name}</Text>
+                    <Text style={styles.searchMeta}>@{user.username}</Text>
+                    <Text numberOfLines={1} style={styles.searchHeadline}>
+                      {user.headline || copy.creatorStudio}
+                    </Text>
+                  </View>
+                  <View style={[styles.searchActionPill, unlocked ? styles.searchActionPillActive : null]}>
+                    <Text style={[styles.searchActionLabel, unlocked ? styles.searchActionLabelActive : null]}>
+                      {unlocked ? copy.message : copy.locked}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : searchQuery.trim() ? (
+          <View style={styles.emptySearchCard}>
+            <Text style={styles.emptySearchTitle}>{copy.noUsersMatchedTitle}</Text>
+            <Text style={styles.emptySearchBody}>{copy.noUsersMatchedBody}</Text>
+          </View>
+        ) : null}
+      </View>
+
       {userThreads.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>No direct chats yet</Text>
-          <Text style={styles.emptyBody}>
-            Follow a creator and once they follow you back, the Message button will unlock on their profile.
-          </Text>
+          <Text style={styles.emptyTitle}>{copy.noDirectChatsTitle}</Text>
+          <Text style={styles.emptyBody}>{copy.noDirectChatsBody}</Text>
         </View>
       ) : (
         <View style={styles.list}>
@@ -69,14 +169,14 @@ export function DirectInboxScreen({ navigation }: { navigation: any }) {
                   source={{
                     uri:
                       counterpart?.profileImage ||
-                      "https://images.unsplash.com/photo-1502685104226-ee32379fefbe?auto=format&fit=crop&w=400&q=80",
+                      DEFAULT_PROFILE_IMAGE,
                   }}
                   style={styles.avatar}
                 />
                 <View style={styles.threadBody}>
                   <View style={styles.threadTop}>
                     <Text numberOfLines={1} style={styles.threadTitle}>
-                      {counterpart?.name ?? "Creator"}
+                      {counterpart?.name ?? copy.creatorStudio}
                     </Text>
                     <View style={styles.threadTopRight}>
                       {unreadCount > 0 ? (
@@ -84,11 +184,11 @@ export function DirectInboxScreen({ navigation }: { navigation: any }) {
                           <Text style={styles.unreadBadgeLabel}>{unreadCount}</Text>
                         </View>
                       ) : null}
-                      <Text style={styles.threadTime}>{new Date(thread.lastMessageAt).toLocaleDateString()}</Text>
+                      <Text style={styles.threadTime}>{formatLocaleDate(thread.lastMessageAt, language)}</Text>
                     </View>
                   </View>
                   <Text style={styles.threadMeta}>@{counterpart?.username ?? "mutual.follow"}</Text>
-                  <Text style={styles.presenceText}>{formatPresenceLabel(presence)}</Text>
+                  <Text style={styles.presenceText}>{formatPresenceLabel(presence, language, copy.onlineNow, copy.offline)}</Text>
                   <Text numberOfLines={2} style={styles.threadPreview}>
                     {thread.lastMessagePreview}
                   </Text>
@@ -102,7 +202,7 @@ export function DirectInboxScreen({ navigation }: { navigation: any }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
   heroCard: {
     backgroundColor: palette.card,
     borderColor: palette.borderStrong,
@@ -134,6 +234,88 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     textTransform: "uppercase",
+  },
+  searchCard: {
+    backgroundColor: palette.card,
+    borderColor: palette.borderStrong,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.xl,
+  },
+  searchResults: {
+    gap: spacing.sm,
+  },
+  searchResultCard: {
+    alignItems: "center",
+    backgroundColor: palette.surface,
+    borderColor: palette.borderStrong,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.md,
+    padding: spacing.md,
+  },
+  searchAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: palette.cardAlt,
+  },
+  searchBody: {
+    flex: 1,
+    gap: 2,
+  },
+  searchName: {
+    color: palette.text,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  searchMeta: {
+    color: palette.accentSoft,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  searchHeadline: {
+    color: palette.textSoft,
+    fontSize: 12,
+  },
+  searchActionPill: {
+    backgroundColor: palette.glass,
+    borderColor: palette.borderStrong,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+  },
+  searchActionPillActive: {
+    backgroundColor: palette.primary,
+    borderColor: palette.primary,
+  },
+  searchActionLabel: {
+    color: palette.text,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  searchActionLabelActive: {
+    color: "#071118",
+  },
+  emptySearchCard: {
+    backgroundColor: palette.surface,
+    borderColor: palette.borderStrong,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    gap: 4,
+    padding: spacing.md,
+  },
+  emptySearchTitle: {
+    color: palette.text,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  emptySearchBody: {
+    color: palette.textSoft,
+    fontSize: 12,
   },
   list: {
     gap: spacing.md,
@@ -228,35 +410,22 @@ const styles = StyleSheet.create({
   },
 });
 
-function formatPresenceLabel(presence?: { isOnline: boolean; lastSeenAt?: string }) {
+function formatPresenceLabel(
+  presence: { isOnline: boolean; lastSeenAt?: string } | undefined,
+  language: Parameters<typeof getCopy>[0],
+  onlineLabel: string,
+  offlineLabel: string
+) {
   if (presence?.isOnline) {
-    return "Online now";
+    return onlineLabel;
   }
 
   if (!presence?.lastSeenAt) {
-    return "Offline";
+    return offlineLabel;
   }
 
-  return `Last seen ${formatRelativeTime(presence.lastSeenAt)}`;
-}
-
-function formatRelativeTime(timestamp: string) {
-  const diffMs = Date.now() - new Date(timestamp).getTime();
-  const diffMinutes = Math.max(Math.floor(diffMs / 60000), 0);
-
-  if (diffMinutes < 1) {
-    return "just now";
-  }
-
-  if (diffMinutes < 60) {
-    return `${diffMinutes}m ago`;
-  }
-
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) {
-    return `${diffHours}h ago`;
-  }
-
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays}d ago`;
+  return formatRelativeTime(presence.lastSeenAt, language, {
+    style: "short",
+    fallbackToDateAfterDays: 14,
+  });
 }

@@ -1,16 +1,22 @@
 import { Ionicons } from "@expo/vector-icons";
+import { communityKindLabel } from "../utils/labels";
+import { openReportSheet } from "../components/ReportSheet";
+import { CallButtons } from "../components/CallButtons";
+import { useProductPriceFormatter } from "../utils/priceFormatting";
 import * as ImagePicker from "expo-image-picker";
+import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { StatPill } from "../components/StatPill";
 import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
-import { Product, Reel, Story } from "../types/models";
-import { palette, radii, spacing } from "../theme";
+import { Post, Product, Reel, Story } from "../types/models";
+import { palette, radii, spacing, createThemedStyles } from "../theme";
+import { PAYMENTS_ENABLED } from "../data/catalog";
 
-type ProfileSection = "reels" | "shop" | "spaces" | "saved";
+type ProfileSection = "posts" | "reels" | "shop" | "spaces" | "saved";
 
 export function ProfileScreen({ navigation, route }: { navigation: any; route?: { params?: { userId?: string } } }) {
   const {
@@ -18,6 +24,7 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
     currentUser,
     stories,
     reels,
+    posts,
     products,
     communities,
     savedPosts,
@@ -34,6 +41,7 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
     logout,
   } = useAppState();
   const copy = getCopy(language);
+  const formatProductPrice = useProductPriceFormatter();
   const rootNavigation = navigation.getParent?.() ?? navigation;
   const userId = route?.params?.userId ?? currentUser?.id;
   const profileUser = userId ? getUserById(userId) : null;
@@ -42,7 +50,7 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
   if (!profileUser) {
     return (
       <Screen contentContainerStyle={styles.emptyContent}>
-        <Text style={styles.emptyText}>Profile not found.</Text>
+        <Text style={styles.emptyText}>{copy.profileNotFound}</Text>
       </Screen>
     );
   }
@@ -50,9 +58,10 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
   const activeProfileUser = profileUser;
   const isOwnProfile = activeProfileUser.id === currentUser?.id;
   const userReels = reels.filter((item) => item.userId === activeProfileUser.id);
+  const userPosts = posts.filter((item) => item.userId === activeProfileUser.id);
   const userProducts = products.filter((item) => item.userId === activeProfileUser.id);
   const userCommunities = communities.filter((item) => item.ownerId === activeProfileUser.id);
-  const profileStories = getLatestStoriesForUser(stories, activeProfileUser.id);
+  const profileStories = getHighlightedStoriesForUser(stories, activeProfileUser.id);
   const isFollowing = currentUser ? activeProfileUser.followers.includes(currentUser.id) : false;
   const followsBack = currentUser ? activeProfileUser.following.includes(currentUser.id) : false;
   const chatUnlocked = currentUser ? canDirectMessageUser(activeProfileUser.id) : false;
@@ -68,14 +77,27 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
     .filter((item) => item.entityType === "product")
     .map((item) => products.find((product) => product.id === item.entityId))
     .filter((item): item is Product => Boolean(item));
+  const savedProfilePosts = savedByCurrentUser
+    .filter((item) => item.entityType === "post")
+    .map((item) => posts.find((post) => post.id === item.entityId))
+    .filter((item): item is Post => Boolean(item));
 
   const sectionItems = useMemo(() => {
     switch (activeSection) {
+      case "posts":
+        return userPosts.map((post) => ({
+          id: `post-${post.id}`,
+          title: post.caption || copy.post,
+          subtitle: `${post.likedBy.length} likes`,
+          imageUrl: post.media[0]?.thumbnailUrl || post.media[0]?.url || activeProfileUser.profileImage,
+          badge: copy.post,
+          onPress: () => rootNavigation.navigate("PostDetails", { postId: post.id }),
+        }));
       case "shop":
         return userProducts.map((product) => ({
           id: `product-${product.id}`,
           title: product.title,
-          subtitle: `$${product.price}`,
+          subtitle: formatProductPrice(product),
           imageUrl: product.imageUrl,
           badge: product.category,
           onPress: () => rootNavigation.navigate("ProductDetails", { productId: product.id }),
@@ -86,25 +108,33 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
           title: community.name,
           subtitle: community.category,
           imageUrl: community.coverImage,
-          badge: community.kind,
+          badge: communityKindLabel(community.kind, copy),
           onPress: () => rootNavigation.navigate("CommunityDetails", { communityId: community.id }),
         }));
       case "saved":
         return [
+          ...savedProfilePosts.map((post) => ({
+            id: `saved-post-${post.id}`,
+            title: post.caption || copy.post,
+            subtitle: `${post.commentCount} ${copy.commentsTitle.toLowerCase()}`,
+            imageUrl: post.media[0]?.thumbnailUrl || post.media[0]?.url || activeProfileUser.profileImage,
+            badge: copy.post,
+            onPress: () => rootNavigation.navigate("PostDetails", { postId: post.id }),
+          })),
           ...savedReels.map((reel) => ({
             id: `saved-reel-${reel.id}`,
             title: reel.caption,
-            subtitle: `${reel.viewCount} views`,
+            subtitle: `${reel.viewCount} ${copy.views}`,
             imageUrl: reel.thumbnailUrl,
-            badge: "saved reel",
+            badge: copy.savedReelBadge,
             onPress: () => rootNavigation.navigate("ReelViewer", { reelId: reel.id }),
           })),
           ...savedProducts.map((product) => ({
             id: `saved-product-${product.id}`,
             title: product.title,
-            subtitle: `$${product.price}`,
+            subtitle: formatProductPrice(product),
             imageUrl: product.imageUrl,
-            badge: "saved product",
+            badge: copy.savedProductBadge,
             onPress: () => rootNavigation.navigate("ProductDetails", { productId: product.id }),
           })),
         ];
@@ -113,20 +143,24 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
         return userReels.map((reel) => ({
           id: `reel-${reel.id}`,
           title: reel.caption,
-          subtitle: `${reel.viewCount} views`,
+          subtitle: `${reel.viewCount} ${copy.views}`,
           imageUrl: reel.thumbnailUrl,
-          badge: getBoostForReel(reel.id)?.status === "active" ? "boost live" : "reel",
+          badge: getBoostForReel(reel.id)?.status === "active" ? copy.boostLiveBadge : copy.reelBadge,
           onPress: () => rootNavigation.navigate("ReelViewer", { reelId: reel.id }),
         }));
     }
   }, [
     activeSection,
+    activeProfileUser.profileImage,
+    copy,
     getBoostForReel,
     rootNavigation,
     savedProducts,
+    savedProfilePosts,
     savedReels,
     userCommunities,
     userProducts,
+    userPosts,
     userReels,
   ]);
 
@@ -154,7 +188,7 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
   async function handleFollow() {
     const result = await toggleFollow(activeProfileUser.id);
     if (!result.ok) {
-      Alert.alert("Follow unavailable", result.message ?? "This creator could not be followed right now.");
+      Alert.alert(copy.followUnavailableTitle, result.message ?? copy.followUnavailableBody);
     }
   }
 
@@ -165,7 +199,7 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
 
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert("Photo access needed", "Allow photo library access so you can update your profile photo.");
+      Alert.alert(copy.profilePhotoAccessTitle, copy.profilePhotoAccessBody);
       return;
     }
 
@@ -182,36 +216,47 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
     }
 
     const asset = result.assets[0];
-    if (!asset.base64) {
-      Alert.alert("Image issue", "The selected photo could not be prepared. Try another image.");
-      return;
-    }
-
     const mimeType = asset.mimeType || "image/jpeg";
     const update = await updateProfile({
       name: currentUser.name,
       username: currentUser.username,
       headline: currentUser.headline,
       bio: currentUser.bio,
-      profileImage: `data:${mimeType};base64,${asset.base64}`,
+      website: currentUser.website ?? "",
+      profileImage: asset.base64 ? `data:${mimeType};base64,${asset.base64}` : asset.uri,
     });
 
     if (!update.ok) {
-      Alert.alert("Photo blocked", update.message ?? "This profile photo could not be updated.");
+      Alert.alert(copy.photoUnavailableTitle, update.message ?? copy.photoUnavailableBody);
       return;
     }
 
-    Alert.alert("Profile photo updated");
+    Alert.alert(copy.profilePhotoUpdated);
   }
 
   async function handleStartDirectChat() {
     const result = await startDirectChat(activeProfileUser.id);
     if (!result.ok || !result.threadId) {
-      Alert.alert("Direct chat unavailable", result.message ?? "This chat is locked right now.");
+      Alert.alert(copy.directChatUnavailableTitle, result.message ?? copy.directChatUnavailableBody);
       return;
     }
 
     rootNavigation.navigate("DirectChat", { threadId: result.threadId });
+  }
+
+  async function handleOpenWebsite() {
+    const website = activeProfileUser.website?.trim();
+    if (!website) {
+      return;
+    }
+
+    const canOpen = await Linking.canOpenURL(website);
+    if (!canOpen) {
+      Alert.alert(copy.websiteUnavailableTitle, copy.websiteUnavailableBody);
+      return;
+    }
+
+    await Linking.openURL(website);
   }
 
   return (
@@ -249,24 +294,48 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
         </View>
 
         <Text style={styles.bio}>{activeProfileUser.bio}</Text>
+        {activeProfileUser.website ? (
+          <Pressable onPress={() => void handleOpenWebsite()} style={styles.websiteChip}>
+            <Ionicons color={palette.accentSoft} name="link-outline" size={15} />
+            <Text numberOfLines={1} style={styles.websiteLabel}>
+              {activeProfileUser.website.replace(/^https?:\/\//i, "")}
+            </Text>
+          </Pressable>
+        ) : null}
 
         <View style={styles.statsRow}>
-          <StatPill label={copy.posts} value={activeProfileUser.reelIds.length + activeProfileUser.productIds.length} />
-          <StatPill label={copy.followers} value={activeProfileUser.followers.length} />
-          <StatPill label={copy.followingCount} value={activeProfileUser.following.length} />
+          <StatPill label={copy.posts} value={userPosts.length} />
+          <StatPill
+            label={copy.followers}
+            onPress={() => rootNavigation.navigate("FollowList", { userId: activeProfileUser.id, mode: "followers" })}
+            value={activeProfileUser.followers.length}
+          />
+          <StatPill
+            label={copy.followingCount}
+            onPress={() => rootNavigation.navigate("FollowList", { userId: activeProfileUser.id, mode: "following" })}
+            value={activeProfileUser.following.length}
+          />
         </View>
 
         {profileStories.length > 0 ? (
           <View style={styles.highlightBlock}>
-            <Text style={styles.highlightTitle}>Highlights</Text>
+            <Text style={styles.highlightTitle}>{copy.highlights}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.highlightRow}>
               {profileStories.map((story) => (
-                <View key={story.id} style={styles.highlightCard}>
-                  <Image source={{ uri: story.imageUrl }} style={styles.highlightImage} />
+                <Pressable
+                  key={story.id}
+                  onPress={() => rootNavigation.navigate("StoryViewer", { userId: activeProfileUser.id, storyId: story.id })}
+                  style={styles.highlightCard}
+                >
+                  <LinearGradient colors={["#ff8a3d", "#ff4d67", "#a855f7"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.highlightRing}>
+                    <View style={styles.highlightRingInner}>
+                      <Image source={{ uri: story.imageUrl }} style={styles.highlightImage} />
+                    </View>
+                  </LinearGradient>
                   <Text numberOfLines={1} style={styles.highlightLabel}>
-                    {story.caption?.trim() ? story.caption : "Story"}
+                    {story.highlightLabel?.trim() || story.caption?.trim() || copy.storyFallbackLabel}
                   </Text>
-                </View>
+                </Pressable>
               ))}
             </ScrollView>
           </View>
@@ -276,23 +345,29 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
           <>
             <View style={styles.actionRow}>
               <PrimaryButton label={copy.editProfile} onPress={() => rootNavigation.navigate("EditProfile")} />
-              <PrimaryButton label="Communities" onPress={() => rootNavigation.navigate("Communities")} variant="ghost" />
+              <PrimaryButton label={copy.communities} onPress={() => rootNavigation.navigate("Communities")} variant="ghost" />
             </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shortcutRow}>
               <ShortcutChip
                 icon="paper-plane-outline"
-                label={totalDirectUnreadCount > 0 ? `Direct ${totalDirectUnreadCount}` : "Direct"}
+                label={totalDirectUnreadCount > 0 ? `${copy.direct} ${totalDirectUnreadCount}` : copy.direct}
                 onPress={() => rootNavigation.navigate("DirectInbox")}
               />
               <ShortcutChip
                 icon="chatbubbles-outline"
-                label={totalMarketplaceUnreadCount > 0 ? `Marketplace ${totalMarketplaceUnreadCount}` : "Marketplace"}
+                label={totalMarketplaceUnreadCount > 0 ? `${copy.marketplace} ${totalMarketplaceUnreadCount}` : copy.marketplace}
                 onPress={() => rootNavigation.navigate("MarketplaceInbox")}
               />
-              <ShortcutChip icon="sparkles-outline" label="AI tools" onPress={() => rootNavigation.navigate("AITools")} />
-              <ShortcutChip icon="card-outline" label="Subscription" onPress={() => rootNavigation.navigate("Subscription")} />
-              <ShortcutChip icon="log-out-outline" label="Logout" onPress={logout} />
+              {currentUser?.role === "admin" ? (
+                <ShortcutChip icon="shield-checkmark-outline" label={copy.adminTitle} onPress={() => rootNavigation.navigate("Admin")} />
+              ) : null}
+              <ShortcutChip icon="sparkles-outline" label={copy.aiTools} onPress={() => rootNavigation.navigate("AITools")} />
+              <ShortcutChip icon="settings-outline" label={copy.settingsTitle} onPress={() => rootNavigation.navigate("Settings")} />
+              {PAYMENTS_ENABLED ? (
+                <ShortcutChip icon="card-outline" label={copy.subscription} onPress={() => rootNavigation.navigate("Subscription")} />
+              ) : null}
+              <ShortcutChip icon="log-out-outline" label={copy.logout} onPress={logout} />
             </ScrollView>
           </>
         ) : (
@@ -306,7 +381,7 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
             />
             {chatUnlocked ? (
               <PrimaryButton
-                label="Message"
+                label={copy.message}
                 onPress={() => {
                   void handleStartDirectChat();
                 }}
@@ -315,22 +390,32 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
             ) : isFollowing ? (
               <View style={styles.messageHintCard}>
                 <Text style={styles.messageHintText}>
-                  {followsBack ? "Direct chat is syncing right now. Try again." : "Chat unlocks after this creator follows you back."}
+                  {followsBack ? copy.directChatSyncing : copy.directChatNeedsFollowBack}
                 </Text>
               </View>
             ) : null}
+            <CallButtons navigation={navigation} userId={activeProfileUser.id} />
+            <Pressable
+              accessibilityLabel={copy.reportAction}
+              hitSlop={8}
+              onPress={() => openReportSheet({ entityType: "user", entityId: activeProfileUser.id, ownerId: activeProfileUser.id })}
+              style={styles.reportButton}
+            >
+              <Ionicons color={palette.muted} name="flag-outline" size={20} />
+            </Pressable>
           </View>
         )}
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRow}>
-        <SectionChip active={activeSection === "reels"} label={`Reels ${userReels.length}`} onPress={() => setActiveSection("reels")} />
-        <SectionChip active={activeSection === "shop"} label={`Shop ${userProducts.length}`} onPress={() => setActiveSection("shop")} />
-        <SectionChip active={activeSection === "spaces"} label={`Spaces ${userCommunities.length}`} onPress={() => setActiveSection("spaces")} />
+        <SectionChip active={activeSection === "posts"} label={`${copy.posts} ${userPosts.length}`} onPress={() => setActiveSection("posts")} />
+        <SectionChip active={activeSection === "reels"} label={`${copy.reels} ${userReels.length}`} onPress={() => setActiveSection("reels")} />
+        <SectionChip active={activeSection === "shop"} label={`${copy.shop} ${userProducts.length}`} onPress={() => setActiveSection("shop")} />
+        <SectionChip active={activeSection === "spaces"} label={`${copy.spaces} ${userCommunities.length}`} onPress={() => setActiveSection("spaces")} />
         {isOwnProfile ? (
           <SectionChip
             active={activeSection === "saved"}
-            label={`Saved ${savedReels.length + savedProducts.length}`}
+            label={`${copy.saved} ${savedProfilePosts.length + savedReels.length + savedProducts.length}`}
             onPress={() => setActiveSection("saved")}
           />
         ) : null}
@@ -357,15 +442,17 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
         ) : (
           <View style={styles.emptySection}>
             <Ionicons color={palette.muted} name="grid-outline" size={30} />
-            <Text style={styles.emptySectionTitle}>Nothing here yet</Text>
+            <Text style={styles.emptySectionTitle}>{copy.nothingHereYet}</Text>
             <Text style={styles.emptySectionBody}>
-              {activeSection === "reels"
-                ? "Publish a reel and it will appear in this profile grid."
-                : activeSection === "shop"
-                  ? "Create a marketplace listing and it will show up here."
+              {activeSection === "posts"
+                ? copy.homeFeedReadyBody
+                : activeSection === "reels"
+                  ? copy.emptyReelsBody
+                  : activeSection === "shop"
+                  ? copy.emptyShopBody
                   : activeSection === "spaces"
-                    ? "Create a page, group, or channel and it will appear here."
-                    : "Save a reel or product and it will appear here."}
+                    ? copy.emptySpacesBody
+                    : copy.emptySavedBody}
             </Text>
           </View>
         )}
@@ -407,15 +494,18 @@ function SectionChip({
   );
 }
 
-function getLatestStoriesForUser(stories: Story[], userId: string) {
-  const now = Date.now();
+function getHighlightedStoriesForUser(stories: Story[], userId: string) {
   return [...stories]
-    .filter((story) => story.userId === userId && new Date(story.expiresAt).getTime() > now)
-    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-    .slice(0, 5);
+    .filter((story) => story.userId === userId && Boolean(story.highlightedAt))
+    .sort((left, right) => {
+      const leftRank = left.highlightedAt ?? left.createdAt;
+      const rightRank = right.highlightedAt ?? right.createdAt;
+      return rightRank.localeCompare(leftRank);
+    })
+    .slice(0, 8);
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
   content: {
     paddingBottom: 96,
   },
@@ -505,6 +595,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
   },
+  websiteChip: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(54,224,161,0.08)",
+    borderColor: "rgba(54,224,161,0.2)",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    maxWidth: "100%",
+    paddingHorizontal: spacing.md,
+    paddingVertical: 9,
+  },
+  websiteLabel: {
+    color: palette.accentSoft,
+    flexShrink: 1,
+    fontSize: 13,
+    fontWeight: "700",
+  },
   statsRow: {
     flexDirection: "row",
     gap: spacing.sm,
@@ -526,10 +635,17 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     width: 80,
   },
-  highlightImage: {
-    borderColor: "rgba(255,255,255,0.10)",
+  highlightRing: {
+    borderRadius: 32,
+    padding: 2.5,
+  },
+  highlightRingInner: {
+    backgroundColor: "#081018",
     borderRadius: 30,
-    borderWidth: 2,
+    padding: 2.5,
+  },
+  highlightImage: {
+    borderRadius: 27,
     height: 60,
     width: 60,
   },
@@ -539,7 +655,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
   },
+  reportButton: {
+    alignItems: "center",
+    height: 40,
+    justifyContent: "center",
+    width: 32,
+  },
   actionRow: {
+    alignItems: "center",
     flexDirection: "row",
     gap: spacing.sm,
   },

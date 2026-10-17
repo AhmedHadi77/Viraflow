@@ -2,24 +2,23 @@ import {
   collection,
   doc,
   getDocs,
+  increment,
   limit,
   onSnapshot,
   orderBy,
   query,
   runTransaction,
   setDoc,
+  updateDoc,
 } from "firebase/firestore";
 import { getFirebaseClientFirestore, isFirebaseClientConfigured } from "./firebaseClient";
-import { LanguageOption, PlanType, Reel, ReelComment, User } from "../types/models";
+import { isLanguageOption, LanguageOption, PlanType, Reel, ReelComment, User } from "../types/models";
+import { DEFAULT_PROFILE_IMAGE, MEDIA_UNAVAILABLE_IMAGE } from "../data/defaultMedia";
 
 const USERS_COLLECTION = "users";
 const REELS_COLLECTION = "reels";
 const COMMENTS_COLLECTION = "comments";
 
-const FALLBACK_PROFILE_IMAGE =
-  "https://images.unsplash.com/photo-1502685104226-ee32379fefbe?auto=format&fit=crop&w=400&q=80";
-const FALLBACK_REEL_THUMBNAIL =
-  "https://images.unsplash.com/photo-1524250502761-1ac6f2e30d43?auto=format&fit=crop&w=1000&q=80";
 
 export function isFirebaseEngagementConfigured() {
   return isFirebaseClientConfigured();
@@ -94,7 +93,6 @@ export async function toggleFirebaseReelLike(userId: string, reelId: string, fal
     transaction.set(
       reelRef,
       {
-        ...nextReel,
         likedBy,
         updatedAt: new Date().toISOString(),
       },
@@ -102,6 +100,14 @@ export async function toggleFirebaseReelLike(userId: string, reelId: string, fal
     );
 
     return nextReel;
+  });
+}
+
+export async function recordFirebaseReelView(reelId: string, input: { countReach: boolean }) {
+  const db = getRequiredFirestore();
+  await updateDoc(doc(db, REELS_COLLECTION, reelId), {
+    viewCount: increment(1),
+    ...(input.countReach ? { reachCount: increment(1) } : {}),
   });
 }
 
@@ -124,7 +130,6 @@ export async function repostFirebaseReel(_userId: string, reelId: string, fallba
     transaction.set(
       reelRef,
       {
-        ...nextReel,
         repostCount: nextReel.repostCount,
         updatedAt: new Date().toISOString(),
       },
@@ -176,7 +181,6 @@ export async function toggleFirebaseFollow(viewerInput: User, targetInput: User)
     transaction.set(
       viewerRef,
       {
-        ...nextViewer,
         following: nextViewer.following,
         updatedAt: now,
       },
@@ -185,7 +189,6 @@ export async function toggleFirebaseFollow(viewerInput: User, targetInput: User)
     transaction.set(
       targetRef,
       {
-        ...nextTarget,
         followers: nextTarget.followers,
         updatedAt: now,
       },
@@ -218,7 +221,7 @@ function getRequiredFirestore() {
 }
 
 function normalizeReelDoc(id: string, data: Record<string, unknown>): Reel {
-  const caption = readString(data.caption, "New Pulseora reel");
+  const caption = readString(data.caption, "New Sohba reel");
   const likedBy = readStringArray(data.likedBy);
 
   return {
@@ -226,13 +229,14 @@ function normalizeReelDoc(id: string, data: Record<string, unknown>): Reel {
     userId: readString(data.userId, "unknown-user"),
     videoUrl: readString(data.videoUrl, ""),
     caption,
-    thumbnailUrl: readString(data.thumbnailUrl, FALLBACK_REEL_THUMBNAIL),
+    thumbnailUrl: readString(data.thumbnailUrl, MEDIA_UNAVAILABLE_IMAGE),
     createdAt: readString(data.createdAt, new Date().toISOString()),
     tags: readStringArray(data.tags, buildTagsFromCaption(caption)),
     likedBy,
     repostCount: readNumber(data.repostCount, 0),
-    viewCount: readNumber(data.viewCount, Math.max(120, likedBy.length * 240)),
-    reachCount: readNumber(data.reachCount, Math.max(520, likedBy.length * 620)),
+    viewCount: readNumber(data.viewCount, 0),
+    reachCount: readNumber(data.reachCount, 0),
+    boostedUntil: typeof data.boostedUntil === "string" && data.boostedUntil.trim() ? data.boostedUntil.trim() : undefined,
   };
 }
 
@@ -241,8 +245,8 @@ function normalizeCommentDoc(id: string, data: Record<string, unknown>): ReelCom
     id,
     reelId: readString(data.reelId, ""),
     userId: readString(data.userId, "unknown-user"),
-    userName: readString(data.userName, "Pulseora Creator"),
-    userAvatar: readString(data.userAvatar, FALLBACK_PROFILE_IMAGE),
+    userName: readString(data.userName, "Sohba Creator"),
+    userAvatar: readString(data.userAvatar, DEFAULT_PROFILE_IMAGE),
     text: readString(data.text, ""),
     createdAt: readString(data.createdAt, new Date().toISOString()),
   };
@@ -253,13 +257,14 @@ function normalizeUserDoc(id: string, data: Record<string, unknown>): User {
 
   return {
     id,
-    name: readString(data.name, "Pulseora Creator"),
+    name: readString(data.name, "Sohba Creator"),
     username,
     email: readString(data.email, `${username}@pulseora.app`),
-    profileImage: readString(data.profileImage, FALLBACK_PROFILE_IMAGE),
-    bio: readString(data.bio, "New creator on Pulseora."),
+    profileImage: readString(data.profileImage, DEFAULT_PROFILE_IMAGE),
+    bio: readString(data.bio, "New creator on Sohba."),
     headline: readString(data.headline, "Creator in progress"),
     language: normalizeLanguage(readString(data.language, "en")),
+    region: readString(data.region, "").toUpperCase() || undefined,
     planType: normalizePlan(readString(data.planType, "free")),
     followers: readStringArray(data.followers),
     following: readStringArray(data.following),
@@ -300,7 +305,7 @@ function readNumber(value: unknown, fallback: number) {
 }
 
 function normalizeLanguage(language: string): LanguageOption {
-  if (language === "en" || language === "ar" || language === "fr" || language === "es") {
+  if (isLanguageOption(language)) {
     return language;
   }
 

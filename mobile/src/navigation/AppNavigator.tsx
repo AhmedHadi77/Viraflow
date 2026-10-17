@@ -1,11 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
-import { MaterialTopTabBarProps, createMaterialTopTabNavigator } from "@react-navigation/material-top-tabs";
+import { BottomTabBarProps, createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { PAYMENTS_ENABLED } from "../data/catalog";
 import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
-import { palette } from "../theme";
+import { palette, createThemedStyles } from "../theme";
 import { LanguageScreen } from "../screens/LanguageScreen";
 import { LoginScreen } from "../screens/LoginScreen";
 import { RegisterScreen } from "../screens/RegisterScreen";
@@ -17,7 +18,18 @@ export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
   MainTabs: undefined;
-  ReelViewer: { reelId: string };
+  Admin: undefined;
+  Explore: { initialQuery?: string } | undefined;
+  HashtagFeed: { tag: string };
+  StoryComposer: {
+    mediaUri: string;
+    mediaType: "image" | "video";
+    mimeType?: string;
+    fileName?: string;
+    durationSeconds?: number;
+  };
+  StoryViewer: { userId: string; storyId?: string };
+  ReelViewer: { reelId: string; openComments?: boolean };
   ReelDetails: { reelId: string };
   BoostReel: { reelId: string };
   ProductDetails: { productId: string };
@@ -30,22 +42,37 @@ export type RootStackParamList = {
   MarketplaceChat: { threadId: string };
   MarketplaceCheckout: { productId: string };
   EditProfile: undefined;
+  Settings: undefined;
   Subscription: undefined;
   AITools: undefined;
   Notifications: undefined;
   PublicProfile: { userId: string };
+  FollowList: { userId: string; mode: "followers" | "following" };
+  Call: { callId: string };
+  PostDetails: { postId: string; openComments?: boolean };
 };
 
 export type AppTabParamList = {
   Home: undefined;
   Reels: undefined;
-  Create: { initialMode?: "reel" | "product" } | undefined;
+  Create:
+    | {
+        initialMode?: "post" | "reel" | "story" | "product";
+        prefillAsset?: {
+          uri: string;
+          type: "image" | "video";
+          mimeType?: string;
+          fileName?: string;
+          durationSeconds?: number;
+        };
+      }
+    | undefined;
   Marketplace: undefined;
   Profile: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
-const Tab = createMaterialTopTabNavigator<AppTabParamList>();
+const Tab = createBottomTabNavigator<AppTabParamList>();
 
 const loadScreen = <T,>(loader: () => T): (() => T) => loader;
 
@@ -71,12 +98,37 @@ export function AppNavigator() {
         <Stack.Screen component={LanguageScreen} name="Language" options={{ headerShown: false }} />
       ) : !session ? (
         <>
-          <Stack.Screen component={LoginScreen} name="Login" options={{ headerShown: false }} />
-          <Stack.Screen component={RegisterScreen} name="Register" options={{ title: copy.register }} />
-        </>
-      ) : (
-        <>
+        <Stack.Screen component={LoginScreen} name="Login" options={{ headerShown: false }} />
+        <Stack.Screen component={RegisterScreen} name="Register" options={{ title: copy.register }} />
+      </>
+    ) : (
+      <>
           <Stack.Screen component={MainTabs} name="MainTabs" options={{ headerShown: false }} />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/AdminDashboardScreen").AdminDashboardScreen)}
+            name="Admin"
+            options={{ title: copy.adminTitle }}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/ExploreScreen").ExploreScreen)}
+            name="Explore"
+            options={{ title: copy.explore }}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/HashtagFeedScreen").HashtagFeedScreen)}
+            name="HashtagFeed"
+            options={({ route }) => ({ title: `#${route.params.tag}` })}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/StoryComposerScreen").StoryComposerScreen)}
+            name="StoryComposer"
+            options={{ title: copy.storyEditor }}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/StoryViewerScreen").StoryViewerScreen)}
+            name="StoryViewer"
+            options={{ headerShown: false }}
+          />
           <Stack.Screen
             getComponent={loadScreen(() => require("../screens/ReelViewerScreen").ReelViewerScreen)}
             name="ReelViewer"
@@ -87,11 +139,13 @@ export function AppNavigator() {
             name="ReelDetails"
             options={{ title: copy.reelDetails }}
           />
-          <Stack.Screen
-            getComponent={loadScreen(() => require("../screens/BoostReelScreen").BoostReelScreen)}
-            name="BoostReel"
-            options={{ title: "Boost reel" }}
-          />
+          {PAYMENTS_ENABLED ? (
+            <Stack.Screen
+              getComponent={loadScreen(() => require("../screens/BoostReelScreen").BoostReelScreen)}
+              name="BoostReel"
+              options={{ title: copy.boostReel }}
+            />
+          ) : null}
           <Stack.Screen
             getComponent={loadScreen(() => require("../screens/ProductDetailsScreen").ProductDetailsScreen)}
             name="ProductDetails"
@@ -100,42 +154,42 @@ export function AppNavigator() {
           <Stack.Screen
             getComponent={loadScreen(() => require("../screens/CommunitiesScreen").CommunitiesScreen)}
             name="Communities"
-            options={{ title: "Pages, groups, channels" }}
+            options={{ title: copy.communitiesTitle }}
           />
           <Stack.Screen
             getComponent={loadScreen(() => require("../screens/CreateCommunityScreen").CreateCommunityScreen)}
             name="CreateCommunity"
-            options={{ title: "Create community" }}
+            options={{ title: copy.createCommunity }}
           />
           <Stack.Screen
             getComponent={loadScreen(() => require("../screens/CommunityDetailsScreen").CommunityDetailsScreen)}
             name="CommunityDetails"
-            options={{ title: "Community" }}
+            options={{ title: copy.community }}
           />
           <Stack.Screen
             getComponent={loadScreen(() => require("../screens/DirectInboxScreen").DirectInboxScreen)}
             name="DirectInbox"
-            options={{ title: "Direct messages" }}
+            options={{ title: copy.directMessages }}
           />
           <Stack.Screen
             getComponent={loadScreen(() => require("../screens/DirectChatScreen").DirectChatScreen)}
             name="DirectChat"
-            options={{ title: "Direct chat" }}
+            options={{ title: copy.directChat }}
           />
           <Stack.Screen
             getComponent={loadScreen(() => require("../screens/MarketplaceInboxScreen").MarketplaceInboxScreen)}
             name="MarketplaceInbox"
-            options={{ title: "Marketplace inbox" }}
+            options={{ title: copy.marketplaceInbox }}
           />
           <Stack.Screen
             getComponent={loadScreen(() => require("../screens/MarketplaceChatScreen").MarketplaceChatScreen)}
             name="MarketplaceChat"
-            options={{ title: "Marketplace chat" }}
+            options={{ title: copy.marketplaceChat }}
           />
           <Stack.Screen
             getComponent={loadScreen(() => require("../screens/MarketplaceCheckoutScreen").MarketplaceCheckoutScreen)}
             name="MarketplaceCheckout"
-            options={{ title: "Checkout" }}
+            options={{ title: copy.checkout }}
           />
           <Stack.Screen
             getComponent={loadScreen(() => require("../screens/EditProfileScreen").EditProfileScreen)}
@@ -143,10 +197,27 @@ export function AppNavigator() {
             options={{ title: copy.editProfile }}
           />
           <Stack.Screen
-            getComponent={loadScreen(() => require("../screens/SubscriptionScreen").SubscriptionScreen)}
-            name="Subscription"
-            options={{ title: copy.subscription }}
+            getComponent={loadScreen(() => require("../screens/FollowListScreen").FollowListScreen)}
+            name="FollowList"
+            options={{ title: "" }}
           />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/CallScreen").CallScreen)}
+            name="Call"
+            options={{ animation: "fade", gestureEnabled: false, headerShown: false, presentation: "fullScreenModal" }}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/SettingsScreen").SettingsScreen)}
+            name="Settings"
+            options={{ title: copy.settingsTitle }}
+          />
+          {PAYMENTS_ENABLED ? (
+            <Stack.Screen
+              getComponent={loadScreen(() => require("../screens/SubscriptionScreen").SubscriptionScreen)}
+              name="Subscription"
+              options={{ title: copy.subscription }}
+            />
+          ) : null}
           <Stack.Screen
             getComponent={loadScreen(() => require("../screens/AIToolsPlaceholderScreen").AIToolsPlaceholderScreen)}
             name="AITools"
@@ -156,6 +227,11 @@ export function AppNavigator() {
             getComponent={loadScreen(() => require("../screens/NotificationsPlaceholderScreen").NotificationsPlaceholderScreen)}
             name="Notifications"
             options={{ title: copy.notifications }}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/PostDetailsScreen").PostDetailsScreen)}
+            name="PostDetails"
+            options={{ title: copy.post }}
           />
           <Stack.Screen
             getComponent={loadScreen(() => require("../screens/ProfileScreen").ProfileScreen)}
@@ -174,14 +250,11 @@ function MainTabs() {
 
   return (
     <Tab.Navigator
-      tabBarPosition="bottom"
       screenOptions={{
-        swipeEnabled: true,
-        animationEnabled: true,
+        headerShown: false,
         lazy: true,
-        lazyPreloadDistance: 1,
       }}
-      tabBar={(props) => <PulseoraTabBar {...props} />}
+      tabBar={(props) => <SohbaTabBar {...props} />}
     >
       <Tab.Screen
         getComponent={loadScreen(() => require("../screens/HomeScreen").HomeScreen)}
@@ -212,11 +285,21 @@ function MainTabs() {
   );
 }
 
-function PulseoraTabBar({ descriptors, navigation, state }: MaterialTopTabBarProps) {
+function SohbaTabBar({ descriptors, navigation, state }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  // Reels is a full-screen video feed, so the bar stays dark there in both themes.
+  const onReels = state.routes[state.index]?.name === "Reels";
+  const activeColor = onReels ? "#ffffff" : palette.text;
+  const idleColor = onReels ? "rgba(255,255,255,0.55)" : palette.mutedSoft;
 
   return (
-    <View style={[styles.tabBarOuter, { paddingBottom: Math.max(insets.bottom, 10) + 6 }]}>
+    <View
+      style={[
+        styles.tabBarOuter,
+        onReels ? { backgroundColor: "#000000", borderTopColor: "rgba(255,255,255,0.08)" } : null,
+        { paddingBottom: Math.max(insets.bottom, 6) },
+      ]}
+    >
       <View style={styles.tabBarShell}>
         {state.routes.map((route, index) => {
           const focused = state.index === index;
@@ -273,9 +356,9 @@ function PulseoraTabBar({ descriptors, navigation, state }: MaterialTopTabBarPro
               testID={options?.tabBarButtonTestID}
             >
               <Ionicons
-                color={focused ? (isCreate ? "#04070b" : palette.text) : palette.mutedSoft}
+                color={focused ? (isCreate ? palette.primary : activeColor) : idleColor}
                 name={icon}
-                size={isCreate ? 28 : 24}
+                size={isCreate ? 30 : 25}
               />
               {focused && !isCreate ? <View style={styles.activePill} /> : null}
               <View accessible={false} style={styles.screenReaderOnly} />
@@ -287,62 +370,37 @@ function PulseoraTabBar({ descriptors, navigation, state }: MaterialTopTabBarPro
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
   tabBarOuter: {
     backgroundColor: palette.backgroundDeep,
-    paddingHorizontal: 14,
-    paddingTop: 8,
+    borderTopColor: palette.border,
+    borderTopWidth: 1,
+    paddingTop: 2,
   },
   tabBarShell: {
     alignItems: "center",
-    backgroundColor: "#05080d",
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: 26,
-    borderWidth: 1,
     flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    shadowColor: "#000000",
-    shadowOffset: {
-      width: 0,
-      height: 14,
-    },
-    shadowOpacity: 0.34,
-    shadowRadius: 28,
+    justifyContent: "space-around",
+    paddingHorizontal: 6,
   },
   tabButton: {
     alignItems: "center",
-    backgroundColor: "transparent",
-    borderRadius: 18,
-    gap: 5,
-    height: 52,
+    flex: 1,
+    gap: 3,
+    height: 50,
     justifyContent: "center",
-    minWidth: 54,
-    paddingHorizontal: 14,
   },
-  tabButtonActive: {
-    backgroundColor: "#0c1219",
-    borderColor: "rgba(255,255,255,0.08)",
-    borderWidth: 1,
-  },
-  createTabButton: {
-    borderColor: "rgba(255,255,255,0.12)",
-    borderWidth: 1,
-    minWidth: 58,
-  },
-  createTabButtonActive: {
-    backgroundColor: palette.text,
-    borderColor: palette.text,
-  },
+  tabButtonActive: {},
+  createTabButton: {},
+  createTabButtonActive: {},
   tabButtonPressed: {
-    opacity: 0.84,
+    opacity: 0.6,
   },
   activePill: {
-    backgroundColor: palette.text,
+    backgroundColor: palette.primary,
     borderRadius: 999,
-    height: 4,
-    width: 16,
+    height: 3,
+    width: 14,
   },
   screenReaderOnly: {
     height: 0,

@@ -95,6 +95,8 @@ The current Firebase MVP slice writes:
 users/{uid}
 stories/{storyId}
 reels/{reelId}
+posts/{postId}
+postComments/{commentId}
 products/{productId}
 comments/{commentId}
 communities/{communityId}
@@ -126,17 +128,40 @@ service cloud.firestore {
     match /stories/{storyId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null &&
+        (resource.data.userId == request.auth.uid ||
+        request.resource.data.diff(resource.data).changedKeys().hasOnly(["viewerIds", "updatedAt"]));
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
     }
 
     match /reels/{reelId} {
       allow read: if request.auth != null;
       allow create, update: if request.auth != null;
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
+    match /posts/{postId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null &&
+        (resource.data.userId == request.auth.uid ||
+        request.resource.data.diff(resource.data).changedKeys().hasOnly(["likedBy", "commentCount", "updatedAt"]));
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
+    match /postComments/{commentId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null &&
+        (resource.data.userId == request.auth.uid ||
+        get(/databases/$(database)/documents/posts/$(resource.data.postId)).data.userId == request.auth.uid);
     }
 
     match /products/{productId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow update: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
     }
 
     match /comments/{commentId} {

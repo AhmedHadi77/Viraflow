@@ -1,14 +1,31 @@
-import { useEffect, useState } from "react";
-import { Alert, Image, StyleSheet, Text, View } from "react-native";
-import { InputField } from "../components/InputField";
-import { PrimaryButton } from "../components/PrimaryButton";
+import { Ionicons } from "@expo/vector-icons";
+import { CallButtons } from "../components/CallButtons";
+import * as ImagePicker from "expo-image-picker";
+import * as Linking from "expo-linking";
+import * as VideoThumbnails from "expo-video-thumbnails";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Image, Pressable, ScrollView, Text, View } from "react-native";
+import { ChatComposer } from "../components/ChatComposer";
 import { Screen } from "../components/Screen";
-import { SectionTitle } from "../components/SectionTitle";
+import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
-import { palette, radii, spacing } from "../theme";
+import { type CreateDirectMessagePayload, type DirectChatMessage } from "../types/models";
+import { palette, radii, spacing, createThemedStyles } from "../theme";
+import { formatLocaleDateTime, formatRelativeTime } from "../utils/timeFormatting";
+import { DEFAULT_PROFILE_IMAGE } from "../data/defaultMedia";
+
+interface PendingDirectAttachment {
+  uri: string;
+  type: "image" | "video";
+  mimeType?: string;
+  fileName?: string;
+  durationSeconds?: number;
+  thumbnailUri?: string;
+}
 
 export function DirectChatScreen({ navigation, route }: { navigation: any; route: { params: { threadId: string } } }) {
   const {
+    language,
     currentUser,
     directThreads,
     getUserById,
@@ -21,22 +38,26 @@ export function DirectChatScreen({ navigation, route }: { navigation: any; route
     setDirectTyping,
     canDirectMessageUser,
   } = useAppState();
+  const copy = getCopy(language);
   const [draft, setDraft] = useState("");
+  const [pendingAttachment, setPendingAttachment] = useState<PendingDirectAttachment | null>(null);
+  const [isSending, setIsSending] = useState(false);
+  const messagesScrollRef = useRef<ScrollView>(null);
   const thread = directThreads.find((item) => item.id === route.params.threadId);
 
   useEffect(() => {
     void (async () => {
       const result = await openDirectThread(route.params.threadId);
       if (!result.ok && result.message) {
-        Alert.alert("Direct chat unavailable", result.message);
+        Alert.alert(copy.directChatUnavailableTitle, result.message);
       }
     })();
-  }, [route.params.threadId]);
+  }, [copy.directChatUnavailableTitle, route.params.threadId]);
 
   if (!thread || !currentUser) {
     return (
       <Screen contentContainerStyle={styles.emptyWrap}>
-        <Text style={styles.emptyText}>Conversation not found.</Text>
+        <Text style={styles.emptyText}>{copy.conversationNotFound}</Text>
       </Screen>
     );
   }
@@ -49,6 +70,14 @@ export function DirectChatScreen({ navigation, route }: { navigation: any; route
   const typingUsers = getDirectTypingUsers(activeThread.id);
   const chatUnlocked = Boolean(counterpartId && canDirectMessageUser(counterpartId));
   const lastOwnMessage = [...messages].reverse().find((message) => message.senderId === currentUser.id);
+  const canSend = chatUnlocked && (draft.trim().length > 0 || Boolean(pendingAttachment)) && !isSending;
+  const typingLabel = useMemo(() => {
+    if (typingUsers.length === 0) {
+      return formatPresenceLabel(counterpartPresence, language, copy.onlineNow, copy.offline);
+    }
+
+    return copy.typingNow;
+  }, [copy.offline, copy.onlineNow, copy.typingNow, counterpartPresence, language, typingUsers.length]);
 
   useEffect(() => {
     if (!currentUser || messages.length === 0) {
@@ -86,94 +115,243 @@ export function DirectChatScreen({ navigation, route }: { navigation: any; route
     };
   }, [route.params.threadId]);
 
-  async function handleSend() {
-    const result = await sendDirectMessage(activeThread.id, draft);
-    if (!result.ok) {
-      Alert.alert("Message unavailable", result.message ?? "This direct message could not be sent.");
+  async function handlePickAttachment() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(copy.mediaAccessNeededTitle, copy.mediaAccessNeededBody);
       return;
     }
 
-    setDirectTyping(activeThread.id, false);
-    setDraft("");
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images", "videos"],
+      allowsMultipleSelection: false,
+      quality: 0.8,
+    });
+
+    if (result.canceled || !result.assets[0]) {
+      return;
+    }
+
+    const asset = result.assets[0];
+    const isVideo = asset.type === "video";
+    let thumbnailUri: string | undefined;
+
+    if (isVideo) {
+      try {
+        const thumbnail = await VideoThumbnails.getThumbnailAsync(asset.uri, {
+          time: 700,
+          quality: 0.65,
+        });
+        thumbnailUri = thumbnail.uri;
+      } catch {
+        thumbnailUri = undefined;
+      }
+    }
+
+    setPendingAttachment({
+      uri: asset.uri,
+      type: isVideo ? "video" : "image",
+      mimeType: asset.mimeType,
+      fileName: asset.fileName || asset.uri.split("/").pop(),
+      durationSeconds: typeof asset.duration === "number" ? Math.max(1, Math.round(asset.duration / 1000)) : undefined,
+      thumbnailUri,
+    });
+  }
+
+  async function handleSend() {
+    if (!canSend) {
+      return;
+    }
+
+    const payload: CreateDirectMessagePayload = {
+      text: draft,
+      mediaUri: pendingAttachment?.uri,
+      mediaType: pendingAttachment?.type,
+      mediaMimeType: pendingAttachment?.mimeType,
+      mediaFileName: pendingAttachment?.fileName,
+      mediaDurationSeconds: pendingAttachment?.durationSeconds,
+      mediaThumbnailUri: pendingAttachment?.thumbnailUri,
+    };
+
+    setIsSending(true);
+    try {
+      const result = await sendDirectMessage(activeThread.id, payload);
+      if (!result.ok) {
+        Alert.alert(copy.messageUnavailableTitle, result.message ?? copy.messageUnavailableBody);
+        return;
+      }
+
+      setDirectTyping(activeThread.id, false);
+      setDraft("");
+      setPendingAttachment(null);
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  async function openMediaMessage(message: DirectChatMessage) {
+    const mediaUrl = message.mediaUrl?.trim();
+    if (!mediaUrl) {
+      return;
+    }
+
+    const supported = await Linking.canOpenURL(mediaUrl);
+    if (!supported) {
+      Alert.alert(copy.previewUnavailableTitle, copy.previewUnavailableBody);
+      return;
+    }
+
+    await Linking.openURL(mediaUrl);
   }
 
   return (
-    <Screen scrollable>
-      <View style={styles.headerCard}>
-        <SectionTitle
-          title={counterpart?.name ?? "Direct chat"}
-          subtitle={
-            chatUnlocked
-              ? "Chat is unlocked because both of you follow each other."
-              : "Chat is locked until both of you follow each other."
-          }
-        />
-        <View style={styles.profileSnippet}>
-          <Image
-            source={{
-              uri:
-                counterpart?.profileImage ||
-                "https://images.unsplash.com/photo-1502685104226-ee32379fefbe?auto=format&fit=crop&w=400&q=80",
-            }}
-            style={styles.avatar}
-          />
-          <View style={styles.profileCopy}>
-            <Text style={styles.profileTitle}>{counterpart?.name ?? "Creator"}</Text>
-            <Text style={styles.profileMeta}>@{counterpart?.username ?? "creator"}</Text>
-            <Text style={styles.profileMeta}>{counterpart?.headline ?? "Mutual creator connection"}</Text>
-          </View>
+    <Screen contentContainerStyle={styles.chatScreen}>
+      <Pressable
+        disabled={!counterpart}
+        onPress={() => counterpart && navigation.navigate("PublicProfile", { userId: counterpart.id })}
+        style={styles.chatHeader}
+      >
+        <Image source={{ uri: counterpart?.profileImage || DEFAULT_PROFILE_IMAGE }} style={styles.chatHeaderAvatar} />
+        <View style={styles.chatHeaderCopy}>
+          <Text numberOfLines={1} style={styles.chatHeaderName}>
+            {counterpart?.name ?? copy.directChatTitle}
+          </Text>
+          <Text numberOfLines={1} style={styles.chatHeaderStatus}>
+            {typingLabel || (counterpart ? `@${counterpart.username}` : "")}
+          </Text>
         </View>
-        {counterpart ? (
-          <PrimaryButton label="Open profile" onPress={() => navigation.navigate("PublicProfile", { userId: counterpart.id })} variant="ghost" />
-        ) : null}
-        <Text style={styles.statusText}>
-          {typingUsers.length > 0 ? `${counterpart?.name ?? "Creator"} is typing...` : formatPresenceLabel(counterpartPresence)}
-        </Text>
-      </View>
+        {counterpart ? <CallButtons navigation={navigation} userId={counterpart.id} /> : null}
+      </Pressable>
 
-      <View style={styles.chatList}>
+      <ScrollView
+        contentContainerStyle={styles.chatList}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        onContentSizeChange={() => messagesScrollRef.current?.scrollToEnd({ animated: false })}
+        ref={messagesScrollRef}
+        style={styles.chatScroll}
+      >
+        {messages.length === 0 ? (
+          <Text style={styles.chatEmpty}>{chatUnlocked ? copy.directChatUnlockedBody : copy.directChatLockedBody}</Text>
+        ) : null}
         {messages.map((message) => {
           const ownMessage = message.senderId === currentUser.id;
-          const deliveryStatus = counterpartId ? getOneToOneDeliveryStatus(message, counterpartId) : null;
+          const deliveryStatus = counterpartId ? getOneToOneDeliveryStatus(message, counterpartId, copy) : null;
           return (
             <View key={message.id} style={[styles.messageRow, ownMessage ? styles.messageRowOwn : null]}>
               {!ownMessage ? <Image source={{ uri: message.senderAvatar }} style={styles.messageAvatar} /> : null}
               <View style={[styles.messageBubble, ownMessage ? styles.messageBubbleOwn : null]}>
-                {!ownMessage ? <Text style={styles.messageName}>{message.senderName}</Text> : null}
-                <Text style={[styles.messageText, ownMessage ? styles.messageTextOwn : null]}>{message.text}</Text>
-                <Text style={[styles.messageTime, ownMessage ? styles.messageTimeOwn : null]}>
-                  {new Date(message.createdAt).toLocaleString()}
-                </Text>
-                {ownMessage && message.id === lastOwnMessage?.id && deliveryStatus ? (
-                  <Text style={styles.readReceipt}>{deliveryStatus}</Text>
+                {message.mediaUrl ? (
+                  <Pressable onPress={() => void openMediaMessage(message)} style={styles.mediaPreviewCard}>
+                    <Image source={{ uri: message.thumbnailUrl || message.mediaUrl }} style={styles.mediaPreviewImage} />
+                    {message.mediaType === "video" ? (
+                      <View style={styles.videoBadge}>
+                        <Ionicons color="#ffffff" name="play" size={14} />
+                        <Text style={styles.videoBadgeLabel}>
+                          {message.durationSeconds ? formatDuration(message.durationSeconds) : copy.video}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </Pressable>
                 ) : null}
+                {message.text.trim() ? (
+                  <Text style={[styles.messageText, ownMessage ? styles.messageTextOwn : null]}>{message.text}</Text>
+                ) : null}
+                <Text style={[styles.messageTime, ownMessage ? styles.messageTimeOwn : null]}>
+                  {formatLocaleDateTime(message.createdAt, language)}
+                  {ownMessage && message.id === lastOwnMessage?.id && deliveryStatus ? `  ·  ${deliveryStatus}` : ""}
+                </Text>
               </View>
             </View>
           );
         })}
-      </View>
+      </ScrollView>
 
-      <View style={styles.composeCard}>
-        <InputField
-          label="Message"
-          onChangeText={setDraft}
-          placeholder={chatUnlocked ? "Send a direct message..." : "Follow each other to unlock direct chat"}
-          value={draft}
-          multiline
-        />
-        <PrimaryButton
-          label="Send message"
-          onPress={() => {
-            void handleSend();
-          }}
-          disabled={!chatUnlocked}
-        />
-      </View>
+      {pendingAttachment ? (
+        <View style={styles.pendingAttachmentCard}>
+          <Image source={{ uri: pendingAttachment.thumbnailUri || pendingAttachment.uri }} style={styles.pendingAttachmentPreview} />
+          <View style={styles.pendingAttachmentBody}>
+            <Text style={styles.pendingAttachmentTitle}>
+              {pendingAttachment.type === "video" ? copy.videoReadyToSend : copy.photoReadyToSend}
+            </Text>
+            <Text style={styles.pendingAttachmentMeta}>
+              {pendingAttachment.type === "video" && pendingAttachment.durationSeconds
+                ? formatDuration(pendingAttachment.durationSeconds)
+                : copy.tapSendWhenReady}
+            </Text>
+          </View>
+          <Pressable hitSlop={8} onPress={() => setPendingAttachment(null)} style={styles.pendingRemoveButton}>
+            <Ionicons color={palette.text} name="close" size={16} />
+          </Pressable>
+        </View>
+      ) : null}
+
+      <ChatComposer
+        attachActive={Boolean(pendingAttachment)}
+        canSend={canSend}
+        editable={chatUnlocked}
+        isSending={isSending}
+        onAttach={
+          chatUnlocked
+            ? () => {
+                void handlePickAttachment();
+              }
+            : undefined
+        }
+        onChangeText={setDraft}
+        onSend={() => {
+          void handleSend();
+        }}
+        placeholder={chatUnlocked ? copy.directMessagePlaceholder : copy.directLockedPlaceholder}
+        value={draft}
+      />
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
+  chatScreen: {
+    paddingBottom: 0,
+    paddingHorizontal: 0,
+  },
+  chatHeader: {
+    alignItems: "center",
+    borderBottomColor: palette.border,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+  },
+  chatHeaderAvatar: {
+    backgroundColor: palette.surfaceRaised,
+    borderRadius: 20,
+    height: 40,
+    width: 40,
+  },
+  chatHeaderCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  chatHeaderName: {
+    color: palette.text,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  chatHeaderStatus: {
+    color: palette.muted,
+    fontSize: 12,
+  },
+  chatScroll: {
+    flex: 1,
+  },
+  chatEmpty: {
+    color: palette.muted,
+    fontSize: 14,
+    lineHeight: 20,
+    paddingVertical: spacing.xl,
+    textAlign: "center",
+  },
   emptyWrap: {
     alignItems: "center",
     justifyContent: "center",
@@ -220,7 +398,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   chatList: {
-    gap: spacing.md,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
   messageRow: {
     alignItems: "flex-end",
@@ -231,18 +411,18 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   messageAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    backgroundColor: palette.surfaceRaised,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
   },
   messageBubble: {
-    backgroundColor: palette.surface,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    gap: 6,
-    maxWidth: "82%",
-    padding: spacing.md,
+    backgroundColor: palette.surfaceRaised,
+    borderRadius: 18,
+    gap: 4,
+    maxWidth: "78%",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   messageBubbleOwn: {
     backgroundColor: palette.primary,
@@ -263,13 +443,53 @@ const styles = StyleSheet.create({
   },
   messageTime: {
     color: palette.muted,
-    fontSize: 11,
+    fontSize: 10,
   },
   messageTimeOwn: {
     color: "#234436",
   },
   readReceipt: {
     color: "#234436",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  mediaPreviewCard: {
+    backgroundColor: "rgba(7,16,24,0.08)",
+    borderRadius: radii.lg,
+    overflow: "hidden",
+    position: "relative",
+  },
+  mediaPreviewImage: {
+    width: 220,
+    height: 260,
+    backgroundColor: palette.cardAlt,
+  },
+  videoBadge: {
+    alignItems: "center",
+    backgroundColor: "rgba(7,16,24,0.78)",
+    borderRadius: radii.pill,
+    bottom: 10,
+    flexDirection: "row",
+    gap: 6,
+    left: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    position: "absolute",
+  },
+  imageBadge: {
+    alignItems: "center",
+    backgroundColor: "rgba(7,16,24,0.7)",
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    gap: 6,
+    left: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    position: "absolute",
+    top: 10,
+  },
+  videoBadgeLabel: {
+    color: palette.text,
     fontSize: 11,
     fontWeight: "800",
   },
@@ -281,52 +501,89 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.xl,
   },
+  pendingAttachmentCard: {
+    alignItems: "center",
+    backgroundColor: palette.surface,
+    borderColor: palette.borderStrong,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.md,
+    padding: spacing.md,
+  },
+  pendingAttachmentPreview: {
+    width: 72,
+    height: 72,
+    borderRadius: radii.lg,
+    backgroundColor: palette.cardAlt,
+  },
+  pendingAttachmentBody: {
+    flex: 1,
+    gap: 4,
+  },
+  pendingAttachmentTitle: {
+    color: palette.text,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  pendingAttachmentMeta: {
+    color: palette.textSoft,
+    fontSize: 12,
+  },
+  pendingRemoveButton: {
+    alignItems: "center",
+    backgroundColor: palette.glass,
+    borderRadius: radii.pill,
+    height: 34,
+    justifyContent: "center",
+    width: 34,
+  },
+  composeActions: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    justifyContent: "space-between",
+  },
 });
 
 function getOneToOneDeliveryStatus(
   message: { deliveredToUserIds: string[]; seenByUserIds: string[] },
-  counterpartId: string
+  counterpartId: string,
+  copy: ReturnType<typeof getCopy>
 ) {
   if (message.seenByUserIds.includes(counterpartId)) {
-    return "Seen";
+    return copy.seen;
   }
 
   if (message.deliveredToUserIds.includes(counterpartId)) {
-    return "Delivered";
+    return copy.delivered;
   }
 
-  return "Sent";
+  return copy.sent;
 }
 
-function formatPresenceLabel(presence?: { isOnline: boolean; lastSeenAt?: string }) {
+function formatPresenceLabel(
+  presence: { isOnline: boolean; lastSeenAt?: string } | undefined,
+  language: Parameters<typeof getCopy>[0],
+  onlineLabel: string,
+  offlineLabel: string
+) {
   if (presence?.isOnline) {
-    return "Online now";
+    return onlineLabel;
   }
 
   if (!presence?.lastSeenAt) {
-    return "Offline";
+    return offlineLabel;
   }
 
-  return `Last seen ${formatRelativeTime(presence.lastSeenAt)}`;
+  return formatRelativeTime(presence.lastSeenAt, language, {
+    style: "short",
+    fallbackToDateAfterDays: 14,
+  });
 }
 
-function formatRelativeTime(timestamp: string) {
-  const diffMs = Date.now() - new Date(timestamp).getTime();
-  const diffMinutes = Math.max(Math.floor(diffMs / 60000), 0);
-
-  if (diffMinutes < 1) {
-    return "just now";
-  }
-
-  if (diffMinutes < 60) {
-    return `${diffMinutes}m ago`;
-  }
-
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) {
-    return `${diffHours}h ago`;
-  }
-
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays}d ago`;
+function formatDuration(value: number) {
+  const safeValue = Number.isFinite(value) ? Math.max(0, value) : 0;
+  const minutes = Math.floor(safeValue / 60);
+  const seconds = Math.floor(safeValue % 60);
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }

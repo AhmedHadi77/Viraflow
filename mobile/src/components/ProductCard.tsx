@@ -1,31 +1,45 @@
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, Text, View } from "react-native";
+import { getCopy } from "../data/copy";
+import { useAppState } from "../providers/AppProvider";
+import { categoryLabel, listingStatusLabel } from "../utils/labels";
+import { usePriceTools } from "../utils/priceFormatting";
 import { Product, User } from "../types/models";
-import { palette, radii, shadows, spacing } from "../theme";
+import { palette, radii, shadows, spacing, createThemedStyles } from "../theme";
 
 interface ProductCardProps {
   product: Product;
   seller: User;
   onPress: () => void;
   onSellerPress: () => void;
+  /** Shown as a small badge when the listing is in the viewer's region. */
+  nearbyLabel?: string;
 }
 
-function formatListingStatus(status: Product["listingStatus"]) {
-  return status.charAt(0).toUpperCase() + status.slice(1);
-}
-
-export function ProductCard({ product, seller, onPress, onSellerPress }: ProductCardProps) {
+export function ProductCard({ product, seller, onPress, onSellerPress, nearbyLabel }: ProductCardProps) {
+  const { getPriceParts } = usePriceTools();
+  const { language } = useAppState();
+  const copy = getCopy(language);
+  const priceParts = getPriceParts(product);
   return (
     <Pressable onPress={onPress} style={styles.card}>
       <Image source={{ uri: product.imageUrl }} style={styles.image} />
       <View style={styles.imageBadge}>
-        <Text style={styles.imageBadgeLabel}>{formatListingStatus(product.listingStatus)}</Text>
+        <Text style={styles.imageBadgeLabel}>{listingStatusLabel(product.listingStatus, copy)}</Text>
       </View>
+      {nearbyLabel ? (
+        <View style={styles.nearbyBadge}>
+          <Text style={styles.nearbyBadgeLabel}>{nearbyLabel}</Text>
+        </View>
+      ) : null}
       <View style={styles.content}>
         <View style={styles.row}>
           <View style={styles.badge}>
-            <Text style={styles.badgeLabel}>{product.category}</Text>
+            <Text style={styles.badgeLabel}>{categoryLabel(product.category, copy)}</Text>
           </View>
-          <Text style={styles.price}>${product.price}</Text>
+          <View style={styles.priceColumn}>
+            <Text style={styles.price}>{priceParts.original}</Text>
+            {priceParts.approx ? <Text style={styles.priceApprox}>{priceParts.approx}</Text> : null}
+          </View>
         </View>
         <Text style={styles.title}>{product.title}</Text>
         <Text numberOfLines={2} style={styles.description}>
@@ -50,7 +64,7 @@ export function ProductCard({ product, seller, onPress, onSellerPress }: Product
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
   card: {
     backgroundColor: palette.surface,
     borderColor: palette.borderStrong,
@@ -73,6 +87,30 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: spacing.md,
     paddingVertical: 8,
+  },
+  priceColumn: {
+    alignItems: "flex-end",
+    flexShrink: 1,
+    gap: 2,
+  },
+  priceApprox: {
+    color: palette.muted,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  nearbyBadge: {
+    position: "absolute",
+    left: spacing.md,
+    top: spacing.md,
+    backgroundColor: palette.primary,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+  },
+  nearbyBadgeLabel: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "800",
   },
   imageBadgeLabel: {
     color: palette.text,

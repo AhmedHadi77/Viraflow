@@ -1,6 +1,8 @@
 import cors from "cors";
 import express from "express";
 import { handleStripeWebhook } from "./controllers/paymentController";
+import { apiErrorHandler, enableAsyncRouteErrors } from "./middleware/asyncErrors";
+import { adminRouter } from "./routes/admin";
 import { aiRouter } from "./routes/ai";
 import { authRouter } from "./routes/auth";
 import { communitiesRouter } from "./routes/communities";
@@ -17,6 +19,7 @@ import { storiesRouter } from "./routes/stories";
 import { subscriptionsRouter } from "./routes/subscriptions";
 
 export function createApp() {
+  enableAsyncRouteErrors();
   const app = express();
 
   app.use(cors());
@@ -25,6 +28,7 @@ export function createApp() {
 
   app.use("/api/meta", metaRouter);
   app.use("/api/auth", authRouter);
+  app.use("/api/admin", adminRouter);
   app.use("/api/ai", aiRouter);
   app.use("/api/communities", communitiesRouter);
   app.use("/api/direct", directRouter);
@@ -45,6 +49,11 @@ export function createApp() {
       message: "Create. Go viral. Make money.",
     });
   });
+
+  app.use("/api", (_req, res) => {
+    res.status(404).json({ message: "Endpoint not found." });
+  });
+  app.use(apiErrorHandler);
 
   return app;
 }

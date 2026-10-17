@@ -1,8 +1,8 @@
-import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
-import { ScrollView, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, StyleProp, View, ViewStyle } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { palette, radii, spacing } from "../theme";
+import { SafeLinearGradient } from "./SafeLinearGradient";
+import { palette, radii, spacing, createThemedStyles } from "../theme";
 
 interface ScreenProps {
   children: React.ReactNode;
@@ -14,6 +14,8 @@ export function Screen({ children, scrollable = false, contentContainerStyle }: 
   const inner = scrollable ? (
     <ScrollView
       contentContainerStyle={[styles.scrollContent, contentContainerStyle]}
+      keyboardDismissMode="on-drag"
+      keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
       {children}
@@ -23,15 +25,20 @@ export function Screen({ children, scrollable = false, contentContainerStyle }: 
   );
 
   return (
-    <LinearGradient colors={[palette.backgroundDeep, palette.background, palette.backgroundSoft]} style={styles.gradient}>
+    <SafeLinearGradient colors={[palette.backgroundDeep, palette.background, palette.backgroundSoft]} style={styles.gradient}>
       <View pointerEvents="none" style={[styles.glow, styles.glowTop]} />
       <View pointerEvents="none" style={[styles.glow, styles.glowBottom]} />
-      <SafeAreaView style={styles.safeArea}>{inner}</SafeAreaView>
-    </LinearGradient>
+      <SafeAreaView style={styles.safeArea}>
+        {/* Android draws edge-to-edge, so the window no longer resizes for the keyboard on its own. */}
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.safeArea}>
+          {inner}
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </SafeLinearGradient>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
   gradient: {
     flex: 1,
   },

@@ -15,6 +15,7 @@ import { getFirebaseClientFirestore, isFirebaseClientConfigured } from "./fireba
 import {
   CommunityChatMessage,
   CommunitySpace,
+  CreateDirectMessagePayload,
   DirectChatMessage,
   DirectChatThread,
   MarketplaceChatMessage,
@@ -22,14 +23,13 @@ import {
   Product,
   User,
 } from "../types/models";
+import { DEFAULT_PROFILE_IMAGE } from "../data/defaultMedia";
 
 const DIRECT_THREADS_COLLECTION = "directThreads";
 const DIRECT_MESSAGES_COLLECTION = "directMessages";
 const MARKETPLACE_THREADS_COLLECTION = "marketplaceThreads";
 const MARKETPLACE_MESSAGES_COLLECTION = "marketplaceMessages";
 const COMMUNITY_MESSAGES_COLLECTION = "communityChatMessages";
-const FALLBACK_PROFILE_IMAGE =
-  "https://images.unsplash.com/photo-1502685104226-ee32379fefbe?auto=format&fit=crop&w=400&q=80";
 
 export function isFirebaseChatConfigured() {
   return isFirebaseClientConfigured();
@@ -170,21 +170,33 @@ export async function fetchFirebaseDirectThread(userId: string, threadId: string
   };
 }
 
-export async function sendFirebaseDirectMessage(thread: DirectChatThread, currentUser: User, text: string) {
+export async function sendFirebaseDirectMessage(
+  thread: DirectChatThread,
+  currentUser: User,
+  payload: CreateDirectMessagePayload
+) {
   if (!thread.participantIds.includes(currentUser.id)) {
     throw new Error("You do not have access to this conversation.");
   }
 
   const db = getRequiredFirestore();
   const createdAt = new Date().toISOString();
+  const normalizedText = payload.text?.trim() ?? "";
+  if (!normalizedText && !payload.mediaUri?.trim()) {
+    throw new Error("Add a message or media before sending.");
+  }
   const messageRef = doc(collection(db, DIRECT_MESSAGES_COLLECTION));
   const message: DirectChatMessage = {
     id: messageRef.id,
     threadId: thread.id,
     senderId: currentUser.id,
     senderName: currentUser.name,
-    senderAvatar: currentUser.profileImage || FALLBACK_PROFILE_IMAGE,
-    text: text.trim(),
+    senderAvatar: currentUser.profileImage || DEFAULT_PROFILE_IMAGE,
+    text: normalizedText,
+    mediaType: payload.mediaType,
+    mediaUrl: payload.mediaUri?.trim() || undefined,
+    thumbnailUrl: payload.mediaThumbnailUri?.trim() || undefined,
+    durationSeconds: payload.mediaDurationSeconds,
     createdAt,
     deliveredToUserIds: [currentUser.id],
     seenByUserIds: [currentUser.id],
@@ -193,7 +205,7 @@ export async function sendFirebaseDirectMessage(thread: DirectChatThread, curren
     ...thread,
     updatedAt: createdAt,
     lastMessageAt: createdAt,
-    lastMessagePreview: message.text,
+    lastMessagePreview: buildDirectMessagePreview(message),
   };
   const batch = writeBatch(db);
 
@@ -277,7 +289,7 @@ export async function sendFirebaseMarketplaceMessage(thread: MarketplaceChatThre
     threadId: thread.id,
     senderId: currentUser.id,
     senderName: currentUser.name,
-    senderAvatar: currentUser.profileImage || FALLBACK_PROFILE_IMAGE,
+    senderAvatar: currentUser.profileImage || DEFAULT_PROFILE_IMAGE,
     text: text.trim(),
     createdAt,
     deliveredToUserIds: [currentUser.id],
@@ -324,7 +336,7 @@ export async function sendFirebaseCommunityChatMessage(community: CommunitySpace
     communityId: community.id,
     senderId: currentUser.id,
     senderName: currentUser.name,
-    senderAvatar: currentUser.profileImage || FALLBACK_PROFILE_IMAGE,
+    senderAvatar: currentUser.profileImage || DEFAULT_PROFILE_IMAGE,
     text: text.trim(),
     createdAt: new Date().toISOString(),
     deliveredToUserIds: [currentUser.id],
@@ -461,8 +473,12 @@ function normalizeDirectMessageDoc(id: string, data: Record<string, unknown>): D
     threadId: readString(data.threadId, ""),
     senderId: readString(data.senderId, ""),
     senderName: readString(data.senderName, "Creator"),
-    senderAvatar: readString(data.senderAvatar, FALLBACK_PROFILE_IMAGE),
+    senderAvatar: readString(data.senderAvatar, DEFAULT_PROFILE_IMAGE),
     text: readString(data.text, ""),
+    mediaType: readMediaType(data.mediaType),
+    mediaUrl: readOptionalString(data.mediaUrl),
+    thumbnailUrl: readOptionalString(data.thumbnailUrl),
+    durationSeconds: readOptionalNumber(data.durationSeconds),
     createdAt: readString(data.createdAt, new Date().toISOString()),
     deliveredToUserIds: readStringArray(data.deliveredToUserIds),
     seenByUserIds: readStringArray(data.seenByUserIds),
@@ -489,7 +505,7 @@ function normalizeMarketplaceMessageDoc(id: string, data: Record<string, unknown
     threadId: readString(data.threadId, ""),
     senderId: readString(data.senderId, ""),
     senderName: readString(data.senderName, "Marketplace user"),
-    senderAvatar: readString(data.senderAvatar, FALLBACK_PROFILE_IMAGE),
+    senderAvatar: readString(data.senderAvatar, DEFAULT_PROFILE_IMAGE),
     text: readString(data.text, ""),
     createdAt: readString(data.createdAt, new Date().toISOString()),
     deliveredToUserIds: readStringArray(data.deliveredToUserIds),
@@ -503,7 +519,7 @@ function normalizeCommunityChatMessageDoc(id: string, data: Record<string, unkno
     communityId: readString(data.communityId, ""),
     senderId: readString(data.senderId, ""),
     senderName: readString(data.senderName, "Community member"),
-    senderAvatar: readString(data.senderAvatar, FALLBACK_PROFILE_IMAGE),
+    senderAvatar: readString(data.senderAvatar, DEFAULT_PROFILE_IMAGE),
     text: readString(data.text, ""),
     createdAt: readString(data.createdAt, new Date().toISOString()),
     deliveredToUserIds: readStringArray(data.deliveredToUserIds),
@@ -543,6 +559,34 @@ function readString(value: unknown, fallback: string) {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
+function readOptionalString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function readOptionalNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function readMediaType(value: unknown) {
+  return value === "image" || value === "video" ? value : undefined;
+}
+
 function readStringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : [];
+}
+
+function buildDirectMessagePreview(message: DirectChatMessage) {
+  if (message.text.trim()) {
+    return message.text.slice(0, 120);
+  }
+
+  if (message.mediaType === "video") {
+    return "Sent a video";
+  }
+
+  if (message.mediaType === "image") {
+    return "Sent a photo";
+  }
+
+  return "Conversation updated";
 }

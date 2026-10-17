@@ -1,9 +1,12 @@
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
+import { getRegion } from "../data/regions";
+import { withAiStudioTranslation, withAiToolsUiTranslation } from "../data/locales/aiStudio";
+import { formatTime } from "../utils/timeFormatting";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import * as VideoThumbnails from "expo-video-thumbnails";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, ScrollView, Text, View } from "react-native";
 import { InputField } from "../components/InputField";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
@@ -38,28 +41,477 @@ import {
   AIVideoJob,
   AIVoiceOption,
 } from "../types/models";
-import { palette, radii, spacing } from "../theme";
+import { palette, radii, spacing, createThemedStyles } from "../theme";
+import { PAYMENTS_ENABLED } from "../data/catalog";
 
 type ToolTab = "engine" | "coach" | "audit" | "trends" | "avatars" | "text" | "image" | "video";
 type FailureFrame = { id: string; uri: string; label: string };
-
-const textModes: Array<{ value: AITextMode; label: string }> = [
-  { value: "captions", label: "Captions" },
-  { value: "script", label: "Scripts" },
-  { value: "product_copy", label: "Product copy" },
-];
 
 const voiceOptions: AIVoiceOption[] = ["coral", "marin", "cedar", "sage", "alloy"];
 const aspectRatios: Array<"1:1" | "9:16" | "16:9"> = ["9:16", "1:1", "16:9"];
 const videoSizes: Array<"720x1280" | "1280x720" | "1080x1920" | "1920x1080"> = ["720x1280", "1080x1920", "1280x720", "1920x1080"];
 const videoSeconds: Array<5 | 8 | 10 | 16 | 20> = [8, 10, 16, 20, 5];
 
+function getAiStudioCopy(language: ReturnType<typeof useAppState>["language"]) {
+  if (language === "ar") {
+    return {
+      heroKicker: "استوديو الذكاء",
+      heroTitle: "حول فكرة واحدة إلى محتوى أسرع",
+      heroSubtitle: "أنشئ النص والصوت والشرح والفكرة المرئية من مكان واحد.",
+      brain: "النص",
+      voice: "الصوت",
+      render: "الفيديو",
+      mode: "الوضع",
+      loading: "جارٍ التحميل",
+      aiOffline: "غير متاح",
+      liveBackend: "خادم مباشر",
+      aiOfflineTitle: "الذكاء الاصطناعي غير متصل",
+      aiOfflineBody: "خدمة الذكاء الاصطناعي غير متاحة على الخادم حاليا. لن يتم إنشاء أي نتائج حتى تعود للعمل.",
+      tabs: {
+        engine: "المحرك",
+        coach: "المدرب",
+        audit: "لماذا فشل؟",
+        trends: "اختطاف الترند",
+        avatars: "أفاتار",
+        text: "نص",
+        image: "صورة",
+        video: "فيديو",
+      },
+      missingPromptTitle: "الوصف مطلوب",
+      missingPromptBody: "اكتب ما الذي تريد من الأداة أن تنشئه أولاً.",
+      noTrendTitle: "لا يوجد ترند محدد",
+      noTrendBody: "اختر ترنداً أولاً.",
+      premiumOnlyTitle: "ميزة بريميوم",
+      premiumOnlyBody: "هذه الأداة متاحة في الخطة الشهرية أو السنوية.",
+      missingPostTopicTitle: "موضوع المنشور مطلوب",
+      missingPostTopicBody: "أخبر المدرب بالمحتوى الذي تريد مراجعته.",
+      videoAccessNeededTitle: "نحتاج الوصول للفيديو",
+      videoAccessNeededBody: "اسمح بالوصول للمكتبة حتى يتمكن Sohba من تحليل الفيديو.",
+      uploadVideoTitle: "ارفع فيديو",
+      uploadVideoBody: "اختر الفيديو أولاً قبل تشغيل التدقيق.",
+      photoAccessNeededTitle: "نحتاج الوصول للصور",
+      photoAccessNeededBody: "اسمح بالوصول للصور حتى يتمكن Sohba من إنشاء حزمة الأفاتار.",
+      uploadPhotoTitle: "ارفع صورة",
+      uploadPhotoBody: "اختر صورة أولاً لإنشاء حزمة الأفاتار.",
+      voicePreviewUnavailableTitle: "معاينة الصوت غير متاحة",
+      voicePreviewUnavailableBody: "معاينة صوت الذكاء الاصطناعي غير متاحة الآن.",
+      requestBlockedTitle: "تم حظر الطلب",
+      textGeneration: "توليد النص",
+      imageGeneration: "توليد الصور",
+      videoGeneration: "توليد الفيديو",
+    };
+  }
+
+  if (language === "fr") {
+    return {
+      heroKicker: "Studio IA",
+      heroTitle: "Transformez une idee en contenu plus vite",
+      heroSubtitle: "Generez texte, voix, accroches et direction visuelle depuis un seul ecran.",
+      brain: "Texte",
+      voice: "Voix",
+      render: "Rendu",
+      mode: "Mode",
+      loading: "Chargement",
+      aiOffline: "Indisponible",
+      liveBackend: "Backend live",
+      aiOfflineTitle: "IA hors ligne",
+      aiOfflineBody: "La generation IA n'est pas disponible sur le serveur pour le moment. Rien ne sera genere tant qu'elle n'est pas de retour.",
+      tabs: {
+        engine: "Moteur viral",
+        coach: "Coach croissance",
+        audit: "Pourquoi ca a rate ?",
+        trends: "Trend Hijacker",
+        avatars: "Avatar IA",
+        text: "Texte IA",
+        image: "Image IA",
+        video: "Video IA",
+      },
+      missingPromptTitle: "Prompt requis",
+      missingPromptBody: "Decrivez d'abord ce que vous voulez creer.",
+      noTrendTitle: "Aucune tendance selectionnee",
+      noTrendBody: "Choisissez une tendance d'abord.",
+      premiumOnlyTitle: "Fonction premium",
+      premiumOnlyBody: "Cet outil est reserve aux plans mensuel ou annuel.",
+      missingPostTopicTitle: "Sujet requis",
+      missingPostTopicBody: "Indiquez au coach quel post doit etre analyse.",
+      videoAccessNeededTitle: "Acces video requis",
+      videoAccessNeededBody: "Autorisez la bibliotheque pour analyser la video.",
+      uploadVideoTitle: "Importez une video",
+      uploadVideoBody: "Choisissez d'abord la video a auditer.",
+      photoAccessNeededTitle: "Acces photo requis",
+      photoAccessNeededBody: "Autorisez la bibliotheque pour creer les styles avatar.",
+      uploadPhotoTitle: "Importez une photo",
+      uploadPhotoBody: "Choisissez d'abord une photo pour creer le pack avatar.",
+      voicePreviewUnavailableTitle: "Apercu vocal indisponible",
+      voicePreviewUnavailableBody: "L'aperçu de la voix IA n'est pas disponible pour le moment.",
+      requestBlockedTitle: "Requete bloquee",
+      textGeneration: "Generation de texte",
+      imageGeneration: "Generation d'image",
+      videoGeneration: "Generation video",
+    };
+  }
+
+  if (language === "es") {
+    return {
+      heroKicker: "Estudio IA",
+      heroTitle: "Convierte una idea en contenido mas rapido",
+      heroSubtitle: "Genera texto, voz, captions y direccion visual desde un solo lugar.",
+      brain: "Texto",
+      voice: "Voz",
+      render: "Render",
+      mode: "Modo",
+      loading: "Cargando",
+      aiOffline: "No disponible",
+      liveBackend: "Backend en vivo",
+      aiOfflineTitle: "IA sin conexion",
+      aiOfflineBody: "La generacion con IA no esta disponible en el servidor ahora mismo. No se generara nada hasta que vuelva a estar activa.",
+      tabs: {
+        engine: "Motor viral",
+        coach: "Coach de crecimiento",
+        audit: "Por que fallo",
+        trends: "Trend Hijacker",
+        avatars: "Avatar IA",
+        text: "Texto IA",
+        image: "Imagen IA",
+        video: "Video IA",
+      },
+      missingPromptTitle: "Falta el prompt",
+      missingPromptBody: "Describe primero lo que quieres crear.",
+      noTrendTitle: "No hay tendencia elegida",
+      noTrendBody: "Elige una tendencia primero.",
+      premiumOnlyTitle: "Funcion premium",
+      premiumOnlyBody: "Esta herramienta esta disponible en el plan mensual o anual.",
+      missingPostTopicTitle: "Falta el tema",
+      missingPostTopicBody: "Dile al coach que publicacion quieres analizar.",
+      videoAccessNeededTitle: "Se necesita acceso al video",
+      videoAccessNeededBody: "Permite el acceso a la galeria para analizar el video.",
+      uploadVideoTitle: "Sube un video",
+      uploadVideoBody: "Elige primero el video para auditar.",
+      photoAccessNeededTitle: "Se necesita acceso a fotos",
+      photoAccessNeededBody: "Permite el acceso a la galeria para crear los estilos del avatar.",
+      uploadPhotoTitle: "Sube una foto",
+      uploadPhotoBody: "Elige primero una foto para crear el paquete de avatar.",
+      voicePreviewUnavailableTitle: "Vista previa de voz no disponible",
+      voicePreviewUnavailableBody: "La vista previa de la voz IA no está disponible ahora.",
+      requestBlockedTitle: "Solicitud bloqueada",
+      textGeneration: "Generacion de texto",
+      imageGeneration: "Generacion de imagen",
+      videoGeneration: "Generacion de video",
+    };
+  }
+
+  return {
+    heroKicker: "Sohba AI Studio",
+    heroTitle: "One prompt into viral content",
+    heroSubtitle: "Generate the script, AI voice, captions, video prompt, and a viral score package for creators who want to move faster and monetize better.",
+    brain: "Brain",
+    voice: "Voice",
+    render: "Render",
+    mode: "Mode",
+    loading: "Loading",
+    aiOffline: "Unavailable",
+    liveBackend: "Live backend",
+    aiOfflineTitle: "AI is offline",
+    aiOfflineBody: "AI generation is not available on the server right now. Nothing will be generated until it is back online.",
+    tabs: {
+      engine: "Viral Engine",
+      coach: "Growth Coach",
+      audit: "Why Failed?",
+      trends: "Trend Hijacker",
+      avatars: "Avatar AI",
+      text: "Text AI",
+      image: "Image AI",
+      video: "Video AI",
+    },
+    missingPromptTitle: "Missing prompt",
+    missingPromptBody: "Describe what you want the tool to create first.",
+    noTrendTitle: "No trend selected",
+    noTrendBody: "Pick a trend first.",
+    premiumOnlyTitle: "Premium only",
+    premiumOnlyBody: "This tool is unlocked on the monthly or yearly plan.",
+    missingPostTopicTitle: "Missing post topic",
+    missingPostTopicBody: "Tell Growth Coach which post you want feedback on.",
+    videoAccessNeededTitle: "Video access needed",
+    videoAccessNeededBody: "Allow photo library access so Sohba can analyze your video.",
+    uploadVideoTitle: "Upload a video",
+    uploadVideoBody: "Pick the underperforming video first so Sohba can audit it.",
+    photoAccessNeededTitle: "Photo access needed",
+    photoAccessNeededBody: "Allow photo library access so Sohba can create avatar styles from your image.",
+    uploadPhotoTitle: "Upload a photo",
+    uploadPhotoBody: "Pick a photo first so Sohba can build your avatar package.",
+    voicePreviewUnavailableTitle: "Voice preview unavailable",
+    voicePreviewUnavailableBody: "AI voice preview is not available right now.",
+    requestBlockedTitle: "Request blocked",
+    textGeneration: "Text generation",
+    imageGeneration: "Image generation",
+    videoGeneration: "Video generation",
+  };
+}
+
+function getAiToolsUiCopy(language: ReturnType<typeof useAppState>["language"]) {
+  const base = {
+    captionsMode: "Captions",
+    scriptsMode: "Scripts",
+    productCopyMode: "Product copy",
+    engineTitle: "Viral AI content engine",
+    engineSubtitle: 'Type one prompt like "Make viral gym reel" and Sohba will build the full content package around it.',
+    starterPlan: "Starter",
+    premiumPlan: "Premium",
+    flexPlan: "Flex",
+    corePrompt: "Core prompt",
+    niche: "Niche",
+    offer: "Offer",
+    targetAudience: "Target audience",
+    tone: "Tone",
+    aiVoiceLabel: "AI voice",
+    formatLabel: "Format",
+    durationLabel: "Duration",
+    speed: "Speed",
+    quality: "Quality",
+    generatingViralPackage: "Generating viral package...",
+    buildViralPackage: "Build viral content package",
+    liveAi: "Live AI",
+    viralScore: "Viral score",
+    builtForHooks: "Built for hooks, replay potential, and audience fit.",
+    bestPostingTime: "Best posting time",
+    script: "Script",
+    hook: "Hook",
+    body: "Body",
+    cta: "CTA",
+    captions: "Captions",
+    retention: "Retention",
+    previewReady: "Preview ready",
+    scriptReady: "Script ready",
+    aiVoiceSection: "AI voice",
+    pauseVoicePreview: "Pause voice preview",
+    playVoicePreview: "Play voice preview",
+    coachTitle: "Personal AI Coach",
+    coachSubtitle: "Growth Coach explains why a post failed, how to improve it, and what you should publish next.",
+    premiumFeatureTitle: "Premium-only feature",
+    premiumFeatureBody: "This tool is reserved for Premium Creator and Yearly Growth plans.",
+    unlockPremium: "Unlock premium",
+    monthlyOrYearly: "Monthly or yearly",
+    recentPostTopic: "Recent post topic",
+    recentCaption: "Recent caption",
+    postGoal: "Post goal",
+    performanceSnapshot: "Performance snapshot",
+    views: "Views",
+    likes: "Likes",
+    comments: "Comments",
+    shares: "Shares",
+    retentionIssue: "Retention issue",
+    biggestPain: "What hurts most right now?",
+    coaching: "Coaching...",
+    analyzeWithCoach: "Analyze with Growth Coach",
+    liveCoach: "Live coach",
+    growthCoach: "Growth Coach",
+    premiumAccess: "Premium access",
+    whyPostFailed: "Why the post failed",
+    howToImprove: "How to improve",
+    whatToPostNext: "What to post next",
+    coachSummary: "Coach summary",
+    formatField: "Format",
+    reason: "Reason",
+    auditTitle: "Why Did This Fail?",
+    auditSubtitle: "Upload an underperforming video and Sohba will analyze the hook, retention, and captions.",
+    badVideoUpload: "Bad video upload",
+    videoReadyForAnalysis: "Video selected and ready for analysis.",
+    selectedFromLibrary: "Selected from your device library.",
+    readyForAudit: "Ready for audit.",
+    uploadBadVideo: "Upload bad video",
+    changeVideo: "Change video",
+    uploadBadVideoBody: "Upload the reel that underperformed so the AI can audit why it failed.",
+    frameThumbnails: "Frame thumbnails",
+    frameThumbnailsBody: "Sohba samples key frames before running the audit so you can quickly spot slow openings or late payoffs.",
+    captionUsedOnPost: "Caption used on the post",
+    whatHappenedToRetention: "What happened to retention?",
+    analyzing: "Analyzing...",
+    analyzeWhyFailed: "Analyze why this failed",
+    liveAudit: "Live audit",
+    failureAudit: "Failure audit",
+    issue: "Issue",
+    fix: "Fix",
+    transcript: "Transcript",
+    autoTranscript: "Auto transcript",
+    captionTranscript: "No speech detected - using your caption",
+    words: "words",
+    retentionGraph: "Retention graph",
+    retentionGraphBody: "AI-estimated retention curve built from your uploaded video, transcript, and performance context.",
+    atSecond: "at",
+    quickWins: "Quick wins",
+    nextMove: "Next move",
+    trendsTitle: "Trend Hijacker AI",
+    trendsSubtitle: "Scan trend formats, remix the angle, and generate matching captions plus a video direction.",
+    trendingNow: "Trending now",
+    momentum: "momentum",
+    musicStyle: "Music style",
+    motionStyle: "Motion style",
+    yourGoal: "Your goal",
+    yourOffer: "Your offer",
+    buildingTrendRemix: "Building trend remix...",
+    useThisTrend: "Use this trend",
+    liveRemix: "Live remix",
+    musicVibe: "Music vibe",
+    similarVideoPrompt: "Similar video prompt",
+    optimizedCaptions: "Optimized captions",
+    trendVideoJob: "Trend video job",
+    avatarTitle: "AI Avatar Creator",
+    avatarSubtitle: "Upload a photo and generate a talking avatar, anime version, cartoon version, and influencer-style portrait.",
+    payPerAvatar: "Pay per avatar",
+    subscriptionPlan: "Subscription",
+    sourcePhoto: "Source photo",
+    sourcePhotoBody: "Upload one portrait photo to build all avatar styles.",
+    uploadPhoto: "Upload photo",
+    changePhoto: "Change photo",
+    avatarMessage: "Avatar message",
+    talkingAvatarFormat: "Talking avatar format",
+    talkingAvatarDuration: "Talking avatar duration",
+    creatingAvatarPackage: "Creating avatar package...",
+    createAvatarPackage: "Create avatar package",
+    liveAvatar: "Live avatar",
+    avatarMonetization: "Avatar monetization",
+    premiumPlanLabel: "Premium plan",
+    avatarStyles: "Avatar styles",
+    talkingAvatarVideo: "Talking avatar video",
+    textTitle: "Text generation",
+    textSubtitle: "Create captions, short scripts, or marketplace copy that matches your offer and audience.",
+    prompt: "Prompt",
+    audience: "Audience",
+    goal: "Goal",
+    generating: "Generating...",
+    generateText: "Generate text",
+    imageTitle: "Image generation",
+    imageSubtitle: "Generate creator ad concepts, thumbnails, or promo visuals using a prompt, style, and aspect ratio.",
+    style: "Style",
+    generateImage: "Generate image",
+    videoTitle: "Video generation",
+    videoSubtitle: "Start an async render job, then monitor progress until the clip is ready.",
+    scenePrompt: "Scene prompt",
+    shotDirection: "Shot direction",
+    starting: "Starting...",
+    startVideoJob: "Start video job",
+    jobStatus: "Job status",
+    statusLabel: "Status",
+    complete: "complete",
+    liveRender: "Live render",
+    videoJob: "Video job",
+    whyThisCanPop: "Why this can pop",
+    productionNote: "Production note",
+    productionOfflineBody: "Sohba AI is offline right now. Generation buttons will report an error instead of returning sample content.",
+    productionLiveBody: "Live AI is connected. Every result on this screen is generated by the Sohba AI service.",
+  } as const;
+
+  if (language === "fr") {
+    return {
+      ...base,
+      starterPlan: "Starter",
+      corePrompt: "Prompt principal",
+      targetAudience: "Audience cible",
+      aiVoiceLabel: "Voix IA",
+      durationLabel: "Duree",
+      buildViralPackage: "Creer le pack viral",
+      coachTitle: "Coach IA personnel",
+      unlockPremium: "Debloquer premium",
+      recentPostTopic: "Sujet du post recent",
+      recentCaption: "Legende recente",
+      performanceSnapshot: "Apercu des performances",
+      retentionIssue: "Probleme de retention",
+      analyzeWithCoach: "Analyser avec Growth Coach",
+      auditTitle: "Pourquoi cela a rate ?",
+      changeVideo: "Changer la video",
+      trendingNow: "Tendances du moment",
+      yourGoal: "Votre objectif",
+      yourOffer: "Votre offre",
+      useThisTrend: "Utiliser cette tendance",
+      sourcePhoto: "Photo source",
+      changePhoto: "Changer la photo",
+      textTitle: "Generation de texte",
+      imageTitle: "Generation d'image",
+      videoTitle: "Generation video",
+      productionNote: "Note de production",
+    };
+  }
+
+  if (language === "es") {
+    return {
+      ...base,
+      corePrompt: "Prompt principal",
+      targetAudience: "Publico objetivo",
+      aiVoiceLabel: "Voz IA",
+      durationLabel: "Duracion",
+      buildViralPackage: "Crear paquete viral",
+      coachTitle: "Coach IA personal",
+      unlockPremium: "Desbloquear premium",
+      recentPostTopic: "Tema del post reciente",
+      recentCaption: "Caption reciente",
+      performanceSnapshot: "Resumen de rendimiento",
+      retentionIssue: "Problema de retencion",
+      analyzeWithCoach: "Analizar con Growth Coach",
+      auditTitle: "Por que fallo?",
+      changeVideo: "Cambiar video",
+      trendingNow: "Tendencias ahora",
+      yourGoal: "Tu objetivo",
+      yourOffer: "Tu oferta",
+      useThisTrend: "Usar esta tendencia",
+      sourcePhoto: "Foto base",
+      changePhoto: "Cambiar foto",
+      textTitle: "Generacion de texto",
+      imageTitle: "Generacion de imagen",
+      videoTitle: "Generacion de video",
+      productionNote: "Nota de produccion",
+    };
+  }
+
+  if (language === "ar") {
+    return {
+      ...base,
+      corePrompt: "الوصف الأساسي",
+      targetAudience: "الجمهور المستهدف",
+      aiVoiceLabel: "الصوت الذكي",
+      durationLabel: "المدة",
+      buildViralPackage: "إنشاء الحزمة الفيروسية",
+      coachTitle: "المدرب الذكي",
+      unlockPremium: "افتح بريميوم",
+      recentPostTopic: "موضوع المنشور الأخير",
+      recentCaption: "الكابشن الأخير",
+      performanceSnapshot: "ملخص الأداء",
+      retentionIssue: "مشكلة الاحتفاظ",
+      analyzeWithCoach: "حلل مع المدرب",
+      auditTitle: "لماذا فشل؟",
+      changeVideo: "تغيير الفيديو",
+      trendingNow: "الترند الآن",
+      yourGoal: "هدفك",
+      yourOffer: "عرضك",
+      useThisTrend: "استخدم هذا الترند",
+      sourcePhoto: "الصورة الأصلية",
+      changePhoto: "تغيير الصورة",
+      textTitle: "توليد النص",
+      imageTitle: "توليد الصورة",
+      videoTitle: "توليد الفيديو",
+      productionNote: "ملاحظة الإنتاج",
+    };
+  }
+
+  return base;
+}
+
 export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
-  const { language, session, currentUser } = useAppState();
+  const { language, region, session, currentUser } = useAppState();
+  const regionInfo = getRegion(region);
   const copy = getCopy(language);
+  const aiCopy = withAiStudioTranslation(getAiStudioCopy(language), language);
+  const aiUi = withAiToolsUiTranslation(getAiToolsUiCopy(language), language);
   const [toolTab, setToolTab] = useState<ToolTab>("engine");
   const [aiStatus, setAiStatus] = useState<AIStatusPayload | null>(null);
-  const isAiDemoMode = aiStatus?.demoMode ?? true;
+  const isAiOffline = aiStatus?.demoMode ?? false;
+  const localizedTextModes = useMemo(
+    () => [
+      { value: "captions" as const, label: aiUi.captionsMode },
+      { value: "script" as const, label: aiUi.scriptsMode },
+      { value: "product_copy" as const, label: aiUi.productCopyMode },
+    ],
+    [aiUi]
+  );
 
   const [enginePrompt, setEnginePrompt] = useState("Make viral gym reel");
   const [engineNiche, setEngineNiche] = useState("fitness creator");
@@ -93,10 +545,10 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
   const [coachNiche, setCoachNiche] = useState("fitness creator");
   const [coachAudience, setCoachAudience] = useState("males 18-25 who save transformation and motivation content");
   const [coachGoal, setCoachGoal] = useState("more saves, comments, and profile visits");
-  const [coachViews, setCoachViews] = useState("1240");
-  const [coachLikes, setCoachLikes] = useState("28");
-  const [coachComments, setCoachComments] = useState("4");
-  const [coachShares, setCoachShares] = useState("2");
+  const [coachViews, setCoachViews] = useState("");
+  const [coachLikes, setCoachLikes] = useState("");
+  const [coachComments, setCoachComments] = useState("");
+  const [coachShares, setCoachShares] = useState("");
   const [coachRetentionNote, setCoachRetentionNote] = useState("Average watch time dropped hard in the first 2 seconds.");
   const [coachPainPoint, setCoachPainPoint] = useState("I need to know why this post failed and what to post next.");
   const [coachResult, setCoachResult] = useState<AIGrowthCoachResult | null>(null);
@@ -108,7 +560,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
   const [failureFrames, setFailureFrames] = useState<FailureFrame[]>([]);
   const [failureCaption, setFailureCaption] = useState("I tried to make this reel motivational, but people stopped watching fast.");
   const [failureRetentionNote, setFailureRetentionNote] = useState("Big drop in the first 2 seconds and another drop before the CTA.");
-  const [failureViews, setFailureViews] = useState("980");
+  const [failureViews, setFailureViews] = useState("");
   const [failureNiche, setFailureNiche] = useState("fitness creator");
   const [failureAudience, setFailureAudience] = useState("males 18-25 who like physique, training, and motivation content");
   const [failureResult, setFailureResult] = useState<AIFailureAuditResult | null>(null);
@@ -143,7 +595,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
   );
   const voicePlayer = useAudioPlayer(voiceSource);
   const voiceStatus = useAudioPlayerStatus(voicePlayer);
-  const isPremiumUnlocked = currentUser?.planType === "monthly" || currentUser?.planType === "yearly";
+  const isPremiumUnlocked = !PAYMENTS_ENABLED || currentUser?.planType === "monthly" || currentUser?.planType === "yearly";
 
   useEffect(() => {
     setAudioModeAsync({ playsInSilentMode: true, interruptionMode: "duckOthers", shouldPlayInBackground: false }).catch(() => undefined);
@@ -154,18 +606,20 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
   }, [session?.token]);
 
   useEffect(() => {
-    fetchAiTrends(session?.token).then((trends) => {
-      setTrendFeed(trends);
-      setSelectedTrendId((current) => current ?? trends[0]?.id ?? null);
-    });
-  }, [session?.token]);
+    fetchAiTrends(session?.token, region)
+      .then((trends) => {
+        setTrendFeed(trends);
+        setSelectedTrendId((current) => (current && trends.some((item) => item.id === current) ? current : trends[0]?.id ?? null));
+      })
+      .catch(() => setTrendFeed([]));
+  }, [session?.token, region]);
 
   useEffect(() => {
     if (!videoJob || (videoJob.status !== "queued" && videoJob.status !== "in_progress")) {
       return;
     }
     const timer = setInterval(async () => {
-      const updated = await refreshAiVideo(session?.token, videoJob.id);
+      const updated = await refreshAiVideo(session?.token, videoJob.id).catch(() => undefined);
       if (updated) setVideoJob(updated);
     }, 3500);
     return () => clearInterval(timer);
@@ -176,7 +630,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
       return;
     }
     const timer = setInterval(async () => {
-      const updated = await refreshAiVideo(session?.token, engineResult.video.id);
+      const updated = await refreshAiVideo(session?.token, engineResult.video.id).catch(() => undefined);
       if (updated) {
         setEngineResult((current) => (current && current.video.id === updated.id ? { ...current, video: updated } : current));
       }
@@ -189,7 +643,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
       return;
     }
     const timer = setInterval(async () => {
-      const updated = await refreshAiVideo(session?.token, trendResult.video.id);
+      const updated = await refreshAiVideo(session?.token, trendResult.video.id).catch(() => undefined);
       if (updated) {
         setTrendResult((current) => (current && current.video.id === updated.id ? { ...current, video: updated } : current));
       }
@@ -202,7 +656,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
       return;
     }
     const timer = setInterval(async () => {
-      const updated = await refreshAiVideo(session?.token, avatarResult.talkingAvatar.id);
+      const updated = await refreshAiVideo(session?.token, avatarResult.talkingAvatar.id).catch(() => undefined);
       if (updated) {
         setAvatarResult((current) =>
           current && current.talkingAvatar.id === updated.id ? { ...current, talkingAvatar: updated } : current
@@ -214,7 +668,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
 
   async function handleGenerateViralEngine() {
     if (!enginePrompt.trim()) {
-      Alert.alert("Missing prompt", "Tell Pulseora what kind of viral reel you want first.");
+      Alert.alert(aiCopy.missingPromptTitle, aiCopy.missingPromptBody);
       return;
     }
     setEngineLoading(true);
@@ -241,12 +695,12 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
 
   async function handleUseTrend() {
     if (!selectedTrendId) {
-      Alert.alert("No trend selected", "Pick a trend first.");
+      Alert.alert(aiCopy.noTrendTitle, aiCopy.noTrendBody);
       return;
     }
 
     if (!isPremiumUnlocked) {
-      Alert.alert("Premium only", "Trend Hijacker AI is unlocked on the $10/month premium plan and yearly plan.");
+      Alert.alert(aiCopy.premiumOnlyTitle, aiCopy.premiumOnlyBody);
       navigation.navigate("Subscription");
       return;
     }
@@ -255,6 +709,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
     try {
       const result = await generateAiTrendHijack(session?.token, {
         trendId: selectedTrendId,
+        region,
         userGoal: trendGoal,
         audience: trendAudience,
         offer: trendOffer,
@@ -273,12 +728,12 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
 
   async function handleGrowthCoach() {
     if (!coachTopic.trim()) {
-      Alert.alert("Missing post topic", "Tell Growth Coach which post you want feedback on.");
+      Alert.alert(aiCopy.missingPostTopicTitle, aiCopy.missingPostTopicBody);
       return;
     }
 
     if (!isPremiumUnlocked) {
-      Alert.alert("Premium only", "Growth Coach is unlocked on the $10/month premium plan and yearly plan.");
+      Alert.alert(aiCopy.premiumOnlyTitle, aiCopy.premiumOnlyBody);
       navigation.navigate("Subscription");
       return;
     }
@@ -311,7 +766,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
-      Alert.alert("Video access needed", "Allow photo library access so Pulseora can analyze your video.");
+      Alert.alert(aiCopy.videoAccessNeededTitle, aiCopy.videoAccessNeededBody);
       return;
     }
 
@@ -341,7 +796,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
 
   async function handleAnalyzeFailureVideo() {
     if (!failureVideoUri || !failureVideoName) {
-      Alert.alert("Upload a video", "Pick the underperforming video first so Pulseora can audit it.");
+      Alert.alert(aiCopy.uploadVideoTitle, aiCopy.uploadVideoBody);
       return;
     }
 
@@ -373,7 +828,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
-      Alert.alert("Photo access needed", "Allow photo library access so Pulseora can create avatar styles from your image.");
+      Alert.alert(aiCopy.photoAccessNeededTitle, aiCopy.photoAccessNeededBody);
       return;
     }
 
@@ -391,7 +846,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
 
     const asset = result.assets[0];
     if (!asset.base64) {
-      Alert.alert("Image issue", "The selected image could not be prepared. Try another photo.");
+      Alert.alert(copy.imageIssueTitle, copy.imageIssueBody);
       return;
     }
 
@@ -403,7 +858,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
 
   async function handleCreateAvatar() {
     if (!avatarSourceDataUrl) {
-      Alert.alert("Upload a photo", "Pick a photo first so Pulseora can build your avatar package.");
+      Alert.alert(aiCopy.uploadPhotoTitle, aiCopy.uploadPhotoBody);
       return;
     }
 
@@ -428,7 +883,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
 
   async function handleGenerateText() {
     if (!textPrompt.trim()) {
-      Alert.alert("Missing prompt", "Add a prompt first so the AI tool knows what to create.");
+      Alert.alert(aiCopy.missingPromptTitle, aiCopy.missingPromptBody);
       return;
     }
     setTextLoading(true);
@@ -443,7 +898,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
 
   async function handleGenerateImage() {
     if (!imagePrompt.trim()) {
-      Alert.alert("Missing prompt", "Describe the image concept you want to generate.");
+      Alert.alert(aiCopy.missingPromptTitle, aiCopy.missingPromptBody);
       return;
     }
     setImageLoading(true);
@@ -458,7 +913,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
 
   async function handleGenerateVideo() {
     if (!videoPrompt.trim()) {
-      Alert.alert("Missing prompt", "Describe the video scene before starting the generation.");
+      Alert.alert(aiCopy.missingPromptTitle, aiCopy.missingPromptBody);
       return;
     }
     setVideoLoading(true);
@@ -473,7 +928,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
 
   function toggleVoicePreview() {
     if (!engineResult?.voice.audioPath) {
-      Alert.alert("Voice preview unavailable", "Start the backend with OPENAI_API_KEY to hear the AI voice. The script is ready now.");
+      Alert.alert(aiCopy.voicePreviewUnavailableTitle, aiCopy.voicePreviewUnavailableBody);
       return;
     }
     if (voiceStatus.playing) {
@@ -485,90 +940,86 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
 
   function showAiRequestAlert(error: unknown) {
     const message = error instanceof Error ? error.message : "This AI request was blocked.";
-    Alert.alert("Request blocked", message);
+    Alert.alert(aiCopy.requestBlockedTitle, message);
   }
 
   return (
     <Screen scrollable>
       <LinearGradient colors={["rgba(255,122,47,0.18)", "rgba(54,224,161,0.14)", "rgba(255,255,255,0.02)"]} style={styles.hero}>
-            <Text style={styles.kicker}>Pulseora AI Studio</Text>
+            <Text style={styles.kicker}>{aiCopy.heroKicker}</Text>
         <SectionTitle
-          title="One prompt into viral content"
-          subtitle="Generate the script, AI voice, captions, video prompt, and a viral score package for creators who want to move faster and monetize better."
+          title={aiCopy.heroTitle}
+          subtitle={aiCopy.heroSubtitle}
         />
         <View style={styles.statusWrap}>
-          <Metric label="Brain" value={aiStatus?.textModel ?? "Loading"} />
-          <Metric label="Voice" value={aiStatus?.voiceModel ?? "Loading"} />
-          <Metric label="Render" value={aiStatus?.videoModel ?? "Loading"} />
-          <Metric label="Mode" value={aiStatus?.demoMode ? "Demo fallback" : "Live backend"} />
+          <Metric label={aiCopy.brain} value={aiStatus ? aiStatus.textModel || "—" : aiCopy.loading} />
+          <Metric label={aiCopy.voice} value={aiStatus ? aiStatus.voiceModel || "—" : aiCopy.loading} />
+          <Metric label={aiCopy.render} value={aiStatus ? aiStatus.videoModel || "—" : aiCopy.loading} />
+          <Metric label={aiCopy.mode} value={aiStatus ? (aiStatus.demoMode ? aiCopy.aiOffline : aiCopy.liveBackend) : aiCopy.loading} />
         </View>
-        {isAiDemoMode ? (
-          <DemoModeNotice
-            title="Demo Mode Active"
-            body="AI image and video tools are showing sample outputs and simulated render jobs right now. Add a real backend OpenAI key later to switch these tools to live generation."
+        {isAiOffline ? (
+          <OfflineNotice
+            title={aiCopy.aiOfflineTitle}
+            body={aiCopy.aiOfflineBody}
           />
         ) : null}
       </LinearGradient>
 
       <View style={styles.tabs}>
-        <Chip label="Viral Engine" active={toolTab === "engine"} onPress={() => setToolTab("engine")} />
-        <Chip label="Growth Coach" active={toolTab === "coach"} onPress={() => setToolTab("coach")} />
-        <Chip label="Why Failed?" active={toolTab === "audit"} onPress={() => setToolTab("audit")} />
-        <Chip label="Trend Hijacker" active={toolTab === "trends"} onPress={() => setToolTab("trends")} />
-        <Chip label="Avatar AI" active={toolTab === "avatars"} onPress={() => setToolTab("avatars")} />
-        <Chip label="Text AI" active={toolTab === "text"} onPress={() => setToolTab("text")} />
-        <Chip label="Image AI" active={toolTab === "image"} onPress={() => setToolTab("image")} />
-        <Chip label="Video AI" active={toolTab === "video"} onPress={() => setToolTab("video")} />
+        <Chip label={aiCopy.tabs.engine} active={toolTab === "engine"} onPress={() => setToolTab("engine")} />
+        <Chip label={aiCopy.tabs.coach} active={toolTab === "coach"} onPress={() => setToolTab("coach")} />
+        <Chip label={aiCopy.tabs.audit} active={toolTab === "audit"} onPress={() => setToolTab("audit")} />
+        <Chip label={aiCopy.tabs.trends} active={toolTab === "trends"} onPress={() => setToolTab("trends")} />
+        <Chip label={aiCopy.tabs.avatars} active={toolTab === "avatars"} onPress={() => setToolTab("avatars")} />
+        <Chip label={aiCopy.tabs.text} active={toolTab === "text"} onPress={() => setToolTab("text")} />
+        <Chip label={aiCopy.tabs.image} active={toolTab === "image"} onPress={() => setToolTab("image")} />
+        <Chip label={aiCopy.tabs.video} active={toolTab === "video"} onPress={() => setToolTab("video")} />
       </View>
 
       {toolTab === "engine" ? (
         <View style={styles.panel}>
           <SectionTitle
-            title="Viral AI content engine"
-                subtitle='Type one prompt like "Make viral gym reel" and Pulseora will build the full content package around it.'
+            title={aiUi.engineTitle}
+                subtitle={aiUi.engineSubtitle}
           />
-          {isAiDemoMode ? (
-            <DemoModeNotice
-              title="Demo Engine Output"
-              body="This package uses demo script, voice, and video preview output so you can test the product flow for free."
-            />
+          {PAYMENTS_ENABLED ? (
+            <View style={styles.pricing}>
+              <View style={styles.priceCard}>
+                <Text style={styles.priceValue}>$3/week</Text>
+                <Text style={styles.priceLabel}>{aiUi.starterPlan}</Text>
+              </View>
+              <View style={styles.priceCard}>
+                <Text style={styles.priceValue}>$10/month</Text>
+                <Text style={styles.priceLabel}>{aiUi.premiumPlan}</Text>
+              </View>
+              <View style={styles.priceCard}>
+                <Text style={styles.priceValue}>{copy.payPerExport}</Text>
+                <Text style={styles.priceLabel}>{aiUi.flexPlan}</Text>
+              </View>
+            </View>
           ) : null}
-          <View style={styles.pricing}>
-            <View style={styles.priceCard}>
-              <Text style={styles.priceValue}>$3/week</Text>
-              <Text style={styles.priceLabel}>Starter</Text>
-            </View>
-            <View style={styles.priceCard}>
-              <Text style={styles.priceValue}>$10/month</Text>
-              <Text style={styles.priceLabel}>Premium</Text>
-            </View>
-            <View style={styles.priceCard}>
-              <Text style={styles.priceValue}>Pay per export</Text>
-              <Text style={styles.priceLabel}>Flex</Text>
-            </View>
-          </View>
 
-          <InputField label="Core prompt" multiline onChangeText={setEnginePrompt} value={enginePrompt} />
-          <InputField label="Niche" onChangeText={setEngineNiche} value={engineNiche} />
-          <InputField label="Offer" onChangeText={setEngineOffer} value={engineOffer} />
-          <InputField label="Target audience" onChangeText={setEngineAudience} value={engineAudience} />
-          <InputField label="Tone" onChangeText={setEngineTone} value={engineTone} />
+          <InputField label={aiUi.corePrompt} multiline onChangeText={setEnginePrompt} value={enginePrompt} />
+          <InputField label={aiUi.niche} onChangeText={setEngineNiche} value={engineNiche} />
+          <InputField label={aiUi.offer} onChangeText={setEngineOffer} value={engineOffer} />
+          <InputField label={aiUi.targetAudience} onChangeText={setEngineAudience} value={engineAudience} />
+          <InputField label={aiUi.tone} onChangeText={setEngineTone} value={engineTone} />
 
-          <Text style={styles.inlineLabel}>AI voice</Text>
+          <Text style={styles.inlineLabel}>{aiUi.aiVoiceLabel}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
             {voiceOptions.map((voice) => (
               <Chip key={voice} label={voice} active={engineVoice === voice} onPress={() => setEngineVoice(voice)} />
             ))}
           </ScrollView>
 
-          <Text style={styles.inlineLabel}>Format</Text>
+          <Text style={styles.inlineLabel}>{aiUi.formatLabel}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
             {videoSizes.map((size) => (
               <Chip key={size} label={size} active={engineSize === size} onPress={() => setEngineSize(size)} />
             ))}
           </ScrollView>
 
-          <Text style={styles.inlineLabel}>Duration</Text>
+          <Text style={styles.inlineLabel}>{aiUi.durationLabel}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
             {videoSeconds.map((seconds) => (
               <Chip key={seconds} label={`${seconds}s`} active={engineDuration === seconds} onPress={() => setEngineDuration(seconds)} />
@@ -576,12 +1027,12 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
           </ScrollView>
 
           <View style={styles.row}>
-            <Chip label="Speed" active={engineQuality === "speed"} onPress={() => setEngineQuality("speed")} />
-            <Chip label="Quality" active={engineQuality === "quality"} onPress={() => setEngineQuality("quality")} />
+            <Chip label={aiUi.speed} active={engineQuality === "speed"} onPress={() => setEngineQuality("speed")} />
+            <Chip label={aiUi.quality} active={engineQuality === "quality"} onPress={() => setEngineQuality("quality")} />
           </View>
 
           <PrimaryButton
-            label={engineLoading ? "Generating viral package..." : isAiDemoMode ? "Build demo viral package" : "Build viral content package"}
+            label={engineLoading ? aiUi.generatingViralPackage : aiUi.buildViralPackage}
             onPress={handleGenerateViralEngine}
             disabled={engineLoading}
           />
@@ -589,17 +1040,17 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
           {engineResult ? (
             <>
               <View style={styles.card}>
-                <MetaRow left={engineResult.demoMode ? "Demo mix" : "Live AI"} right={`${engineResult.voice.model} | ${new Date(engineResult.createdAt).toLocaleTimeString()}`} />
+                <MetaRow left={aiUi.liveAi} right={`${engineResult.voice.model} | ${formatTime(engineResult.createdAt)}`} />
                 <Text style={styles.title}>{engineResult.conceptTitle}</Text>
                 <View style={styles.scoreRow}>
                   <View style={styles.scoreBadge}>
                     <Text style={styles.scoreValue}>{engineResult.insights.viralScore}%</Text>
-                    <Text style={styles.scoreLabel}>Viral score</Text>
+                    <Text style={styles.scoreLabel}>{aiUi.viralScore}</Text>
                   </View>
                   <View style={styles.scoreBody}>
-                    <Text style={styles.bodyStrong}>Built for hooks, replay potential, and audience fit.</Text>
-                    <Text style={styles.body}>Best posting time: {engineResult.insights.bestPostingTime}</Text>
-                    <Text style={styles.body}>Target audience: {engineResult.insights.targetAudience}</Text>
+                    <Text style={styles.bodyStrong}>{aiUi.builtForHooks}</Text>
+                    <Text style={styles.body}>{aiUi.bestPostingTime}: {engineResult.insights.bestPostingTime}</Text>
+                    <Text style={styles.body}>{aiUi.targetAudience}: {engineResult.insights.targetAudience}</Text>
                   </View>
                 </View>
                 <View style={styles.track}>
@@ -608,23 +1059,23 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
               </View>
 
               <View style={styles.card}>
-                <Text style={styles.sectionMini}>Script</Text>
+                <Text style={styles.sectionMini}>{aiUi.script}</Text>
                 <View style={styles.block}>
-                  <Text style={styles.blockLabel}>Hook</Text>
+                  <Text style={styles.blockLabel}>{aiUi.hook}</Text>
                   <Text style={styles.body}>{engineResult.script.hook}</Text>
                 </View>
                 <View style={styles.block}>
-                  <Text style={styles.blockLabel}>Body</Text>
+                  <Text style={styles.blockLabel}>{aiUi.body}</Text>
                   <Text style={styles.body}>{engineResult.script.body}</Text>
                 </View>
                 <View style={styles.block}>
-                  <Text style={styles.blockLabel}>CTA</Text>
+                  <Text style={styles.blockLabel}>{aiUi.cta}</Text>
                   <Text style={styles.body}>{engineResult.script.cta}</Text>
                 </View>
               </View>
 
               <View style={styles.card}>
-                <Text style={styles.sectionMini}>Captions</Text>
+                <Text style={styles.sectionMini}>{aiUi.captions}</Text>
                 {engineResult.captions.map((caption) => (
                   <View key={caption} style={styles.block}>
                     <Text style={styles.body}>{caption}</Text>
@@ -633,13 +1084,13 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
               </View>
 
               <View style={styles.card}>
-                <MetaRow left={`Voice: ${engineResult.voice.voice}`} right={engineResult.voice.audioPath ? "Preview ready" : "Script ready"} />
-                <Text style={styles.sectionMini}>AI voice</Text>
+                <MetaRow left={`${aiUi.aiVoiceLabel}: ${engineResult.voice.voice}`} right={engineResult.voice.audioPath ? aiUi.previewReady : aiUi.scriptReady} />
+                <Text style={styles.sectionMini}>{aiUi.aiVoiceSection}</Text>
                 <View style={styles.block}>
                   <Text style={styles.body}>{engineResult.voice.script}</Text>
                 </View>
                 <Text style={styles.note}>{engineResult.voice.disclosure}</Text>
-                <PrimaryButton label={voiceStatus.playing ? "Pause voice preview" : "Play voice preview"} onPress={toggleVoicePreview} variant={engineResult.voice.audioPath ? "solid" : "ghost"} />
+                <PrimaryButton label={voiceStatus.playing ? aiUi.pauseVoicePreview : aiUi.playVoicePreview} onPress={toggleVoicePreview} variant={engineResult.voice.audioPath ? "solid" : "ghost"} />
               </View>
             </>
           ) : null}
@@ -649,50 +1100,44 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
       {toolTab === "coach" ? (
         <View style={styles.panel}>
           <SectionTitle
-            title="Personal AI Coach"
-            subtitle="Growth Coach explains why a post failed, how to improve it, and what you should publish next."
+            title={aiUi.coachTitle}
+            subtitle={aiUi.coachSubtitle}
           />
-          {isAiDemoMode ? (
-            <DemoModeNotice
-              title="Demo Coaching Output"
-              body="Growth Coach is still presented in demo mode on this build, so the strategy output is sample AI guidance rather than fully live analysis."
-            />
-          ) : null}
 
           {!isPremiumUnlocked ? (
             <View style={styles.lockCard}>
-              <Text style={styles.lockTitle}>Premium-only feature</Text>
-              <Text style={styles.body}>
-                Growth Coach is reserved for Premium Creator and Yearly Growth plans. Upgrade to unlock post diagnosis and next-post strategy.
-              </Text>
-              <PrimaryButton label="Unlock premium" onPress={() => navigation.navigate("Subscription")} />
+              <Text style={styles.lockTitle}>{aiUi.premiumFeatureTitle}</Text>
+              <Text style={styles.body}>{aiUi.premiumFeatureBody}</Text>
+              <PrimaryButton label={aiUi.unlockPremium} onPress={() => navigation.navigate("Subscription")} />
             </View>
           ) : null}
 
-          <View style={styles.pricing}>
-            <View style={styles.priceCard}>
-              <Text style={styles.priceValue}>Premium</Text>
-              <Text style={styles.priceLabel}>Monthly or yearly</Text>
+          {PAYMENTS_ENABLED ? (
+            <View style={styles.pricing}>
+              <View style={styles.priceCard}>
+                <Text style={styles.priceValue}>{aiUi.premiumPlan}</Text>
+                <Text style={styles.priceLabel}>{aiUi.monthlyOrYearly}</Text>
+              </View>
             </View>
-          </View>
+          ) : null}
 
-          <InputField label="Recent post topic" multiline onChangeText={setCoachTopic} value={coachTopic} />
-          <InputField label="Recent caption" multiline onChangeText={setCoachCaption} value={coachCaption} />
-          <InputField label="Niche" onChangeText={setCoachNiche} value={coachNiche} />
-          <InputField label="Target audience" onChangeText={setCoachAudience} value={coachAudience} />
-          <InputField label="Post goal" onChangeText={setCoachGoal} value={coachGoal} />
+          <InputField label={aiUi.recentPostTopic} multiline onChangeText={setCoachTopic} value={coachTopic} />
+          <InputField label={aiUi.recentCaption} multiline onChangeText={setCoachCaption} value={coachCaption} />
+          <InputField label={aiUi.niche} onChangeText={setCoachNiche} value={coachNiche} />
+          <InputField label={aiUi.targetAudience} onChangeText={setCoachAudience} value={coachAudience} />
+          <InputField label={aiUi.postGoal} onChangeText={setCoachGoal} value={coachGoal} />
 
-          <Text style={styles.inlineLabel}>Performance snapshot</Text>
-          <InputField label="Views" keyboardType="number-pad" onChangeText={setCoachViews} value={coachViews} />
-          <InputField label="Likes" keyboardType="number-pad" onChangeText={setCoachLikes} value={coachLikes} />
-          <InputField label="Comments" keyboardType="number-pad" onChangeText={setCoachComments} value={coachComments} />
-          <InputField label="Shares" keyboardType="number-pad" onChangeText={setCoachShares} value={coachShares} />
+          <Text style={styles.inlineLabel}>{aiUi.performanceSnapshot}</Text>
+          <InputField label={aiUi.views} keyboardType="number-pad" onChangeText={setCoachViews} value={coachViews} />
+          <InputField label={aiUi.likes} keyboardType="number-pad" onChangeText={setCoachLikes} value={coachLikes} />
+          <InputField label={aiUi.comments} keyboardType="number-pad" onChangeText={setCoachComments} value={coachComments} />
+          <InputField label={aiUi.shares} keyboardType="number-pad" onChangeText={setCoachShares} value={coachShares} />
 
-          <InputField label="Retention issue" multiline onChangeText={setCoachRetentionNote} value={coachRetentionNote} />
-          <InputField label="What hurts most right now?" multiline onChangeText={setCoachPainPoint} value={coachPainPoint} />
+          <InputField label={aiUi.retentionIssue} multiline onChangeText={setCoachRetentionNote} value={coachRetentionNote} />
+          <InputField label={aiUi.biggestPain} multiline onChangeText={setCoachPainPoint} value={coachPainPoint} />
 
           <PrimaryButton
-            label={coachLoading ? "Coaching..." : isAiDemoMode ? "Analyze with demo coach" : "Analyze with Growth Coach"}
+            label={coachLoading ? aiUi.coaching : aiUi.analyzeWithCoach}
             onPress={handleGrowthCoach}
             disabled={coachLoading || !isPremiumUnlocked}
           />
@@ -700,17 +1145,17 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
           {coachResult ? (
             <>
               <View style={styles.card}>
-                <MetaRow left={coachResult.demoMode ? "Demo coach" : "Live coach"} right={new Date(coachResult.createdAt).toLocaleTimeString()} />
-                <Text style={styles.title}>Growth Coach</Text>
+                <MetaRow left={aiUi.liveCoach} right={formatTime(coachResult.createdAt)} />
+                <Text style={styles.title}>{aiUi.growthCoach}</Text>
                 <Text style={styles.bodyStrong}>{coachResult.headline}</Text>
                 <View style={styles.block}>
-                  <Text style={styles.blockLabel}>Premium access</Text>
+                  <Text style={styles.blockLabel}>{aiUi.premiumAccess}</Text>
                   <Text style={styles.body}>{coachResult.premium.label}</Text>
                 </View>
               </View>
 
               <View style={styles.card}>
-                <Text style={styles.sectionMini}>Why the post failed</Text>
+                <Text style={styles.sectionMini}>{aiUi.whyPostFailed}</Text>
                 {coachResult.diagnosis.map((reason) => (
                   <View key={reason} style={styles.reasonRow}>
                     <View style={styles.dot} />
@@ -720,7 +1165,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
               </View>
 
               <View style={styles.card}>
-                <Text style={styles.sectionMini}>How to improve</Text>
+                <Text style={styles.sectionMini}>{aiUi.howToImprove}</Text>
                 {coachResult.improvements.map((improvement) => (
                   <View key={improvement} style={styles.block}>
                     <Text style={styles.body}>{improvement}</Text>
@@ -729,19 +1174,19 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
               </View>
 
               <View style={styles.card}>
-                <Text style={styles.sectionMini}>What to post next</Text>
+                <Text style={styles.sectionMini}>{aiUi.whatToPostNext}</Text>
                 {coachResult.nextPosts.map((idea) => (
                   <View key={`${idea.title}-${idea.hook}`} style={styles.block}>
                     <Text style={styles.bodyStrong}>{idea.title}</Text>
-                    <Text style={styles.body}>Hook: {idea.hook}</Text>
-                    <Text style={styles.body}>Format: {idea.format}</Text>
-                    <Text style={styles.note}>{idea.reason}</Text>
+                    <Text style={styles.body}>{aiUi.hook}: {idea.hook}</Text>
+                    <Text style={styles.body}>{aiUi.formatField}: {idea.format}</Text>
+                    <Text style={styles.note}>{aiUi.reason}: {idea.reason}</Text>
                   </View>
                 ))}
               </View>
 
               <View style={styles.card}>
-                <Text style={styles.sectionMini}>Coach summary</Text>
+                <Text style={styles.sectionMini}>{aiUi.coachSummary}</Text>
                 <Text style={styles.body}>{coachResult.coachSummary}</Text>
               </View>
             </>
@@ -752,36 +1197,30 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
       {toolTab === "audit" ? (
         <View style={styles.panel}>
           <SectionTitle
-            title="Why Did This Fail?"
-            subtitle="Upload an underperforming video and Pulseora will analyze the hook, retention, and captions."
+            title={aiUi.auditTitle}
+            subtitle={aiUi.auditSubtitle}
           />
-          {isAiDemoMode ? (
-            <DemoModeNotice
-              title="Demo Video Audit"
-              body="Failure analysis is still in demo mode here. Your upload flow is real, but the returned audit is a demo-style AI breakdown until live AI is connected."
-            />
-          ) : null}
 
           <View style={styles.avatarUploadCard}>
-            <Text style={styles.sectionMini}>Bad video upload</Text>
+            <Text style={styles.sectionMini}>{aiUi.badVideoUpload}</Text>
             {failureVideoName ? (
               <View style={styles.block}>
                 <Text style={styles.bodyStrong}>{failureVideoName}</Text>
-                <Text style={styles.body}>{failureVideoDuration ? `${failureVideoDuration}s video ready for analysis.` : "Video selected and ready for analysis."}</Text>
-                <Text style={styles.note}>{failureVideoUri ? "Selected from your device library." : "Ready for audit."}</Text>
+                <Text style={styles.body}>{failureVideoDuration ? `${failureVideoDuration}s ${aiUi.videoReadyForAnalysis.toLowerCase()}` : aiUi.videoReadyForAnalysis}</Text>
+                <Text style={styles.note}>{failureVideoUri ? aiUi.selectedFromLibrary : aiUi.readyForAudit}</Text>
               </View>
             ) : (
               <View style={styles.avatarPlaceholder}>
-                <Text style={styles.body}>Upload the reel that underperformed so the AI can audit why it failed.</Text>
+                <Text style={styles.body}>{aiUi.uploadBadVideoBody}</Text>
               </View>
             )}
-            <PrimaryButton label={failureVideoName ? "Change video" : "Upload bad video"} onPress={handlePickFailureVideo} variant={failureVideoName ? "ghost" : "solid"} />
+            <PrimaryButton label={failureVideoName ? aiUi.changeVideo : aiUi.uploadBadVideo} onPress={handlePickFailureVideo} variant={failureVideoName ? "ghost" : "solid"} />
           </View>
 
           {failureFrames.length > 0 ? (
             <View style={styles.card}>
-              <Text style={styles.sectionMini}>Frame thumbnails</Text>
-              <Text style={styles.note}>Pulseora samples key frames before running the audit so you can quickly spot slow openings or late payoffs.</Text>
+              <Text style={styles.sectionMini}>{aiUi.frameThumbnails}</Text>
+              <Text style={styles.note}>{aiUi.frameThumbnailsBody}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.frameRow}>
                 {failureFrames.map((frame) => (
                   <View key={frame.id} style={styles.frameCard}>
@@ -793,14 +1232,14 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
             </View>
           ) : null}
 
-          <InputField label="Caption used on the post" multiline onChangeText={setFailureCaption} value={failureCaption} />
-          <InputField label="What happened to retention?" multiline onChangeText={setFailureRetentionNote} value={failureRetentionNote} />
-          <InputField label="Views" keyboardType="number-pad" onChangeText={setFailureViews} value={failureViews} />
-          <InputField label="Niche" onChangeText={setFailureNiche} value={failureNiche} />
-          <InputField label="Target audience" onChangeText={setFailureAudience} value={failureAudience} />
+          <InputField label={aiUi.captionUsedOnPost} multiline onChangeText={setFailureCaption} value={failureCaption} />
+          <InputField label={aiUi.whatHappenedToRetention} multiline onChangeText={setFailureRetentionNote} value={failureRetentionNote} />
+          <InputField label={aiUi.views} keyboardType="number-pad" onChangeText={setFailureViews} value={failureViews} />
+          <InputField label={aiUi.niche} onChangeText={setFailureNiche} value={failureNiche} />
+          <InputField label={aiUi.targetAudience} onChangeText={setFailureAudience} value={failureAudience} />
 
           <PrimaryButton
-            label={failureLoading ? "Analyzing..." : isAiDemoMode ? "Analyze demo failure audit" : "Analyze why this failed"}
+            label={failureLoading ? aiUi.analyzing : aiUi.analyzeWhyFailed}
             onPress={handleAnalyzeFailureVideo}
             disabled={failureLoading || !failureVideoName}
           />
@@ -808,43 +1247,43 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
           {failureResult ? (
             <>
               <View style={styles.card}>
-                <MetaRow left={failureResult.demoMode ? "Demo audit" : "Live audit"} right={new Date(failureResult.createdAt).toLocaleTimeString()} />
-                <Text style={styles.title}>Failure audit</Text>
+                <MetaRow left={aiUi.liveAudit} right={formatTime(failureResult.createdAt)} />
+                <Text style={styles.title}>{aiUi.failureAudit}</Text>
                 <Text style={styles.bodyStrong}>{failureResult.headline}</Text>
               </View>
 
               <View style={styles.auditSectionCard}>
                 <View style={styles.metaRow}>
-                  <Text style={styles.sectionMini}>Hook</Text>
+                  <Text style={styles.sectionMini}>{aiUi.hook}</Text>
                   <Text style={styles.auditScore}>{failureResult.hook.score}/100</Text>
                 </View>
                 <Text style={styles.bodyStrong}>{failureResult.hook.verdict}</Text>
-                <Text style={styles.body}>Issue: {failureResult.hook.issue}</Text>
-                <Text style={styles.body}>Fix: {failureResult.hook.fix}</Text>
+                <Text style={styles.body}>{aiUi.issue}: {failureResult.hook.issue}</Text>
+                <Text style={styles.body}>{aiUi.fix}: {failureResult.hook.fix}</Text>
               </View>
 
               <View style={styles.auditSectionCard}>
                 <View style={styles.metaRow}>
-                  <Text style={styles.sectionMini}>Retention</Text>
+                  <Text style={styles.sectionMini}>{aiUi.retention}</Text>
                   <Text style={styles.auditScore}>{failureResult.retention.score}/100</Text>
                 </View>
                 <Text style={styles.bodyStrong}>{failureResult.retention.verdict}</Text>
-                <Text style={styles.body}>Issue: {failureResult.retention.issue}</Text>
-                <Text style={styles.body}>Fix: {failureResult.retention.fix}</Text>
+                <Text style={styles.body}>{aiUi.issue}: {failureResult.retention.issue}</Text>
+                <Text style={styles.body}>{aiUi.fix}: {failureResult.retention.fix}</Text>
               </View>
 
               <View style={styles.card}>
                 <MetaRow
-                  left={failureResult.transcript.source === "auto" ? "Auto transcript" : "Demo transcript"}
-                  right={`${failureResult.transcript.text.split(/\s+/).filter(Boolean).length} words`}
+                  left={failureResult.transcript.source === "auto" ? aiUi.autoTranscript : aiUi.captionTranscript}
+                  right={`${failureResult.transcript.text.split(/\s+/).filter(Boolean).length} ${aiUi.words}`}
                 />
-                <Text style={styles.sectionMini}>Transcript</Text>
+                <Text style={styles.sectionMini}>{aiUi.transcript}</Text>
                 <Text style={styles.body}>{failureResult.transcript.text}</Text>
               </View>
 
               <View style={styles.card}>
-                <Text style={styles.sectionMini}>Retention graph</Text>
-                <Text style={styles.note}>AI-estimated retention curve built from your uploaded video, transcript, and the performance context you provided.</Text>
+                <Text style={styles.sectionMini}>{aiUi.retentionGraph}</Text>
+                <Text style={styles.note}>{aiUi.retentionGraphBody}</Text>
                 <View style={styles.retentionGraphRow}>
                   {failureResult.retentionGraph.map((point) => (
                     <View key={`${point.label}-${point.second}`} style={styles.retentionPoint}>
@@ -860,7 +1299,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
                 <View style={styles.row}>
                   {failureResult.retentionGraph.map((point) => (
                     <View key={`${point.label}-${point.second}-note`} style={styles.block}>
-                      <Text style={styles.blockLabel}>{point.label} at {point.second}s</Text>
+                      <Text style={styles.blockLabel}>{point.label} {aiUi.atSecond} {point.second}s</Text>
                       <Text style={styles.body}>{point.note}</Text>
                     </View>
                   ))}
@@ -869,7 +1308,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
 
               <View style={styles.auditSectionCard}>
                 <View style={styles.metaRow}>
-                  <Text style={styles.sectionMini}>Captions</Text>
+                <Text style={styles.sectionMini}>{aiUi.captions}</Text>
                   <Text style={styles.auditScore}>{failureResult.captions.score}/100</Text>
                 </View>
                 <Text style={styles.bodyStrong}>{failureResult.captions.verdict}</Text>
@@ -878,7 +1317,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
               </View>
 
               <View style={styles.card}>
-                <Text style={styles.sectionMini}>Quick wins</Text>
+                <Text style={styles.sectionMini}>{aiUi.quickWins}</Text>
                 {failureResult.quickWins.map((item) => (
                   <View key={item} style={styles.reasonRow}>
                     <View style={styles.dot} />
@@ -888,7 +1327,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
               </View>
 
               <View style={styles.card}>
-                <Text style={styles.sectionMini}>Next move</Text>
+                <Text style={styles.sectionMini}>{aiUi.nextMove}</Text>
                 <Text style={styles.body}>{failureResult.nextMove}</Text>
               </View>
             </>
@@ -899,27 +1338,19 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
       {toolTab === "trends" ? (
         <View style={styles.panel}>
           <SectionTitle
-            title="Trend Hijacker AI"
-            subtitle="Scan TikTok-style trend formats, tap Use this trend, and get a similar video direction, matching music vibe, and optimized captions."
+            title={aiUi.trendsTitle}
+            subtitle={aiUi.trendsSubtitle}
           />
-          {isAiDemoMode ? (
-            <DemoModeNotice
-              title="Demo Trend Remix"
-              body="Trend feed, remix angle, and generated video job are all clearly running in demo mode right now so you can test the premium flow for free."
-            />
-          ) : null}
 
           {!isPremiumUnlocked ? (
             <View style={styles.lockCard}>
-              <Text style={styles.lockTitle}>Premium-only feature</Text>
-              <Text style={styles.body}>
-                Trend Hijacker AI is reserved for Premium Creator and Yearly Growth plans. Upgrade to unlock live trend remixes.
-              </Text>
-              <PrimaryButton label="Unlock premium" onPress={() => navigation.navigate("Subscription")} />
+              <Text style={styles.lockTitle}>{aiUi.premiumFeatureTitle}</Text>
+              <Text style={styles.body}>{aiUi.premiumFeatureBody}</Text>
+              <PrimaryButton label={aiUi.unlockPremium} onPress={() => navigation.navigate("Subscription")} />
             </View>
           ) : null}
 
-          <Text style={styles.inlineLabel}>Trending now</Text>
+          <Text style={styles.inlineLabel}>{aiUi.trendingNow}</Text>
           <View style={styles.trendList}>
             {trendFeed.map((trend) => {
               const selected = selectedTrendId === trend.id;
@@ -929,23 +1360,36 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
                   <View style={styles.trendContent}>
                     <View style={styles.metaRow}>
                       <Text style={styles.meta}>{trend.niche}</Text>
-                      <Text style={styles.meta}>{trend.momentumScore}% momentum</Text>
+                      <Text style={styles.meta}>{trend.momentumScore}% {aiUi.momentum}</Text>
+                    </View>
+                    <View style={[styles.trendScopeBadge, trend.scope === "local" ? styles.trendScopeBadgeLocal : null]}>
+                      <Text style={[styles.trendScopeLabel, trend.scope === "local" ? styles.trendScopeLabelLocal : null]}>
+                        {trend.scope === "local" ? `${regionInfo.flag} ${copy.trendLocal} · ${regionInfo.name}` : `🌍 ${copy.trendGlobal}`}
+                      </Text>
                     </View>
                     <Text style={styles.trendTitle}>{trend.title}</Text>
-                    <Text style={styles.body}>{trend.trendHook}</Text>
-                    <Text style={styles.trendMeta}>Music style: {trend.musicStyle}</Text>
-                    <Text style={styles.trendMeta}>Motion style: {trend.motionStyle}</Text>
+                    <Text style={styles.body}>
+                      {trend.reelCount !== undefined
+                        ? copy.trendStats
+                            .replace("{reels}", String(trend.reelCount))
+                            .replace("{posts}", String(trend.postCount ?? 0))
+                            .replace("{creators}", String(trend.creatorCount ?? 0))
+                            .replace("{days}", String(trend.windowDays ?? 14))
+                        : trend.trendHook}
+                    </Text>
+                    <Text style={styles.trendMeta}>{aiUi.musicStyle}: {trend.musicStyle}</Text>
+                    <Text style={styles.trendMeta}>{aiUi.motionStyle}: {trend.motionStyle}</Text>
                   </View>
                 </Pressable>
               );
             })}
           </View>
 
-          <InputField label="Your goal" multiline onChangeText={setTrendGoal} value={trendGoal} />
-          <InputField label="Your offer" onChangeText={setTrendOffer} value={trendOffer} />
-          <InputField label="Target audience" onChangeText={setTrendAudience} value={trendAudience} />
+          <InputField label={aiUi.yourGoal} multiline onChangeText={setTrendGoal} value={trendGoal} />
+          <InputField label={aiUi.yourOffer} onChangeText={setTrendOffer} value={trendOffer} />
+          <InputField label={aiUi.targetAudience} onChangeText={setTrendAudience} value={trendAudience} />
           <PrimaryButton
-            label={trendLoading ? "Building trend remix..." : isAiDemoMode ? "Use this trend in demo mode" : "Use this trend"}
+            label={trendLoading ? aiUi.buildingTrendRemix : aiUi.useThisTrend}
             onPress={handleUseTrend}
             disabled={trendLoading || !selectedTrendId}
           />
@@ -953,21 +1397,21 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
           {trendResult ? (
             <>
               <View style={styles.card}>
-                <MetaRow left={trendResult.demoMode ? "Demo remix" : "Live remix"} right={`${trendResult.trend.title} | ${new Date(trendResult.createdAt).toLocaleTimeString()}`} />
+                <MetaRow left={aiUi.liveRemix} right={`${trendResult.trend.title} | ${formatTime(trendResult.createdAt)}`} />
                 <Text style={styles.title}>{trendResult.trend.title}</Text>
                 <Text style={styles.bodyStrong}>{trendResult.angle}</Text>
                 <View style={styles.block}>
-                  <Text style={styles.blockLabel}>Music vibe</Text>
+                  <Text style={styles.blockLabel}>{aiUi.musicVibe}</Text>
                   <Text style={styles.body}>{trendResult.musicStyle}</Text>
                 </View>
                 <View style={styles.block}>
-                  <Text style={styles.blockLabel}>Similar video prompt</Text>
+                  <Text style={styles.blockLabel}>{aiUi.similarVideoPrompt}</Text>
                   <Text style={styles.body}>{trendResult.similarVideoPrompt}</Text>
                 </View>
               </View>
 
               <View style={styles.card}>
-                <Text style={styles.sectionMini}>Optimized captions</Text>
+                <Text style={styles.sectionMini}>{aiUi.optimizedCaptions}</Text>
                 {trendResult.optimizedCaptions.map((caption) => (
                   <View key={caption} style={styles.block}>
                     <Text style={styles.body}>{caption}</Text>
@@ -976,13 +1420,13 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
               </View>
 
               <View style={styles.card}>
-                <MetaRow left={trendResult.video.demoMode ? "Demo render" : "Live render"} right={`${trendResult.video.model} | ${trendResult.video.seconds}s | ${trendResult.video.size}`} />
-                <Text style={styles.sectionMini}>Trend video job</Text>
-                <Text style={styles.bodyStrong}>Status: {trendResult.video.status.replace("_", " ")}</Text>
+                <MetaRow left={aiUi.liveRender} right={`${trendResult.video.model} | ${trendResult.video.seconds}s | ${trendResult.video.size}`} />
+                <Text style={styles.sectionMini}>{aiUi.trendVideoJob}</Text>
+                <Text style={styles.bodyStrong}>{aiUi.statusLabel}: {trendResult.video.status.replace("_", " ")}</Text>
                 <View style={styles.track}>
                   <View style={[styles.fill, { width: `${trendResult.video.progress}%` }]} />
                 </View>
-                <Text style={styles.bodyStrong}>{trendResult.video.progress}% complete</Text>
+                <Text style={styles.bodyStrong}>{trendResult.video.progress}% {aiUi.complete}</Text>
                 {trendResult.video.thumbnailDataUrl ? <Image resizeMode="cover" source={{ uri: trendResult.video.thumbnailDataUrl }} style={styles.image} /> : null}
                 <Text style={styles.body}>{trendResult.video.note ?? trendResult.video.prompt}</Text>
               </View>
@@ -994,50 +1438,46 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
       {toolTab === "avatars" ? (
         <View style={styles.panel}>
           <SectionTitle
-            title="AI Avatar Creator"
-            subtitle="Upload a photo and generate a talking avatar, anime version, cartoon version, and influencer-style portrait."
+            title={aiUi.avatarTitle}
+            subtitle={aiUi.avatarSubtitle}
           />
-          {isAiDemoMode ? (
-            <DemoModeNotice
-              title="Demo Avatar Creator"
-              body="Avatar styles and talking-avatar video are sample/demo outputs in this free setup. The app now makes that explicit before you generate anything."
-            />
+
+          {PAYMENTS_ENABLED ? (
+            <View style={styles.pricing}>
+              <View style={styles.priceCard}>
+                <Text style={styles.priceValue}>$2/avatar</Text>
+                <Text style={styles.priceLabel}>{aiUi.payPerAvatar}</Text>
+              </View>
+              <View style={styles.priceCard}>
+                <Text style={styles.priceValue}>{aiUi.premiumPlan}</Text>
+                <Text style={styles.priceLabel}>{aiUi.subscriptionPlan}</Text>
+              </View>
+            </View>
           ) : null}
 
-          <View style={styles.pricing}>
-            <View style={styles.priceCard}>
-              <Text style={styles.priceValue}>$2/avatar</Text>
-              <Text style={styles.priceLabel}>Pay per avatar</Text>
-            </View>
-            <View style={styles.priceCard}>
-              <Text style={styles.priceValue}>Premium</Text>
-              <Text style={styles.priceLabel}>Subscription</Text>
-            </View>
-          </View>
-
           <View style={styles.avatarUploadCard}>
-            <Text style={styles.sectionMini}>Source photo</Text>
+            <Text style={styles.sectionMini}>{aiUi.sourcePhoto}</Text>
             {avatarSourcePreview ? (
               <Image resizeMode="cover" source={{ uri: avatarSourcePreview }} style={styles.avatarSourceImage} />
             ) : (
               <View style={styles.avatarPlaceholder}>
-                <Text style={styles.body}>Upload one portrait photo to build all avatar styles.</Text>
+                <Text style={styles.body}>{aiUi.sourcePhotoBody}</Text>
               </View>
             )}
-            <PrimaryButton label={avatarSourcePreview ? "Change photo" : "Upload photo"} onPress={handlePickAvatarPhoto} variant={avatarSourcePreview ? "ghost" : "solid"} />
+            <PrimaryButton label={avatarSourcePreview ? aiUi.changePhoto : aiUi.uploadPhoto} onPress={handlePickAvatarPhoto} variant={avatarSourcePreview ? "ghost" : "solid"} />
           </View>
 
-          <InputField label="Avatar message" multiline onChangeText={setAvatarMessage} value={avatarMessage} />
-          <InputField label="Niche" onChangeText={setAvatarNiche} value={avatarNiche} />
+          <InputField label={aiUi.avatarMessage} multiline onChangeText={setAvatarMessage} value={avatarMessage} />
+          <InputField label={aiUi.niche} onChangeText={setAvatarNiche} value={avatarNiche} />
 
-          <Text style={styles.inlineLabel}>Talking avatar format</Text>
+          <Text style={styles.inlineLabel}>{aiUi.talkingAvatarFormat}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
             {videoSizes.map((size) => (
               <Chip key={size} label={size} active={avatarSize === size} onPress={() => setAvatarSize(size)} />
             ))}
           </ScrollView>
 
-          <Text style={styles.inlineLabel}>Talking avatar duration</Text>
+          <Text style={styles.inlineLabel}>{aiUi.talkingAvatarDuration}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
             {videoSeconds.map((seconds) => (
               <Chip key={seconds} label={`${seconds}s`} active={avatarDuration === seconds} onPress={() => setAvatarDuration(seconds)} />
@@ -1045,12 +1485,12 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
           </ScrollView>
 
           <View style={styles.row}>
-            <Chip label="Speed" active={avatarQuality === "speed"} onPress={() => setAvatarQuality("speed")} />
-            <Chip label="Quality" active={avatarQuality === "quality"} onPress={() => setAvatarQuality("quality")} />
+            <Chip label={aiUi.speed} active={avatarQuality === "speed"} onPress={() => setAvatarQuality("speed")} />
+            <Chip label={aiUi.quality} active={avatarQuality === "quality"} onPress={() => setAvatarQuality("quality")} />
           </View>
 
           <PrimaryButton
-            label={avatarLoading ? "Creating avatar package..." : isAiDemoMode ? "Create demo avatar package" : "Create avatar package"}
+            label={avatarLoading ? aiUi.creatingAvatarPackage : aiUi.createAvatarPackage}
             onPress={handleCreateAvatar}
             disabled={avatarLoading || !avatarSourceDataUrl}
           />
@@ -1058,20 +1498,22 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
           {avatarResult ? (
             <>
               <View style={styles.card}>
-                <MetaRow left={avatarResult.demoMode ? "Demo avatar" : "Live avatar"} right={new Date(avatarResult.createdAt).toLocaleTimeString()} />
-                <Text style={styles.title}>Avatar monetization</Text>
+                <MetaRow left={aiUi.liveAvatar} right={formatTime(avatarResult.createdAt)} />
+                <Text style={styles.title}>{aiUi.avatarMonetization}</Text>
+                {avatarResult.monetization.payPerAvatarLabel ? (
+                  <View style={styles.block}>
+                    <Text style={styles.blockLabel}>{aiUi.payPerAvatar}</Text>
+                    <Text style={styles.body}>{avatarResult.monetization.payPerAvatarLabel}</Text>
+                  </View>
+                ) : null}
                 <View style={styles.block}>
-                  <Text style={styles.blockLabel}>Pay per avatar</Text>
-                  <Text style={styles.body}>{avatarResult.monetization.payPerAvatarLabel}</Text>
-                </View>
-                <View style={styles.block}>
-                  <Text style={styles.blockLabel}>Premium plan</Text>
+                  <Text style={styles.blockLabel}>{aiUi.premiumPlanLabel}</Text>
                   <Text style={styles.body}>{avatarResult.monetization.premiumLabel}</Text>
                 </View>
               </View>
 
               <View style={styles.card}>
-                <Text style={styles.sectionMini}>Avatar styles</Text>
+                <Text style={styles.sectionMini}>{aiUi.avatarStyles}</Text>
                 {avatarResult.variants.map((variant) => (
                   <View key={variant.id} style={styles.avatarVariantCard}>
                     <Image resizeMode="cover" source={{ uri: variant.imageDataUrl }} style={styles.avatarVariantImage} />
@@ -1084,13 +1526,13 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
               </View>
 
               <View style={styles.card}>
-                <MetaRow left={avatarResult.talkingAvatar.demoMode ? "Demo talking avatar" : "Live talking avatar"} right={`${avatarResult.talkingAvatar.model} | ${avatarResult.talkingAvatar.seconds}s | ${avatarResult.talkingAvatar.size}`} />
-                <Text style={styles.sectionMini}>Talking avatar video</Text>
-                <Text style={styles.bodyStrong}>Status: {avatarResult.talkingAvatar.status.replace("_", " ")}</Text>
+                <MetaRow left={aiUi.liveAvatar} right={`${avatarResult.talkingAvatar.model} | ${avatarResult.talkingAvatar.seconds}s | ${avatarResult.talkingAvatar.size}`} />
+                <Text style={styles.sectionMini}>{aiUi.talkingAvatarVideo}</Text>
+                <Text style={styles.bodyStrong}>{aiUi.statusLabel}: {avatarResult.talkingAvatar.status.replace("_", " ")}</Text>
                 <View style={styles.track}>
                   <View style={[styles.fill, { width: `${avatarResult.talkingAvatar.progress}%` }]} />
                 </View>
-                <Text style={styles.bodyStrong}>{avatarResult.talkingAvatar.progress}% complete</Text>
+                <Text style={styles.bodyStrong}>{avatarResult.talkingAvatar.progress}% {aiUi.complete}</Text>
                 {avatarResult.talkingAvatar.thumbnailDataUrl ? <Image resizeMode="cover" source={{ uri: avatarResult.talkingAvatar.thumbnailDataUrl }} style={styles.image} /> : null}
                 <Text style={styles.body}>{avatarResult.talkingAvatar.note ?? avatarResult.talkingAvatar.prompt}</Text>
               </View>
@@ -1101,30 +1543,24 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
 
       {toolTab === "text" ? (
         <View style={styles.panel}>
-          <SectionTitle title="Text generation" subtitle="Create captions, short scripts, or marketplace copy that matches your offer and audience." />
-          {isAiDemoMode ? (
-            <DemoModeNotice
-              title="Demo Text Output"
-              body="Text AI is using free fallback content right now, so the app clearly stays in demo mode until live AI is connected."
-            />
-          ) : null}
+          <SectionTitle title={aiUi.textTitle} subtitle={aiUi.textSubtitle} />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-            {textModes.map((mode) => (
+            {localizedTextModes.map((mode) => (
               <Chip key={mode.value} label={mode.label} active={textMode === mode.value} onPress={() => setTextMode(mode.value)} />
             ))}
           </ScrollView>
-          <InputField label="Prompt" multiline onChangeText={setTextPrompt} value={textPrompt} />
-          <InputField label="Tone" onChangeText={setTextTone} value={textTone} />
-          <InputField label="Audience" onChangeText={setTextAudience} value={textAudience} />
-          <InputField label="Goal" onChangeText={setTextGoal} value={textGoal} />
+          <InputField label={aiUi.prompt} multiline onChangeText={setTextPrompt} value={textPrompt} />
+          <InputField label={aiUi.tone} onChangeText={setTextTone} value={textTone} />
+          <InputField label={aiUi.audience} onChangeText={setTextAudience} value={textAudience} />
+          <InputField label={aiUi.goal} onChangeText={setTextGoal} value={textGoal} />
           <PrimaryButton
-            label={textLoading ? "Generating..." : isAiDemoMode ? "Generate demo text" : "Generate text"}
+            label={textLoading ? aiUi.generating : aiUi.generateText}
             onPress={handleGenerateText}
             disabled={textLoading}
           />
           {textResult ? (
             <View style={styles.card}>
-              <MetaRow left={textResult.demoMode ? "Demo mode" : "Live AI"} right={`${textResult.model} | ${new Date(textResult.createdAt).toLocaleTimeString()}`} />
+              <MetaRow left={aiUi.liveAi} right={`${textResult.model} | ${formatTime(textResult.createdAt)}`} />
               <Text style={styles.title}>{textResult.summary}</Text>
               {textResult.outputs.map((output) => (
                 <View key={output} style={styles.block}>
@@ -1138,28 +1574,22 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
 
       {toolTab === "image" ? (
         <View style={styles.panel}>
-          <SectionTitle title="Image generation" subtitle="Generate creator ad concepts, thumbnails, or promo visuals using a prompt, style, and aspect ratio." />
-          {isAiDemoMode ? (
-            <DemoModeNotice
-              title="Demo Image Generator"
-              body="Generated images are sample/demo visuals right now. They show the app experience, but they are not live AI renders yet."
-            />
-          ) : null}
-          <InputField label="Prompt" multiline onChangeText={setImagePrompt} value={imagePrompt} />
-          <InputField label="Style" onChangeText={setImageStyle} value={imageStyle} />
+          <SectionTitle title={aiUi.imageTitle} subtitle={aiUi.imageSubtitle} />
+          <InputField label={aiUi.prompt} multiline onChangeText={setImagePrompt} value={imagePrompt} />
+          <InputField label={aiUi.style} onChangeText={setImageStyle} value={imageStyle} />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
             {aspectRatios.map((ratio) => (
               <Chip key={ratio} label={ratio} active={imageAspectRatio === ratio} onPress={() => setImageAspectRatio(ratio)} />
             ))}
           </ScrollView>
           <PrimaryButton
-            label={imageLoading ? "Generating..." : isAiDemoMode ? "Generate demo image preview" : "Generate image"}
+            label={imageLoading ? aiUi.generating : aiUi.generateImage}
             onPress={handleGenerateImage}
             disabled={imageLoading}
           />
           {imageResult ? (
             <View style={styles.card}>
-              <MetaRow left={imageResult.demoMode ? "Demo mode" : "Live AI"} right={`${imageResult.model} | ${new Date(imageResult.createdAt).toLocaleTimeString()}`} />
+              <MetaRow left={aiUi.liveAi} right={`${imageResult.model} | ${formatTime(imageResult.createdAt)}`} />
               <Image resizeMode="cover" source={{ uri: imageResult.imageDataUrl }} style={styles.image} />
               <Text style={styles.body}>{imageResult.revisedPrompt ?? imageResult.prompt}</Text>
             </View>
@@ -1169,45 +1599,39 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
 
       {toolTab === "video" ? (
         <View style={styles.panel}>
-          <SectionTitle title="Video generation" subtitle="Start an async render job, then monitor progress until the clip is ready. Demo mode simulates the same flow." />
-          {isAiDemoMode ? (
-            <DemoModeNotice
-              title="Demo Video Generator"
-              body="Video jobs are simulated in the app for free right now. Progress, thumbnails, and completion states are demo previews until live rendering is connected."
-            />
-          ) : null}
-          <InputField label="Scene prompt" multiline onChangeText={setVideoPrompt} value={videoPrompt} />
-          <InputField label="Style" onChangeText={setVideoStyle} value={videoStyle} />
-          <InputField label="Shot direction" onChangeText={setVideoShotType} value={videoShotType} />
-          <Text style={styles.inlineLabel}>Format</Text>
+          <SectionTitle title={aiUi.videoTitle} subtitle={aiUi.videoSubtitle} />
+          <InputField label={aiUi.scenePrompt} multiline onChangeText={setVideoPrompt} value={videoPrompt} />
+          <InputField label={aiUi.style} onChangeText={setVideoStyle} value={videoStyle} />
+          <InputField label={aiUi.shotDirection} onChangeText={setVideoShotType} value={videoShotType} />
+          <Text style={styles.inlineLabel}>{aiUi.formatLabel}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
             {videoSizes.map((size) => (
               <Chip key={size} label={size} active={videoSize === size} onPress={() => setVideoSize(size)} />
             ))}
           </ScrollView>
-          <Text style={styles.inlineLabel}>Duration</Text>
+          <Text style={styles.inlineLabel}>{aiUi.durationLabel}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
             {videoSeconds.map((seconds) => (
               <Chip key={seconds} label={`${seconds}s`} active={videoDuration === seconds} onPress={() => setVideoDuration(seconds)} />
             ))}
           </ScrollView>
           <View style={styles.row}>
-            <Chip label="Speed" active={videoQuality === "speed"} onPress={() => setVideoQuality("speed")} />
-            <Chip label="Quality" active={videoQuality === "quality"} onPress={() => setVideoQuality("quality")} />
+            <Chip label={aiUi.speed} active={videoQuality === "speed"} onPress={() => setVideoQuality("speed")} />
+            <Chip label={aiUi.quality} active={videoQuality === "quality"} onPress={() => setVideoQuality("quality")} />
           </View>
           <PrimaryButton
-            label={videoLoading ? "Starting..." : isAiDemoMode ? "Start demo video job" : "Start video job"}
+            label={videoLoading ? aiUi.starting : aiUi.startVideoJob}
             onPress={handleGenerateVideo}
             disabled={videoLoading}
           />
           {videoJob ? (
             <View style={styles.card}>
-              <MetaRow left={videoJob.demoMode ? "Demo mode" : "Live AI"} right={`${videoJob.model} | ${videoJob.seconds}s | ${videoJob.size}`} />
-              <Text style={styles.title}>Job status: {videoJob.status.replace("_", " ")}</Text>
+              <MetaRow left={aiUi.liveAi} right={`${videoJob.model} | ${videoJob.seconds}s | ${videoJob.size}`} />
+              <Text style={styles.title}>{aiUi.jobStatus}: {videoJob.status.replace("_", " ")}</Text>
               <View style={styles.track}>
                 <View style={[styles.fill, { width: `${videoJob.progress}%` }]} />
               </View>
-              <Text style={styles.bodyStrong}>{videoJob.progress}% complete</Text>
+              <Text style={styles.bodyStrong}>{videoJob.progress}% {aiUi.complete}</Text>
               {videoJob.thumbnailDataUrl ? <Image resizeMode="cover" source={{ uri: videoJob.thumbnailDataUrl }} style={styles.image} /> : null}
               <Text style={styles.body}>{videoJob.note ?? videoJob.prompt}</Text>
               {videoJob.error ? <Text style={styles.error}>{videoJob.error}</Text> : null}
@@ -1218,16 +1642,16 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
 
       {toolTab === "engine" && engineResult ? (
         <View style={styles.card}>
-          <MetaRow left={engineResult.video.demoMode ? "Demo render" : "Live render"} right={`${engineResult.video.model} | ${engineResult.video.seconds}s | ${engineResult.video.size}`} />
-          <Text style={styles.sectionMini}>Video job</Text>
-          <Text style={styles.bodyStrong}>Status: {engineResult.video.status.replace("_", " ")}</Text>
+          <MetaRow left={aiUi.liveRender} right={`${engineResult.video.model} | ${engineResult.video.seconds}s | ${engineResult.video.size}`} />
+          <Text style={styles.sectionMini}>{aiUi.videoJob}</Text>
+          <Text style={styles.bodyStrong}>{aiUi.statusLabel}: {engineResult.video.status.replace("_", " ")}</Text>
           <View style={styles.track}>
             <View style={[styles.fill, { width: `${engineResult.video.progress}%` }]} />
           </View>
-          <Text style={styles.bodyStrong}>{engineResult.video.progress}% complete</Text>
+          <Text style={styles.bodyStrong}>{engineResult.video.progress}% {aiUi.complete}</Text>
           {engineResult.video.thumbnailDataUrl ? <Image resizeMode="cover" source={{ uri: engineResult.video.thumbnailDataUrl }} style={styles.image} /> : null}
           <Text style={styles.body}>{engineResult.video.note ?? engineResult.video.prompt}</Text>
-          <Text style={styles.sectionMini}>Why this can pop</Text>
+          <Text style={styles.sectionMini}>{aiUi.whyThisCanPop}</Text>
           {engineResult.insights.reasons.map((reason) => (
             <View key={reason} style={styles.reasonRow}>
               <View style={styles.dot} />
@@ -1238,13 +1662,15 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
       ) : null}
 
       <View style={styles.footer}>
-        <Text style={styles.footerTitle}>Production note</Text>
+        <Text style={styles.footerTitle}>{aiUi.productionNote}</Text>
         <Text style={styles.body}>
-          {isAiDemoMode
-            ? "Pulseora AI is currently in clear demo mode on this device. You can keep testing the full creator flow for free, but image and video outputs are sample previews until live AI is connected."
-            : "Live AI is connected. Keep your backend running and the app pointed at the real API base URL so image and video generation stay live on your phone."}
+          {isAiOffline
+            ? aiUi.productionOfflineBody
+            : aiUi.productionLiveBody}
         </Text>
-        <PrimaryButton label={copy.subscription} onPress={() => navigation.navigate("Subscription")} variant="ghost" />
+        {PAYMENTS_ENABLED ? (
+          <PrimaryButton label={copy.subscription} onPress={() => navigation.navigate("Subscription")} variant="ghost" />
+        ) : null}
       </View>
     </Screen>
   );
@@ -1276,7 +1702,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function DemoModeNotice({ title, body }: { title: string; body: string }) {
+function OfflineNotice({ title, body }: { title: string; body: string }) {
   return (
     <View style={styles.demoNotice}>
       <Text style={styles.demoNoticeTitle}>{title}</Text>
@@ -1341,7 +1767,7 @@ function formatFailureFrameLabel(timeMs: number) {
   return `${Math.max(0, Math.round(timeMs / 1000))}s`;
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
   hero: { borderColor: palette.borderStrong, borderRadius: radii.xl, borderWidth: 1, gap: spacing.lg, padding: spacing.xl },
   kicker: { color: palette.accentSoft, fontSize: 12, fontWeight: "800", letterSpacing: 0.6, textTransform: "uppercase" },
   statusWrap: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
@@ -1358,6 +1784,17 @@ const styles = StyleSheet.create({
   tabs: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   panel: { backgroundColor: palette.surface, borderColor: palette.borderStrong, borderRadius: radii.xl, borderWidth: 1, gap: spacing.md, padding: spacing.xl },
   pricing: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  trendScopeBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: palette.surfaceMuted,
+    borderRadius: radii.pill,
+    marginTop: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  trendScopeBadgeLocal: { backgroundColor: palette.primary },
+  trendScopeLabel: { color: palette.muted, fontSize: 11, fontWeight: "800" },
+  trendScopeLabelLocal: { color: "#04110b" },
   priceCard: { backgroundColor: palette.cardAlt, borderColor: palette.borderStrong, borderRadius: radii.lg, borderWidth: 1, minWidth: 108, padding: spacing.md },
   priceValue: { color: palette.accentSoft, fontSize: 16, fontWeight: "900" },
   priceLabel: { color: palette.textSoft, fontSize: 12, fontWeight: "700", marginTop: 2, textTransform: "uppercase" },

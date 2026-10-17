@@ -1,13 +1,31 @@
 import { z } from "zod";
 import { getFirestore } from "./firebaseService";
+import { localizePushText } from "./notificationText";
 
 const DEVICE_PUSH_TOKENS_COLLECTION = "devicePushTokens";
 const NOTIFICATIONS_COLLECTION = "notifications";
 const EXPO_PUSH_API_URL = "https://exp.host/--/api/v2/push/send";
 const ANDROID_CHANNEL_ID = "pulseora-social";
 
-const notificationTypeSchema = z.enum(["like", "comment", "follow", "repost", "boost", "save", "message", "order", "system"]);
-const savedEntityTypeSchema = z.enum(["reel", "product"]);
+const notificationTypeSchema = z.enum([
+  "post_like",
+  "post_comment",
+  "reel_like",
+  "reel_comment",
+  "story_view",
+  "mention",
+  "like",
+  "comment",
+  "follow",
+  "repost",
+  "boost",
+  "save",
+  "message",
+  "order",
+  "call",
+  "system",
+]);
+const savedEntityTypeSchema = z.enum(["reel", "product", "post"]);
 const conversationTypeSchema = z.enum(["marketplace", "direct"]);
 
 export const notificationDeliverySchema = z.object({
@@ -107,11 +125,25 @@ async function sendExpoPushNotificationsForUser(
     return 0;
   }
 
+  // Write the banner in the recipient's language.
+  const recipient = await db.collection("users").doc(userId).get().catch(() => null);
+  const pushText = localizePushText(
+    {
+      type: notification.type,
+      actorName: notification.actorName,
+      entityType: notification.entityType,
+      conversationType: notification.conversationType,
+      title: notification.title,
+      body: notification.body,
+    },
+    typeof recipient?.get("language") === "string" ? recipient.get("language") : undefined
+  );
+
   const messages = tokens.map((token) => ({
     to: token,
     sound: "default",
-    title: notification.title,
-    body: notification.body,
+    title: pushText.title,
+    ...(pushText.body ? { body: pushText.body } : {}),
     data: {
       notificationId: notification.id,
       type: notification.type,
@@ -122,6 +154,9 @@ async function sendExpoPushNotificationsForUser(
       actorId: notification.actorId,
     },
     channelId: ANDROID_CHANNEL_ID,
+    // Incoming calls must wake the phone right away.
+    priority: notification.type === "call" ? "high" : "default",
+    ...(notification.type === "call" ? { ttl: 45 } : {}),
   }));
 
   const response = await fetch(EXPO_PUSH_API_URL, {

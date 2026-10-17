@@ -4,6 +4,7 @@ import {
   addComment,
   createReelBoost,
   createReel,
+  deleteReel,
   getActiveBoostForReel,
   getReelById,
   getUserById,
@@ -14,6 +15,7 @@ import {
   toggleLike,
 } from "../data/mockDb";
 import { AuthenticatedRequest } from "../middleware/auth";
+import { getOrCreateAuthenticatedUser } from "../services/authenticatedUserService";
 import { getBillingReelById, getBillingUserById, hasActiveBillingBoostForReel } from "../services/billingService";
 import { createBoostCheckoutSession as createStripeBoostCheckoutSession } from "../services/stripeService";
 import { rejectIfSexualContent, rejectIfSexualMedia } from "./contentSafety";
@@ -23,6 +25,7 @@ const createReelSchema = z.object({
   videoUrl: z.string().url(),
   caption: z.string().min(3),
   thumbnailUrl: z.string().url().optional(),
+  hashtags: z.array(z.string().min(1)).max(6).optional(),
 });
 
 const commentSchema = z.object({
@@ -71,7 +74,14 @@ export async function postReel(req: AuthenticatedRequest, res: Response) {
     return;
   }
 
-  if (rejectIfSexualContent(res, [parsed.data.caption, parsed.data.videoUrl, parsed.data.thumbnailUrl])) {
+  if (
+    rejectIfSexualContent(res, [
+      parsed.data.caption,
+      parsed.data.videoUrl,
+      parsed.data.thumbnailUrl,
+      ...(parsed.data.hashtags ?? []).map((tag) => `#${tag}`),
+    ])
+  ) {
     return;
   }
 
@@ -199,6 +209,23 @@ export function boostReel(req: AuthenticatedRequest, res: Response) {
     reel: buildReelPayload(result.reel),
     boost: result.boost,
   });
+}
+
+export function removeReel(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) {
+    res.status(401).json({ message: "Unauthorized." });
+    return;
+  }
+
+  const actingUser = getOrCreateAuthenticatedUser(req.user!);
+  const deleted = deleteReel(req.params.id, userId, { allowAdmin: actingUser.role === "admin" });
+  if (!deleted) {
+    res.status(404).json({ message: "Reel not found." });
+    return;
+  }
+
+  res.json({ ok: true });
 }
 
 export async function createBoostCheckoutSession(req: AuthenticatedRequest, res: Response) {

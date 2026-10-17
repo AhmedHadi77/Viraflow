@@ -8,6 +8,7 @@ import {
   getReels,
   likeReel,
   postReel,
+  removeReel,
   repost,
 } from "../controllers/reelController";
 import { toggleSavedReel } from "../controllers/savedController";
@@ -25,5 +26,6 @@ router.post("/:id/repost", requireAuth, repost);
 router.post("/:id/boost/checkout-session", requireAuth, createBoostCheckoutSession);
 router.post("/:id/boost", requireAuth, boostReel);
 router.post("/:id/save", requireAuth, toggleSavedReel);
+router.delete("/:id", requireAuth, removeReel);
 
 export { router as reelsRouter };

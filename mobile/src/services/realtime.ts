@@ -5,6 +5,7 @@ import {
   ApiDirectChatThreadPayload,
   ApiMarketplaceChatMessagePayload,
   ApiMarketplaceChatThreadPayload,
+  ApiNotificationPayload,
 } from "./appApi";
 import { getPublicApiBaseUrl } from "./publicEnv";
 
@@ -34,6 +35,14 @@ export interface MarketplaceMessageRealtimeEvent {
 export interface CommunityMessageRealtimeEvent {
   communityId: string;
   message: ApiCommunityChatMessagePayload;
+}
+
+export interface NotificationRealtimeEvent {
+  notification: ApiNotificationPayload;
+}
+
+export interface NotificationsReadAllRealtimeEvent {
+  notifications: ApiNotificationPayload[];
 }
 
 export type TypingRealtimeEvent =

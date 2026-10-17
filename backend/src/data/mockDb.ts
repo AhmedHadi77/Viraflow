@@ -25,407 +25,45 @@ import {
   Subscription,
   User,
 } from "../types/models";
+import { DEFAULT_PROFILE_IMAGE, MEDIA_UNAVAILABLE_IMAGE } from "./defaultMedia";
 
-const users: User[] = [
-  {
-    id: "user-1",
-    name: "Layla Noor",
-    username: "laylanoor",
-    email: "layla@viraflow.app",
-    passwordHash: "demo-hash",
-    profileImage:
-      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80",
-    bio: "Fashion creator sharing fast styling edits and sellable looks.",
-    headline: "Fashion reels creator",
-    language: "en",
-    createdAt: "2026-03-20T10:00:00.000Z",
-  },
-  {
-    id: "user-2",
-    name: "Omar Kassim",
-    username: "omarkassim",
-    email: "omar@viraflow.app",
-    passwordHash: "demo-hash",
-    profileImage:
-      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80",
-    bio: "Growth marketer turning content into sales.",
-    headline: "Growth strategist",
-    language: "en",
-    createdAt: "2026-03-19T10:00:00.000Z",
-  },
-  {
-    id: "user-3",
-    name: "Sofia Meret",
-    username: "sofiameret",
-    email: "sofia@viraflow.app",
-    passwordHash: "demo-hash",
-    profileImage:
-      "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=400&q=80",
-    bio: "Productivity creator and digital template seller.",
-    headline: "Template seller",
-    language: "fr",
-    createdAt: "2026-03-18T10:00:00.000Z",
-  },
-];
+const HOURS_IN_MS = 60 * 60 * 1000;
+const STORY_LIFETIME_MS = 24 * HOURS_IN_MS;
+let notificationCreatedListener: ((notification: Notification) => void) | null = null;
 
-const reels: Reel[] = [
-  {
-    id: "reel-1",
-    userId: "user-1",
-    videoUrl: "https://example.com/video/fashion-shift.mp4",
-    caption: "Three outfit transitions for one weekend trip.",
-    thumbnailUrl:
-      "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=1000&q=80",
-    likedBy: ["user-2", "user-3"],
-    repostCount: 12,
-    viewCount: 6400,
-    reachCount: 18300,
-    createdAt: "2026-03-29T08:30:00.000Z",
-  },
-  {
-    id: "reel-2",
-    userId: "user-2",
-    videoUrl: "https://example.com/video/creator-funnel.mp4",
-    caption: "How creators turn one reel into three income streams.",
-    thumbnailUrl:
-      "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1000&q=80",
-    likedBy: ["user-1"],
-    repostCount: 6,
-    viewCount: 18900,
-    reachCount: 54200,
-    createdAt: "2026-03-28T13:15:00.000Z",
-  },
-];
+const users: User[] = [];
 
-const comments: Comment[] = [
-  {
-    id: "comment-1",
-    userId: "user-2",
-    reelId: "reel-1",
-    text: "The first transition is super clean.",
-    createdAt: "2026-03-29T09:00:00.000Z",
-  },
-  {
-    id: "comment-2",
-    userId: "user-1",
-    reelId: "reel-2",
-    text: "This would be perfect as a carousel too.",
-    createdAt: "2026-03-28T15:00:00.000Z",
-  },
-];
+const reels: Reel[] = [];
 
-const stories: Story[] = [
-  {
-    id: "story-1",
-    userId: "user-2",
-    imageUrl:
-      "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80",
-    caption: "New funnel breakdown dropping tonight.",
-    createdAt: "2026-03-31T01:20:00.000Z",
-    expiresAt: "2026-04-01T01:20:00.000Z",
-  },
-  {
-    id: "story-2",
-    userId: "user-3",
-    imageUrl:
-      "https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=900&q=80",
-    caption: "Template preview before tomorrow's launch.",
-    createdAt: "2026-03-31T00:45:00.000Z",
-    expiresAt: "2026-04-01T00:45:00.000Z",
-  },
-];
+const comments: Comment[] = [];
 
-const follows: FollowRelation[] = [
-  { id: "follow-1", followerId: "user-2", followingId: "user-1" },
-  { id: "follow-2", followerId: "user-3", followingId: "user-1" },
-  { id: "follow-3", followerId: "user-1", followingId: "user-2" },
-];
+const stories: Story[] = [];
 
-const products: Product[] = [
-  {
-    id: "product-1",
-    userId: "user-1",
-    title: "Vintage mirrorless camera",
-    description: "Compact creator camera with charger, strap, and extra battery. Great for local pickup listings.",
-    price: 420,
-    imageUrl:
-      "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=900&q=80",
-    imageUrls: [
-      "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1502982720700-bfff97f2ecac?auto=format&fit=crop&w=900&q=80",
-    ],
-    category: "Electronics",
-    condition: "Like New",
-    location: "Kuala Lumpur, Malaysia",
-    listingStatus: "available",
-    createdAt: "2026-03-29T11:00:00.000Z",
-  },
-  {
-    id: "product-2",
-    userId: "user-2",
-    title: "Standing desk setup",
-    description: "Height-adjustable desk with cable tray and monitor riser. Pickup only, already packed for fast collection.",
-    price: 180,
-    imageUrl:
-      "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?auto=format&fit=crop&w=900&q=80",
-    imageUrls: [
-      "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=900&q=80",
-    ],
-    category: "Home Goods",
-    condition: "Good",
-    location: "Petaling Jaya, Malaysia",
-    listingStatus: "pending",
-    createdAt: "2026-03-27T16:30:00.000Z",
-  },
-];
+const follows: FollowRelation[] = [];
 
-const communities: CommunitySpace[] = [
-  {
-    id: "community-1",
-    ownerId: "user-1",
-    kind: "page",
-    name: "Layla Style Club",
-    description: "A fashion page for outfit drops, styling reels, and creator collabs.",
-    category: "Fashion",
-    coverImage:
-      "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1200&q=80",
-    visibility: "public",
-    memberIds: ["user-1", "user-2"],
-    createdAt: "2026-03-30T08:15:00.000Z",
-  },
-  {
-    id: "community-2",
-    ownerId: "user-2",
-    kind: "group",
-    name: "Creator Growth Circle",
-    description: "A private group for growth experiments, monetization ideas, and review swaps.",
-    category: "Business",
-    coverImage:
-      "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80",
-    visibility: "private",
-    memberIds: ["user-2", "user-1"],
-    createdAt: "2026-03-29T14:40:00.000Z",
-  },
-  {
-    id: "community-3",
-    ownerId: "user-3",
-    kind: "channel",
-    name: "Template Drops Channel",
-    description: "A channel for template launches, workflow updates, and quick creator resources.",
-    category: "Productivity",
-    coverImage:
-      "https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=1200&q=80",
-    visibility: "public",
-    memberIds: ["user-3", "user-1"],
-    createdAt: "2026-03-28T11:20:00.000Z",
-  },
-];
+const products: Product[] = [];
 
-const communityPosts: CommunityPost[] = [
-  {
-    id: "community-post-1",
-    communityId: "community-1",
-    authorId: "user-1",
-    text: "New style drop this Friday. I am sharing three reel concepts and one shoppable look bundle here first.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1200&q=80",
-    createdAt: "2026-03-31T09:10:00.000Z",
-  },
-  {
-    id: "community-post-2",
-    communityId: "community-2",
-    authorId: "user-2",
-    text: "Drop your worst-performing reel from this week and I will help everyone rewrite the first three seconds.",
-    createdAt: "2026-03-31T07:30:00.000Z",
-  },
-  {
-    id: "community-post-3",
-    communityId: "community-3",
-    authorId: "user-3",
-    text: "Template drop: a new creator workflow pack is live in the channel today.",
-    createdAt: "2026-03-31T06:15:00.000Z",
-  },
-];
+const communities: CommunitySpace[] = [];
 
-const communityChatMessages: CommunityChatMessage[] = [
-  {
-    id: "community-chat-1",
-    communityId: "community-2",
-    senderId: "user-2",
-    text: "Welcome to the group chat. Drop your reel link and the retention graph if you have it.",
-    createdAt: "2026-03-31T08:00:00.000Z",
-    deliveredToUserIds: ["user-2", "user-1"],
-    seenByUserIds: ["user-2", "user-1"],
-  },
-  {
-    id: "community-chat-2",
-    communityId: "community-2",
-    senderId: "user-1",
-    text: "I am posting one later today. I want feedback on the hook and caption framing.",
-    createdAt: "2026-03-31T08:12:00.000Z",
-    deliveredToUserIds: ["user-1", "user-2"],
-    seenByUserIds: ["user-1"],
-  },
-];
+const communityPosts: CommunityPost[] = [];
 
-const directThreads: DirectChatThread[] = [
-  {
-    id: "direct-thread-1",
-    participantIds: ["user-1", "user-2"],
-    createdAt: "2026-03-31T04:10:00.000Z",
-    updatedAt: "2026-03-31T04:26:00.000Z",
-    lastMessagePreview: "Yes, send it over and I will review the hook.",
-    lastMessageAt: "2026-03-31T04:26:00.000Z",
-  },
-];
+const communityChatMessages: CommunityChatMessage[] = [];
 
-const directMessages: DirectChatMessage[] = [
-  {
-    id: "direct-message-1",
-    threadId: "direct-thread-1",
-    senderId: "user-2",
-    text: "You want to swap reel feedback tonight?",
-    createdAt: "2026-03-31T04:10:00.000Z",
-    deliveredToUserIds: ["user-2", "user-1"],
-    seenByUserIds: ["user-2", "user-1"],
-  },
-  {
-    id: "direct-message-2",
-    threadId: "direct-thread-1",
-    senderId: "user-1",
-    text: "Yes, send it over and I will review the hook.",
-    createdAt: "2026-03-31T04:26:00.000Z",
-    deliveredToUserIds: ["user-1", "user-2"],
-    seenByUserIds: ["user-1"],
-  },
-];
+const directThreads: DirectChatThread[] = [];
 
-const marketplaceThreads: MarketplaceChatThread[] = [
-  {
-    id: "thread-1",
-    productId: "product-2",
-    buyerId: "user-1",
-    sellerId: "user-2",
-    createdAt: "2026-03-31T02:20:00.000Z",
-    updatedAt: "2026-03-31T03:05:00.000Z",
-    lastMessagePreview: "Yes, pickup after 7PM works for me.",
-    lastMessageAt: "2026-03-31T03:05:00.000Z",
-  },
-];
+const directMessages: DirectChatMessage[] = [];
 
-const marketplaceMessages: MarketplaceChatMessage[] = [
-  {
-    id: "message-1",
-    threadId: "thread-1",
-    senderId: "user-1",
-    text: "Hi, is this standing desk still available?",
-    createdAt: "2026-03-31T02:20:00.000Z",
-    deliveredToUserIds: ["user-1", "user-2"],
-    seenByUserIds: ["user-1", "user-2"],
-  },
-  {
-    id: "message-2",
-    threadId: "thread-1",
-    senderId: "user-2",
-    text: "Yes, pickup after 7PM works for me.",
-    createdAt: "2026-03-31T03:05:00.000Z",
-    deliveredToUserIds: ["user-2", "user-1"],
-    seenByUserIds: ["user-2"],
-  },
-];
+const marketplaceThreads: MarketplaceChatThread[] = [];
 
-const marketplaceOrders: MarketplaceOrder[] = [
-  {
-    id: "order-1",
-    productId: "product-2",
-    buyerId: "user-1",
-    sellerId: "user-2",
-    amountUsd: 180,
-    deliveryMethod: "pickup",
-    paymentMethod: "cash",
-    buyerNote: "I can collect it tonight after 7PM.",
-    status: "placed",
-    createdAt: "2026-03-31T03:10:00.000Z",
-  },
-];
+const marketplaceMessages: MarketplaceChatMessage[] = [];
 
-const subscriptions: Subscription[] = [
-  {
-    id: "subscription-1",
-    userId: "user-1",
-    planType: "yearly",
-    status: "active",
-    stripeCustomerId: "cus_demo_layla",
-    startedAt: "2026-03-01T00:00:00.000Z",
-    endsAt: "2027-03-01T00:00:00.000Z",
-  },
-];
+const marketplaceOrders: MarketplaceOrder[] = [];
 
-const savedPosts: SavedPost[] = [
-  {
-    id: "saved-1",
-    userId: "user-1",
-    entityType: "product",
-    entityId: "product-2",
-    createdAt: "2026-03-29T18:20:00.000Z",
-  },
-  {
-    id: "saved-2",
-    userId: "user-1",
-    entityType: "reel",
-    entityId: "reel-2",
-    createdAt: "2026-03-29T18:10:00.000Z",
-  },
-];
+const subscriptions: Subscription[] = [];
 
-const notifications: Notification[] = [
-  {
-    id: "notification-1",
-    userId: "user-1",
-    type: "follow",
-    title: "New follower",
-    body: "Omar Kassim started following you.",
-    actorId: "user-2",
-    createdAt: "2026-03-29T18:25:00.000Z",
-  },
-  {
-    id: "notification-2",
-    userId: "user-1",
-    type: "comment",
-    title: "New comment",
-    body: "Omar Kassim commented on your reel.",
-    actorId: "user-2",
-    entityType: "reel",
-    entityId: "reel-1",
-    createdAt: "2026-03-29T18:15:00.000Z",
-    readAt: "2026-03-29T18:30:00.000Z",
-  },
-  {
-    id: "notification-3",
-    userId: "user-1",
-    type: "message",
-    title: "New marketplace message",
-    body: "Omar Kassim replied about the standing desk setup.",
-    actorId: "user-2",
-    entityType: "product",
-    entityId: "product-2",
-    conversationId: "thread-1",
-    conversationType: "marketplace",
-    createdAt: "2026-03-31T03:05:00.000Z",
-  },
-  {
-    id: "notification-4",
-    userId: "user-1",
-    type: "message",
-    title: "New direct message",
-    body: "Omar Kassim sent you a direct message.",
-    actorId: "user-2",
-    conversationId: "direct-thread-1",
-    conversationType: "direct",
-    createdAt: "2026-03-31T04:26:00.000Z",
-  },
-];
+const savedPosts: SavedPost[] = [];
+
+const notifications: Notification[] = [];
 
 const reelBoostPlans: Record<
   ReelBoostPlanId,
@@ -464,23 +102,7 @@ const reelBoostPlans: Record<
   },
 };
 
-const reelBoosts: ReelBoostCampaign[] = [
-  {
-    id: "boost-1",
-    reelId: "reel-2",
-    userId: "user-2",
-    planId: "growth",
-    planTitle: "Growth Burst",
-    amountUsd: 15,
-    estimatedViews: 4800,
-    estimatedReach: 18000,
-    status: "active",
-    startedAt: "2026-03-30T01:15:00.000Z",
-    endsAt: "2026-04-04T01:15:00.000Z",
-    targetAudience: "Founders, creators, and small businesses interested in monetization content.",
-    note: "Boost is actively distributing this reel to adjacent business and creator-growth audiences.",
-  },
-];
+const reelBoosts: ReelBoostCampaign[] = [];
 
 export function listUsers() {
   return [...users];
@@ -530,9 +152,10 @@ export function createUser(input: {
     email: input.email.trim().toLowerCase(),
     passwordHash: "demo-hash",
     profileImage:
-      "https://images.unsplash.com/photo-1502685104226-ee32379fefbe?auto=format&fit=crop&w=400&q=80",
+      DEFAULT_PROFILE_IMAGE,
     bio: "New creator on ViraFlow.",
     headline: "Creator in progress",
+    website: "",
     language: input.language,
     createdAt: new Date().toISOString(),
   };
@@ -541,17 +164,61 @@ export function createUser(input: {
   return user;
 }
 
-export function updateUser(userId: string, input: Partial<Pick<User, "name" | "username" | "bio" | "headline" | "profileImage">>) {
+export function createExternalUser(input: {
+  id: string;
+  name: string;
+  username: string;
+  email: string;
+  language: LanguageOption;
+  profileImage?: string;
+}) {
+  const user: User = {
+    id: input.id,
+    name: input.name.trim() || "Sohba Creator",
+    username: input.username.trim().replace(/\s+/g, "").toLowerCase(),
+    email: input.email.trim().toLowerCase(),
+    passwordHash: "external-auth",
+    profileImage:
+      input.profileImage?.trim() ||
+      DEFAULT_PROFILE_IMAGE,
+    bio: "New creator on Sohba.",
+    headline: "Creator in progress",
+    website: "",
+    language: input.language,
+    createdAt: new Date().toISOString(),
+  };
+
+  users.unshift(user);
+  return user;
+}
+
+export function updateUser(
+  userId: string,
+  input: Partial<Pick<User, "name" | "username" | "bio" | "headline" | "website" | "profileImage">>
+) {
   const user = getUserById(userId);
   if (!user) {
     return undefined;
   }
 
-  user.name = input.name?.trim() || user.name;
-  user.username = input.username?.trim().replace(/\s+/g, "").toLowerCase() || user.username;
-  user.bio = input.bio?.trim() || user.bio;
-  user.headline = input.headline?.trim() || user.headline;
-  user.profileImage = input.profileImage?.trim() || user.profileImage;
+  user.name = input.name !== undefined ? input.name.trim() || user.name : user.name;
+  user.username =
+    input.username !== undefined ? input.username.trim().replace(/\s+/g, "").toLowerCase() || user.username : user.username;
+  user.bio = input.bio !== undefined ? input.bio.trim() : user.bio;
+  user.headline = input.headline !== undefined ? input.headline.trim() : user.headline;
+  user.website = input.website !== undefined ? input.website.trim() : user.website;
+  user.profileImage = input.profileImage !== undefined ? input.profileImage.trim() || user.profileImage : user.profileImage;
+  return user;
+}
+
+export function setUserBanStatus(userId: string, banned: boolean) {
+  const user = getUserById(userId);
+  if (!user) {
+    return undefined;
+  }
+
+  user.isBanned = banned;
+  user.bannedAt = banned ? new Date().toISOString() : undefined;
   return user;
 }
 
@@ -560,49 +227,140 @@ export function listReels() {
 }
 
 export function listStories() {
-  const now = Date.now();
   return stories
-    .filter((story) => new Date(story.expiresAt).getTime() > now)
+    .filter((story) => new Date(story.expiresAt).getTime() > Date.now() || Boolean(story.highlightedAt))
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 
-export function createStory(userId: string, input: { imageUrl: string; caption?: string }) {
+export function createStory(
+  userId: string,
+  input: {
+    imageUrl: string;
+    mediaType?: "image" | "video";
+    videoUrl?: string;
+    videoDurationSeconds?: number;
+    caption?: string;
+    saveToHighlights?: boolean;
+    highlightLabel?: string;
+  }
+) {
   const createdAt = new Date().toISOString();
   const story: Story = {
     id: `story-${Date.now()}`,
     userId,
     imageUrl: input.imageUrl.trim(),
+    mediaType: input.mediaType ?? (input.videoUrl?.trim() ? "video" : "image"),
+    videoUrl: input.videoUrl?.trim() || undefined,
+    videoDurationSeconds: input.videoDurationSeconds,
     caption: input.caption?.trim() || undefined,
     createdAt,
-    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    expiresAt: new Date(Date.now() + STORY_LIFETIME_MS).toISOString(),
+    viewerIds: [],
+    highlightedAt: input.saveToHighlights ? createdAt : undefined,
+    highlightLabel: input.saveToHighlights
+      ? input.highlightLabel?.trim() || input.caption?.trim() || "Highlight"
+      : undefined,
   };
 
   stories.unshift(story);
   return story;
 }
 
+export function markStoryViewed(storyId: string, viewerId: string) {
+  const targetStory = stories.find((story) => story.id === storyId);
+  if (!targetStory) {
+    return undefined;
+  }
+
+  if (targetStory.userId === viewerId || targetStory.viewerIds.includes(viewerId)) {
+    return targetStory;
+  }
+
+  targetStory.viewerIds = [...targetStory.viewerIds, viewerId];
+  return targetStory;
+}
+
+export function toggleStoryHighlight(
+  storyId: string,
+  userId: string,
+  input: { highlighted: boolean; highlightLabel?: string }
+) {
+  const targetStory = stories.find((story) => story.id === storyId && story.userId === userId);
+  if (!targetStory) {
+    return undefined;
+  }
+
+  targetStory.highlightedAt = input.highlighted ? new Date().toISOString() : undefined;
+  targetStory.highlightLabel = input.highlighted
+    ? input.highlightLabel?.trim() || targetStory.highlightLabel || targetStory.caption || "Highlight"
+    : undefined;
+  return targetStory;
+}
+
+export function deleteStory(storyId: string, userId: string, options: { allowAdmin?: boolean } = {}) {
+  const index = stories.findIndex((story) => story.id === storyId && (options.allowAdmin || story.userId === userId));
+  if (index < 0) {
+    return false;
+  }
+
+  stories.splice(index, 1);
+  return true;
+}
+
 export function getReelById(reelId: string) {
   return reels.find((reel) => reel.id === reelId);
 }
 
-export function createReel(userId: string, input: { videoUrl: string; caption: string; thumbnailUrl?: string }) {
+export function deleteReel(reelId: string, userId: string, options: { allowAdmin?: boolean } = {}) {
+  const index = reels.findIndex((reel) => reel.id === reelId && (options.allowAdmin || reel.userId === userId));
+  if (index < 0) {
+    return false;
+  }
+
+  reels.splice(index, 1);
+  removeItems(comments, (comment) => comment.reelId === reelId);
+  removeItems(savedPosts, (savedPost) => savedPost.entityType === "reel" && savedPost.entityId === reelId);
+  removeItems(notifications, (notification) => notification.entityType === "reel" && notification.entityId === reelId);
+  removeItems(reelBoosts, (boost) => boost.reelId === reelId);
+  return true;
+}
+
+export function createReel(userId: string, input: { videoUrl: string; caption: string; thumbnailUrl?: string; hashtags?: string[] }) {
+  const normalizedCaption = input.caption.trim();
   const reel: Reel = {
     id: `reel-${Date.now()}`,
     userId,
     videoUrl: input.videoUrl.trim(),
-    caption: input.caption.trim(),
+    caption: normalizedCaption,
     thumbnailUrl:
       input.thumbnailUrl?.trim() ||
-      "https://images.unsplash.com/photo-1524250502761-1ac6f2e30d43?auto=format&fit=crop&w=1000&q=80",
+      MEDIA_UNAVAILABLE_IMAGE,
+    tags: buildReelTags(normalizedCaption, input.hashtags),
     likedBy: [],
     repostCount: 0,
-    viewCount: 120,
-    reachCount: 520,
+    viewCount: 0,
+    reachCount: 0,
     createdAt: new Date().toISOString(),
   };
 
   reels.unshift(reel);
   return reel;
+}
+
+function buildReelTags(caption: string, hashtags: string[] = []) {
+  const normalizedHashtags = hashtags.map((tag) => tag.trim().replace(/^#+/, "").toLowerCase()).filter(Boolean);
+  const extracted = caption.match(/#[a-zA-Z0-9_]+/g)?.map((tag) => tag.replace("#", "").toLowerCase()) ?? [];
+  const merged = [...new Set([...normalizedHashtags, ...extracted])];
+  if (merged.length > 0) {
+    return merged.slice(0, 6);
+  }
+
+  const words = caption
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length >= 4);
+  return [...new Set(words)].slice(0, 4).length > 0 ? [...new Set(words)].slice(0, 4) : ["creator", "reel"];
 }
 
 export function toggleLike(userId: string, reelId: string) {
@@ -686,8 +444,6 @@ export function createReelBoost(userId: string, reelId: string, planId: ReelBoos
     note: "Your ad campaign is live and pushing this reel to more high-fit viewers now.",
   };
 
-  reel.viewCount += plan.estimatedViews;
-  reel.reachCount += plan.estimatedReach;
   reelBoosts.unshift(boost);
   createNotification({
     userId,
@@ -757,7 +513,7 @@ export function createProduct(userId: string, input: {
   const firstImage =
     input.imageUrls?.[0]?.trim() ||
     input.imageUrl?.trim() ||
-    "https://images.unsplash.com/photo-1520607162513-77705c0f0d4a?auto=format&fit=crop&w=900&q=80";
+    MEDIA_UNAVAILABLE_IMAGE;
   const product: Product = {
     id: `product-${Date.now()}`,
     userId,
@@ -768,13 +524,25 @@ export function createProduct(userId: string, input: {
     imageUrls: input.imageUrls?.map((item) => item.trim()).filter(Boolean) ?? [firstImage],
     category: input.category?.trim() || "Home Goods",
     condition: input.condition || "Good",
-    location: input.location?.trim() || "Kuala Lumpur, Malaysia",
+    location: input.location?.trim() || "",
     listingStatus: "available",
     createdAt: new Date().toISOString(),
   };
 
   products.unshift(product);
   return product;
+}
+
+export function deleteProduct(productId: string, userId: string, options: { allowAdmin?: boolean } = {}) {
+  const product = getProductById(productId);
+  if (!product || (!options.allowAdmin && product.userId !== userId)) {
+    return false;
+  }
+
+  removeItems(products, (item) => item.id === productId);
+  removeItems(savedPosts, (savedPost) => savedPost.entityType === "product" && savedPost.entityId === productId);
+  removeItems(notifications, (notification) => notification.entityType === "product" && notification.entityId === productId);
+  return true;
 }
 
 export function listCommunities() {
@@ -865,6 +633,16 @@ export function addCommunityPost(
 
   communityPosts.unshift(post);
   return post;
+}
+
+export function deleteCommunityPost(communityId: string, postId: string, userId: string) {
+  const post = communityPosts.find((item) => item.id === postId && item.communityId === communityId);
+  if (!post || post.authorId !== userId) {
+    return false;
+  }
+
+  removeItems(communityPosts, (item) => item.id === postId && item.communityId === communityId);
+  return true;
 }
 
 export function addCommunityChatMessage(userId: string, communityId: string, text: string) {
@@ -1233,7 +1011,17 @@ export function createOrGetDirectThread(userId: string, targetUserId: string) {
   return thread;
 }
 
-export function addDirectMessage(userId: string, threadId: string, text: string) {
+export function addDirectMessage(
+  userId: string,
+  threadId: string,
+  payload: {
+    text?: string;
+    mediaType?: DirectChatMessage["mediaType"];
+    mediaUrl?: string;
+    thumbnailUrl?: string;
+    durationSeconds?: number;
+  }
+) {
   const thread = getDirectThreadById(threadId);
   if (!thread || !thread.participantIds.includes(userId)) {
     return undefined;
@@ -1244,12 +1032,21 @@ export function addDirectMessage(userId: string, threadId: string, text: string)
     return undefined;
   }
 
+  const normalizedText = payload.text?.trim() ?? "";
+  if (!normalizedText && !payload.mediaUrl?.trim()) {
+    return undefined;
+  }
+
   const createdAt = new Date().toISOString();
   const message: DirectChatMessage = {
     id: `direct-message-${Date.now()}`,
     threadId,
     senderId: userId,
-    text: text.trim(),
+    text: normalizedText,
+    mediaType: payload.mediaType,
+    mediaUrl: payload.mediaUrl?.trim() || undefined,
+    thumbnailUrl: payload.thumbnailUrl?.trim() || undefined,
+    durationSeconds: payload.durationSeconds,
     createdAt,
     deliveredToUserIds: [userId],
     seenByUserIds: [userId],
@@ -1258,7 +1055,7 @@ export function addDirectMessage(userId: string, threadId: string, text: string)
   directMessages.push(message);
   thread.updatedAt = createdAt;
   thread.lastMessageAt = createdAt;
-  thread.lastMessagePreview = message.text.slice(0, 120);
+  thread.lastMessagePreview = buildDirectMessagePreview(message);
 
   createNotification({
     userId: counterpartId,
@@ -1331,6 +1128,22 @@ export function markDirectThreadDelivered(userId: string, threadId: string) {
   };
 }
 
+function buildDirectMessagePreview(message: DirectChatMessage) {
+  if (message.text.trim()) {
+    return message.text.slice(0, 120);
+  }
+
+  if (message.mediaType === "video") {
+    return "Sent a video";
+  }
+
+  if (message.mediaType === "image") {
+    return "Sent a photo";
+  }
+
+  return "Conversation updated";
+}
+
 export function listSavedPostsByUser(userId: string) {
   return savedPosts
     .filter((item) => item.userId === userId)
@@ -1375,6 +1188,23 @@ export function markAllNotificationsRead(userId: string) {
   });
 
   return listNotificationsByUser(userId);
+}
+
+export function markNotificationRead(userId: string, notificationId: string) {
+  const notification = notifications.find((item) => item.id === notificationId && item.userId === userId);
+  if (!notification) {
+    return undefined;
+  }
+
+  if (!notification.readAt) {
+    notification.readAt = new Date().toISOString();
+  }
+
+  return notification;
+}
+
+export function setNotificationCreatedListener(listener: ((notification: Notification) => void) | null) {
+  notificationCreatedListener = listener;
 }
 
 export function toggleFollow(followerId: string, followingId: string) {
@@ -1467,9 +1297,18 @@ function createNotification(input: {
   };
 
   notifications.unshift(notification);
+  notificationCreatedListener?.(notification);
   return notification;
 }
 
 function addUniqueId(list: string[], value: string) {
   return list.includes(value) ? list : [value, ...list];
+}
+
+function removeItems<T>(list: T[], predicate: (item: T) => boolean) {
+  for (let index = list.length - 1; index >= 0; index -= 1) {
+    if (predicate(list[index])) {
+      list.splice(index, 1);
+    }
+  }
 }

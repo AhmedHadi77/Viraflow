@@ -1,16 +1,31 @@
 import {
   createUserWithEmailAndPassword,
+  GoogleAuthProvider,
   signInWithEmailAndPassword,
+  signInWithCredential,
   signOut,
   updateProfile as updateFirebaseAuthProfile,
 } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import Constants, { AppOwnership } from "expo-constants";
+import { collection, doc, getDoc, getDocs, limit, query, setDoc, where } from "firebase/firestore";
 import { getFirebaseClientAuth, getFirebaseClientFirestore, isFirebaseClientConfigured } from "./firebaseClient";
-import { LanguageOption, PlanType, RegisterPayload, UpdateProfilePayload, User } from "../types/models";
+import { getPublicEnv } from "./publicEnv";
+import { isLanguageOption, LanguageOption, PlanType, RegisterPayload, UpdateProfilePayload, User, UserRole } from "../types/models";
+import {
+  getUsernameValidationMessage,
+  getWebsiteValidationMessage,
+  normalizeUsernameInput,
+  normalizeWebsiteInput,
+} from "../utils/profileValidation";
+import { DEFAULT_PROFILE_IMAGE } from "../data/defaultMedia";
 
 const USERS_COLLECTION = "users";
-const DEFAULT_PROFILE_IMAGE =
-  "https://images.unsplash.com/photo-1502685104226-ee32379fefbe?auto=format&fit=crop&w=400&q=80";
+const GOOGLE_WEB_CLIENT_ID = getPublicEnv("EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID");
+const GOOGLE_ANDROID_CLIENT_ID = getPublicEnv("EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID");
+let googleSignInConfigured = false;
+let cachedGoogleSigninModule: GoogleSigninModule | null | undefined;
+
+type GoogleSigninModule = typeof import("@react-native-google-signin/google-signin").GoogleSignin;
 
 interface FirestoreUserProfile {
   id: string;
@@ -20,7 +35,9 @@ interface FirestoreUserProfile {
   profileImage: string;
   bio: string;
   headline: string;
+  website: string;
   language: LanguageOption;
+  region?: string;
   planType: PlanType;
   followers: string[];
   following: string[];
@@ -28,6 +45,9 @@ interface FirestoreUserProfile {
   productIds: string[];
   createdAt: string;
   updatedAt: string;
+  role?: UserRole;
+  isBanned?: boolean;
+  bannedAt?: string;
 }
 
 export interface FirebaseProfileSession {
@@ -39,6 +59,34 @@ export function isFirebaseProfilesConfigured() {
   return isFirebaseClientConfigured();
 }
 
+export function isGoogleSignInConfigured() {
+  return getGoogleSignInUnavailableMessage() === null;
+}
+
+export function getGoogleSignInUnavailableMessage() {
+  if (!isFirebaseProfilesConfigured()) {
+    return "Firebase Auth is not configured in this app yet.";
+  }
+
+  if (!GOOGLE_WEB_CLIENT_ID) {
+    return "Google sign-in still needs EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in the app config.";
+  }
+
+  if (!GOOGLE_ANDROID_CLIENT_ID) {
+    return "Google sign-in still needs the Android OAuth client. Add the app SHA-1 in Firebase, then download a fresh google-services.json.";
+  }
+
+  if (!isGoogleNativeEnvironmentSupported()) {
+    return "Google sign-in works in the installed Android app or development build, not inside Expo Go.";
+  }
+
+  if (!getGoogleSigninModule()) {
+    return "Google sign-in is unavailable in this build right now. Email and password will still work.";
+  }
+
+  return null;
+}
+
 export async function registerWithFirebaseProfile(
   payload: RegisterPayload,
   language: LanguageOption | null
@@ -47,6 +95,11 @@ export async function registerWithFirebaseProfile(
   const db = getRequiredFirestore();
   const email = payload.email.trim().toLowerCase();
   const username = normalizeUsername(payload.username);
+  const usernameValidationMessage = getUsernameValidationMessage(username);
+  if (usernameValidationMessage) {
+    throw new Error(usernameValidationMessage);
+  }
+  await assertUsernameAvailable(db, username);
   const now = new Date().toISOString();
 
   const credential = await createUserWithEmailAndPassword(auth, email, payload.password);
@@ -63,8 +116,9 @@ export async function registerWithFirebaseProfile(
     username,
     email,
     profileImage: DEFAULT_PROFILE_IMAGE,
-    bio: "New creator on Pulseora.",
+    bio: "New creator on Sohba.",
     headline: "Creator in progress",
+    website: "",
     language: language ?? "en",
     planType: "free",
     followers: [],
@@ -88,31 +142,38 @@ export async function loginWithFirebaseProfile(email: string, password: string):
   const auth = getRequiredFirebaseAuth();
   const db = getRequiredFirestore();
   const credential = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
-  const profileRef = doc(db, USERS_COLLECTION, credential.user.uid);
-  const snapshot = await getDoc(profileRef);
-  let profile: FirestoreUserProfile;
+  return buildFirebaseProfileSession(credential.user, db, languageOrDefault(null, email.trim().toLowerCase()));
+}
 
-  if (snapshot.exists()) {
-    profile = normalizeFirestoreProfile({
-      id: credential.user.uid,
-      ...snapshot.data(),
-    });
-  } else {
-    profile = buildFallbackProfile({
-      id: credential.user.uid,
-      email: credential.user.email ?? email.trim().toLowerCase(),
-      name: credential.user.displayName ?? "Pulseora Creator",
-      profileImage: credential.user.photoURL ?? DEFAULT_PROFILE_IMAGE,
-    });
-    await setDoc(profileRef, profile, { merge: true });
+export async function continueWithFirebaseGoogleProfile(language: LanguageOption | null): Promise<FirebaseProfileSession> {
+  const unavailableMessage = getGoogleSignInUnavailableMessage();
+  if (unavailableMessage) {
+    throw new Error(unavailableMessage);
   }
 
-  const token = await credential.user.getIdToken();
+  const GoogleSignin = getRequiredGoogleSignin();
+  ensureGoogleSignInConfigured(GoogleSignin);
+  const auth = getRequiredFirebaseAuth();
+  const db = getRequiredFirestore();
 
-  return {
-    token,
-    user: mapFirestoreProfileToUser(profile),
+  await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+
+  const googleResult = (await GoogleSignin.signIn()) as {
+    idToken?: string | null;
+    data?: {
+      idToken?: string | null;
+    };
   };
+  const idToken = googleResult.idToken ?? googleResult.data?.idToken;
+
+  if (!idToken) {
+    throw new Error("Google sign-in did not return an ID token.");
+  }
+
+  const credential = GoogleAuthProvider.credential(idToken);
+  const firebaseCredential = await signInWithCredential(auth, credential);
+
+  return buildFirebaseProfileSession(firebaseCredential.user, db, languageOrDefault(language, firebaseCredential.user.email ?? ""));
 }
 
 export async function getFirebaseProfileById(userId: string) {
@@ -157,6 +218,17 @@ export async function getCurrentFirebaseIdToken(forceRefresh = true) {
 export async function updateFirebaseUserProfile(userId: string, payload: UpdateProfilePayload): Promise<User> {
   const db = getRequiredFirestore();
   const auth = getRequiredFirebaseAuth();
+  const normalizedUsername = normalizeUsername(payload.username);
+  const usernameValidationMessage = getUsernameValidationMessage(normalizedUsername);
+  if (usernameValidationMessage) {
+    throw new Error(usernameValidationMessage);
+  }
+
+  const websiteValidationMessage = getWebsiteValidationMessage(payload.website);
+  if (websiteValidationMessage) {
+    throw new Error(websiteValidationMessage);
+  }
+
   const profileRef = doc(db, USERS_COLLECTION, userId);
   const snapshot = await getDoc(profileRef);
   const existing = snapshot.exists()
@@ -166,17 +238,22 @@ export async function updateFirebaseUserProfile(userId: string, payload: UpdateP
       })
     : buildFallbackProfile({
         id: userId,
-        email: auth.currentUser?.email ?? `${normalizeUsername(payload.username)}@pulseora.app`,
+        email: auth.currentUser?.email ?? `${normalizedUsername}@pulseora.app`,
         name: payload.name,
         profileImage: payload.profileImage,
       });
 
+  if (existing.username !== normalizedUsername) {
+    await assertUsernameAvailable(db, normalizedUsername, userId);
+  }
+
   const nextProfile: FirestoreUserProfile = {
     ...existing,
     name: payload.name.trim(),
-    username: normalizeUsername(payload.username),
+    username: normalizedUsername,
     bio: payload.bio.trim(),
     headline: payload.headline.trim(),
+    website: normalizeWebsiteInput(payload.website),
     profileImage: payload.profileImage.trim() || existing.profileImage,
     updatedAt: new Date().toISOString(),
   };
@@ -195,6 +272,54 @@ export async function updateFirebaseUserProfile(userId: string, payload: UpdateP
   return mapFirestoreProfileToUser(nextProfile);
 }
 
+/** Saves the language and region the user picked in Settings to their profile document. */
+export async function updateFirebaseUserPreferences(
+  userId: string,
+  preferences: { language?: LanguageOption; region?: string }
+) {
+  const db = getRequiredFirestore();
+  const update: Record<string, string> = { updatedAt: new Date().toISOString() };
+  if (preferences.language && isLanguageOption(preferences.language)) {
+    update.language = preferences.language;
+  }
+  if (preferences.region) {
+    update.region = preferences.region.toUpperCase();
+  }
+  await setDoc(doc(db, USERS_COLLECTION, userId), update, { merge: true });
+}
+
+export async function setFirebaseUserBanStatus(userId: string, banned: boolean): Promise<User> {
+  const db = getRequiredFirestore();
+  const profileRef = doc(db, USERS_COLLECTION, userId);
+  const snapshot = await getDoc(profileRef);
+  if (!snapshot.exists()) {
+    throw new Error("User not found.");
+  }
+
+  const existing = normalizeFirestoreProfile({
+    id: userId,
+    ...snapshot.data(),
+  });
+  const nextProfile: FirestoreUserProfile = {
+    ...existing,
+    isBanned: banned,
+    bannedAt: banned ? new Date().toISOString() : undefined,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await setDoc(
+    profileRef,
+    {
+      isBanned: nextProfile.isBanned,
+      bannedAt: nextProfile.bannedAt ?? null,
+      updatedAt: nextProfile.updatedAt,
+    },
+    { merge: true }
+  );
+
+  return mapFirestoreProfileToUser(nextProfile);
+}
+
 export async function logoutFromFirebaseProfile() {
   const auth = getFirebaseClientAuth();
   if (!auth) {
@@ -202,6 +327,10 @@ export async function logoutFromFirebaseProfile() {
   }
 
   await signOut(auth);
+  const GoogleSignin = getGoogleSigninModule();
+  if (GoogleSignin && isGoogleSignInConfigured()) {
+    await GoogleSignin.signOut().catch(() => undefined);
+  }
 }
 
 export function getFirebaseProfileErrorMessage(error: unknown) {
@@ -221,6 +350,18 @@ export function getFirebaseProfileErrorMessage(error: unknown) {
 
   if (code === "auth/invalid-email") {
     return "Enter a valid email address.";
+  }
+
+  if (code === "auth/account-exists-with-different-credential") {
+    return "This email already uses another sign-in method. Sign in with your password first, then connect Google later.";
+  }
+
+  if (code === "SIGN_IN_CANCELLED" || code === "12501") {
+    return "Google sign-in was cancelled.";
+  }
+
+  if (code === "PLAY_SERVICES_NOT_AVAILABLE") {
+    return "Google Play Services is required for Google sign-in on this device.";
   }
 
   if (error instanceof Error) {
@@ -248,19 +389,107 @@ function getRequiredFirestore() {
   return db;
 }
 
-function buildFallbackProfile(input: { id: string; email: string; name: string; profileImage?: string }): FirestoreUserProfile {
+async function buildFirebaseProfileSession(
+  authUser: { uid: string; email: string | null; displayName: string | null; photoURL: string | null; getIdToken: () => Promise<string> },
+  db: ReturnType<typeof getRequiredFirestore>,
+  language: LanguageOption
+): Promise<FirebaseProfileSession> {
+  const profileRef = doc(db, USERS_COLLECTION, authUser.uid);
+  const snapshot = await getDoc(profileRef);
+  let profile: FirestoreUserProfile;
+
+  if (snapshot.exists()) {
+    profile = normalizeFirestoreProfile({
+      id: authUser.uid,
+      ...snapshot.data(),
+    });
+  } else {
+    const fallbackUsername = await buildAvailableUsername(
+      db,
+      authUser.email ?? authUser.displayName ?? authUser.uid,
+      authUser.uid
+    );
+    profile = buildFallbackProfile({
+      id: authUser.uid,
+      email: authUser.email ?? `${authUser.uid}@pulseora.app`,
+      name: authUser.displayName ?? "Sohba Creator",
+      profileImage: authUser.photoURL ?? DEFAULT_PROFILE_IMAGE,
+      language,
+      username: fallbackUsername,
+    });
+    await setDoc(profileRef, profile, { merge: true });
+  }
+
+  const token = await authUser.getIdToken();
+
+  return {
+    token,
+    user: mapFirestoreProfileToUser(profile),
+  };
+}
+
+function ensureGoogleSignInConfigured(GoogleSignin: GoogleSigninModule) {
+  if (googleSignInConfigured) {
+    return;
+  }
+
+  GoogleSignin.configure({
+    webClientId: GOOGLE_WEB_CLIENT_ID,
+    offlineAccess: false,
+    profileImageSize: 160,
+  });
+  googleSignInConfigured = true;
+}
+
+function getGoogleSigninModule() {
+  if (cachedGoogleSigninModule !== undefined) {
+    return cachedGoogleSigninModule;
+  }
+
+  try {
+    cachedGoogleSigninModule = require("@react-native-google-signin/google-signin").GoogleSignin as GoogleSigninModule;
+  } catch (error) {
+    console.warn("Sohba Google sign-in module is unavailable in this build.", error);
+    cachedGoogleSigninModule = null;
+  }
+
+  return cachedGoogleSigninModule;
+}
+
+function getRequiredGoogleSignin() {
+  const GoogleSignin = getGoogleSigninModule();
+  if (!GoogleSignin) {
+    throw new Error("Google sign-in is unavailable in this build right now. Email and password will still work.");
+  }
+
+  return GoogleSignin;
+}
+
+function isGoogleNativeEnvironmentSupported() {
+  return Constants.appOwnership !== AppOwnership.Expo;
+}
+
+function buildFallbackProfile(input: {
+  id: string;
+  email: string;
+  name: string;
+  profileImage?: string;
+  language?: LanguageOption;
+  username?: string;
+}): FirestoreUserProfile {
   const now = new Date().toISOString();
   const usernameSeed = input.email.split("@")[0] || input.name || "creator";
 
   return {
     id: input.id,
-    name: input.name.trim() || "Pulseora Creator",
-    username: normalizeUsername(usernameSeed),
+    name: input.name.trim() || "Sohba Creator",
+    username: normalizeUsername(input.username || usernameSeed),
     email: input.email.trim().toLowerCase(),
     profileImage: input.profileImage?.trim() || DEFAULT_PROFILE_IMAGE,
-    bio: "New creator on Pulseora.",
+    bio: "New creator on Sohba.",
     headline: "Creator in progress",
-    language: "en",
+    website: "",
+    language: input.language ?? "en",
     planType: "free",
     followers: [],
     following: [],
@@ -268,14 +497,20 @@ function buildFallbackProfile(input: { id: string; email: string; name: string; 
     productIds: [],
     createdAt: now,
     updatedAt: now,
+    role: "user",
+    isBanned: false,
   };
+}
+
+function languageOrDefault(language: LanguageOption | null, email: string) {
+  return language ?? "en";
 }
 
 function normalizeFirestoreProfile(raw: Partial<FirestoreUserProfile> & { id: string }): FirestoreUserProfile {
   const fallback = buildFallbackProfile({
     id: raw.id,
     email: raw.email || `${raw.username || raw.id}@pulseora.app`,
-    name: raw.name || "Pulseora Creator",
+    name: raw.name || "Sohba Creator",
     profileImage: raw.profileImage,
   });
 
@@ -288,7 +523,9 @@ function normalizeFirestoreProfile(raw: Partial<FirestoreUserProfile> & { id: st
     profileImage: raw.profileImage?.trim() || fallback.profileImage,
     bio: raw.bio?.trim() ?? fallback.bio,
     headline: raw.headline?.trim() ?? fallback.headline,
+    website: normalizeWebsiteInput(raw.website ?? fallback.website),
     language: normalizeLanguage(raw.language, fallback.language),
+    region: typeof raw.region === "string" && raw.region ? raw.region.toUpperCase() : undefined,
     planType: normalizePlan(raw.planType),
     followers: Array.isArray(raw.followers) ? raw.followers : [],
     following: Array.isArray(raw.following) ? raw.following : [],
@@ -296,6 +533,9 @@ function normalizeFirestoreProfile(raw: Partial<FirestoreUserProfile> & { id: st
     productIds: Array.isArray(raw.productIds) ? raw.productIds : [],
     createdAt: raw.createdAt || fallback.createdAt,
     updatedAt: raw.updatedAt || fallback.updatedAt,
+    role: raw.role === "admin" ? "admin" : "user",
+    isBanned: Boolean(raw.isBanned),
+    bannedAt: typeof raw.bannedAt === "string" ? raw.bannedAt : undefined,
   };
 }
 
@@ -308,21 +548,66 @@ function mapFirestoreProfileToUser(profile: FirestoreUserProfile): User {
     profileImage: profile.profileImage,
     bio: profile.bio,
     headline: profile.headline,
+    website: profile.website,
     language: profile.language,
+    region: profile.region,
     planType: profile.planType,
     followers: profile.followers,
     following: profile.following,
     reelIds: profile.reelIds,
     productIds: profile.productIds,
+    role: profile.role,
+    isBanned: profile.isBanned,
+    bannedAt: profile.bannedAt,
   };
 }
 
 function normalizeUsername(username: string) {
-  return username.trim().replace(/\s+/g, "").replace(/^@+/, "").toLowerCase() || `creator${Date.now()}`;
+  return normalizeUsernameInput(username) || `creator${Date.now()}`;
+}
+
+async function assertUsernameAvailable(
+  db: ReturnType<typeof getRequiredFirestore>,
+  username: string,
+  currentUserId?: string
+) {
+  const snapshot = await getDocs(query(collection(db, USERS_COLLECTION), where("username", "==", username), limit(1)));
+  const existing = snapshot.docs[0];
+
+  if (existing && existing.id !== currentUserId) {
+    throw new Error("That username is already taken.");
+  }
+}
+
+async function buildAvailableUsername(
+  db: ReturnType<typeof getRequiredFirestore>,
+  seed: string,
+  currentUserId?: string
+) {
+  const sanitizedSeed = normalizeUsername(seed)
+    .replace(/[^a-z0-9._]/g, "")
+    .replace(/^[._]+|[._]+$/g, "")
+    .replace(/[._]{2,}/g, "_");
+  const base = (sanitizedSeed || `creator${Date.now()}`).slice(0, 20);
+  let attempt = base;
+  let suffix = 0;
+
+  while (true) {
+    const snapshot = await getDocs(query(collection(db, USERS_COLLECTION), where("username", "==", attempt), limit(1)));
+    const existing = snapshot.docs[0];
+    if (!existing || existing.id === currentUserId) {
+      return attempt;
+    }
+
+    suffix += 1;
+    const suffixLabel = String(suffix);
+    const stemLength = Math.max(3, 20 - suffixLabel.length);
+    attempt = `${base.slice(0, stemLength)}${suffixLabel}`;
+  }
 }
 
 function normalizeLanguage(language: LanguageOption | undefined, fallback: LanguageOption): LanguageOption {
-  if (language === "en" || language === "ar" || language === "fr" || language === "es") {
+  if (isLanguageOption(language)) {
     return language;
   }
 

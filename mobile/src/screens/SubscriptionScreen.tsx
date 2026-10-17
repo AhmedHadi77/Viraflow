@@ -1,13 +1,14 @@
 import { LinearGradient } from "expo-linear-gradient";
+import { formatDateTime } from "../utils/timeFormatting";
 import { useEffect, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, Text, View } from "react-native";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { SectionTitle } from "../components/SectionTitle";
 import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
 import { PlanType } from "../types/models";
-import { palette, radii, spacing } from "../theme";
+import { palette, radii, spacing, createThemedStyles } from "../theme";
 
 export function SubscriptionScreen() {
   const { activeSubscription, language, plans, subscribeToPlan } = useAppState();
@@ -24,16 +25,16 @@ export function SubscriptionScreen() {
     const result = await subscribeToPlan(selected);
 
     if (!result.ok) {
-      Alert.alert("Subscription unavailable", result.message ?? "This plan could not be activated right now.");
+      Alert.alert(copy.checkoutUnavailableTitle, result.message ?? copy.checkoutUnavailableTitle);
       return;
     }
 
     Alert.alert(
-      result.subscription ? "Premium activated" : "Checkout opened",
+      result.subscription ? copy.premiumActivatedTitle : copy.checkoutOpenedTitle,
       result.message ??
         (result.subscription
-          ? `${selected} plan is now active on your Pulseora account.`
-          : `Secure Stripe checkout opened for the ${selected} plan.`)
+          ? `${selected} ${copy.subscription.toLowerCase()} ${copy.live.toLowerCase()}.`
+          : `${copy.checkoutOpenedTitle} - ${selected}`)
     );
   }
 
@@ -65,24 +66,18 @@ export function SubscriptionScreen() {
         })}
       </View>
       <View style={styles.statusCard}>
-        <Text style={styles.statusLabel}>Current subscription</Text>
+        <Text style={styles.statusLabel}>{copy.currentSubscription}</Text>
         <Text style={styles.statusTitle}>
-          {activeSubscription?.status === "active" ? `${activeSubscription.planType} plan active` : "Free plan"}
+          {activeSubscription?.status === "active" ? `${activeSubscription.planType} ${copy.live.toLowerCase()}` : copy.freePlan}
         </Text>
         <Text style={styles.statusBody}>
           {activeSubscription?.status === "active" && activeSubscription.endsAt
-            ? `Premium access is active until ${new Date(activeSubscription.endsAt).toLocaleString()}.`
-            : "Upgrade to unlock premium AI tools, advanced exports, and subscriber-only growth features."}
-        </Text>
-      </View>
-      <View style={styles.exportCard}>
-        <Text style={styles.exportTitle}>Pay per export</Text>
-        <Text style={styles.exportBody}>
-          Need a one-off render instead of a plan? Pulseora can also charge per premium export so creators can buy only the final assets they want.
+            ? `${copy.premiumActiveUntil} ${formatDateTime(activeSubscription.endsAt)}.`
+            : copy.premiumUpgradeBody}
         </Text>
       </View>
       <PrimaryButton
-        label={activeSubscription?.status === "active" && activeSubscription.planType === selected ? "Current plan active" : `Activate ${selected} plan`}
+        label={activeSubscription?.status === "active" && activeSubscription.planType === selected ? copy.currentPlanActive : `${copy.activatePlan} ${selected}`}
         onPress={() => {
           void handleUpgrade();
         }}
@@ -92,7 +87,7 @@ export function SubscriptionScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
   hero: {
     borderColor: palette.borderStrong,
     borderRadius: radii.xl,

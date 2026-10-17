@@ -1,5 +1,5 @@
-import { Pressable, StyleSheet, Text } from "react-native";
-import { palette, radii, shadows, spacing } from "../theme";
+import { Pressable, Text } from "react-native";
+import { palette, radii, shadows, spacing, createThemedStyles } from "../theme";
 
 interface PrimaryButtonProps {
   label: string;
@@ -30,7 +30,7 @@ export function PrimaryButton({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
   base: {
     alignItems: "center",
     borderRadius: radii.lg,

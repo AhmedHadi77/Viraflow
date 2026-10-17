@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { formatDate, formatDateTime } from "../utils/timeFormatting";
+import { Alert, Image, Keyboard, Pressable, Text, View } from "react-native";
 import { InputField } from "../components/InputField";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { ReelCard } from "../components/ReelCard";
@@ -7,7 +8,9 @@ import { Screen } from "../components/Screen";
 import { SectionTitle } from "../components/SectionTitle";
 import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
-import { palette, radii, spacing } from "../theme";
+import { shareReelToApps } from "../services/reelSharing";
+import { palette, radii, spacing, createThemedStyles } from "../theme";
+import { PAYMENTS_ENABLED } from "../data/catalog";
 
 export function ReelDetailsScreen({ navigation, route }: { navigation: any; route: { params: { reelId: string } } }) {
   const {
@@ -23,15 +26,17 @@ export function ReelDetailsScreen({ navigation, route }: { navigation: any; rout
     toggleSaveReel,
     toggleFollow,
     addComment,
+    deleteReel,
   } = useAppState();
   const copy = getCopy(language);
   const [commentText, setCommentText] = useState("");
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const reel = reels.find((item) => item.id === route.params.reelId);
 
   if (!reel) {
     return (
       <Screen contentContainerStyle={styles.missingWrap}>
-        <Text style={styles.missingText}>Reel not found.</Text>
+        <Text style={styles.missingText}>{copy.rdNotFound}</Text>
       </Screen>
     );
   }
@@ -52,44 +57,66 @@ export function ReelDetailsScreen({ navigation, route }: { navigation: any; rout
   async function handleLike() {
     const result = await toggleLike(activeReel.id);
     if (!result.ok) {
-      Alert.alert("Like unavailable", result.message ?? "This reel could not be liked right now.");
+      Alert.alert(copy.likeUnavailableTitle, result.message ?? copy.rdLikeFailed);
     }
   }
 
-  async function handleRepost() {
+  async function handleShare() {
     const result = await repostReel(activeReel.id);
     if (!result.ok) {
-      Alert.alert("Repost unavailable", result.message ?? "This reel could not be reposted right now.");
+      Alert.alert(copy.shareUnavailableTitle, result.message ?? copy.rdShareFailed);
+      return;
+    }
+
+    try {
+      await shareReelToApps(activeReel, reelCreator);
+    } catch (error) {
+      Alert.alert(copy.shareUnavailableTitle, error instanceof Error ? error.message : copy.rdShareFailed);
     }
   }
 
   async function handleFollow() {
     const result = await toggleFollow(reelCreator.id);
     if (!result.ok) {
-      Alert.alert("Follow unavailable", result.message ?? "This creator could not be followed right now.");
+      Alert.alert(copy.rdFollowUnavailable, result.message ?? copy.rdFollowFailed);
     }
   }
 
   async function handleSave() {
     const result = await toggleSaveReel(activeReel.id);
     if (!result.ok) {
-      Alert.alert("Save unavailable", result.message ?? "This reel could not be saved right now.");
+      Alert.alert(copy.saveUnavailableTitle, result.message ?? copy.rdSaveFailed);
     }
   }
 
   async function submitComment() {
-    if (!commentText.trim()) {
-      Alert.alert("Comment is empty", "Write something before posting.");
+    const nextComment = commentText.trim();
+
+    if (!nextComment) {
+      Alert.alert(copy.commentEmptyTitle, copy.commentEmptyBody);
       return;
     }
 
-    const result = await addComment(activeReel.id, commentText);
-    if (!result.ok) {
-      Alert.alert("Content blocked", result.message ?? "This comment was blocked.");
-      return;
-    }
+    Keyboard.dismiss();
+    setIsSubmittingComment(true);
 
-    setCommentText("");
+    try {
+      const result = await addComment(activeReel.id, nextComment);
+      if (!result.ok) {
+        const title =
+          result.message === "Comment is empty."
+            ? copy.commentEmptyTitle
+            : result.message?.toLowerCase().includes("blocked")
+              ? copy.csContentBlocked
+              : copy.commentUnavailableTitle;
+        Alert.alert(title, result.message ?? copy.commentUnavailableBody);
+        return;
+      }
+
+      setCommentText("");
+    } finally {
+      setIsSubmittingComment(false);
+    }
   }
 
   return (
@@ -98,7 +125,7 @@ export function ReelDetailsScreen({ navigation, route }: { navigation: any; rout
         commentCount={comments.length}
         creator={reelCreator}
         currentUserId={currentUser?.id}
-        boostLabel={boost?.status === "active" ? "Boost live" : undefined}
+        boostLabel={boost?.status === "active" ? copy.boostLive : undefined}
         playVideo
         onComment={() => undefined}
         onLike={() => {
@@ -106,7 +133,7 @@ export function ReelDetailsScreen({ navigation, route }: { navigation: any; rout
         }}
         onOpen={() => undefined}
         onRepost={() => {
-          void handleRepost();
+          void handleShare();
         }}
         onSave={() => {
           void handleSave();
@@ -124,39 +151,65 @@ export function ReelDetailsScreen({ navigation, route }: { navigation: any; rout
 
       {isOwnReel ? (
         <View style={styles.boostCard}>
-          <Text style={styles.boostKicker}>Ads monetization</Text>
-          <Text style={styles.boostTitle}>Boost this reel</Text>
+          <Text style={styles.boostKicker}>{PAYMENTS_ENABLED ? copy.rdAdsMonetization : copy.rdInsights}</Text>
+          <Text style={styles.boostTitle}>{PAYMENTS_ENABLED ? copy.rdBoostThis : copy.rdHowDoing}</Text>
           <Text style={styles.boostBody}>
-            Put ad spend behind this reel to buy more reach and more views directly inside the app.
+            {PAYMENTS_ENABLED
+              ? copy.rdBoostBody
+              : copy.rdViewsBody}
           </Text>
           <View style={styles.analyticsRow}>
             <View style={styles.analyticsPill}>
               <Text style={styles.analyticsValue}>{formatCompact(activeReel.viewCount)}</Text>
-              <Text style={styles.analyticsLabel}>Views</Text>
+              <Text style={styles.analyticsLabel}>{copy.rdViews}</Text>
             </View>
             <View style={styles.analyticsPill}>
               <Text style={styles.analyticsValue}>{formatCompact(activeReel.reachCount)}</Text>
-              <Text style={styles.analyticsLabel}>Reach</Text>
+              <Text style={styles.analyticsLabel}>{copy.rdReach}</Text>
             </View>
           </View>
           {boost?.status === "active" ? (
             <View style={styles.boostStatus}>
               <Text style={styles.boostStatusTitle}>{boost.planTitle} is live</Text>
               <Text style={styles.commentBody}>Spend: ${boost.amountUsd}</Text>
-              <Text style={styles.commentBody}>Estimated bonus reach: +{formatCompact(boost.estimatedReach)}</Text>
-              <Text style={styles.commentBody}>Estimated bonus views: +{formatCompact(boost.estimatedViews)}</Text>
-              <Text style={styles.boostNote}>Campaign ends {new Date(boost.endsAt).toLocaleString()}</Text>
-              <PrimaryButton label="Open boost details" onPress={() => navigation.navigate("BoostReel", { reelId: activeReel.id })} variant="ghost" />
+              <Text style={styles.commentBody}>Priority placement in Reels and Explore until {formatDate(boost.endsAt)}</Text>
+              <Text style={styles.boostNote}>Campaign ends {formatDateTime(boost.endsAt)}</Text>
+              <PrimaryButton label={copy.rdOpenBoost} onPress={() => navigation.navigate("BoostReel", { reelId: activeReel.id })} variant="ghost" />
             </View>
-          ) : (
-            <PrimaryButton label="Boost my reel" onPress={() => navigation.navigate("BoostReel", { reelId: activeReel.id })} />
-          )}
+          ) : PAYMENTS_ENABLED ? (
+            <PrimaryButton label={copy.rdBoostMine} onPress={() => navigation.navigate("BoostReel", { reelId: activeReel.id })} />
+          ) : null}
+          <PrimaryButton 
+            label={copy.rdDeleteThis} 
+            variant="ghost" 
+            onPress={() => {
+              Alert.alert(copy.rdDeleteReel, copy.rdDeleteConfirm, [
+                { text: copy.cancel, style: "cancel" },
+                { 
+                  text: copy.delete, 
+                  style: "destructive", 
+                  onPress: async () => { 
+                    const result = await deleteReel(activeReel.id); 
+                    if (result.ok) {
+                      navigation.goBack();
+                    } else {
+                      Alert.alert("Error", result.message || copy.rdDeleteFailed);
+                    }
+                  } 
+                }
+              ]);
+            }} 
+          />
         </View>
       ) : null}
 
       <SectionTitle title={copy.reelDetails} subtitle={copy.commentPlaceholder} />
       <InputField label={copy.comment} onChangeText={setCommentText} placeholder={copy.commentPlaceholder} value={commentText} multiline />
-      <PrimaryButton label={copy.postComment} onPress={submitComment} />
+      <PrimaryButton
+        disabled={isSubmittingComment || !commentText.trim()}
+        label={isSubmittingComment ? "Posting..." : copy.postComment}
+        onPress={submitComment}
+      />
 
       <View style={styles.commentList}>
         {comments.map((comment) => (
@@ -166,7 +219,7 @@ export function ReelDetailsScreen({ navigation, route }: { navigation: any; rout
                 <Image source={{ uri: comment.userAvatar }} style={styles.commentAvatar} />
                 <Text style={styles.commentName}>{comment.userName}</Text>
               </Pressable>
-              <Text style={styles.commentDate}>{new Date(comment.createdAt).toLocaleDateString()}</Text>
+              <Text style={styles.commentDate}>{formatDate(comment.createdAt)}</Text>
             </View>
             <Text style={styles.commentBody}>{comment.text}</Text>
           </View>
@@ -176,7 +229,7 @@ export function ReelDetailsScreen({ navigation, route }: { navigation: any; rout
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
   missingWrap: {
     alignItems: "center",
     justifyContent: "center",

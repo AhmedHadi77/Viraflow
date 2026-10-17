@@ -1,19 +1,22 @@
 import * as ImagePicker from "expo-image-picker";
+import { communityKindLabel, fill, visibilityLabel } from "../utils/labels";
 import { useState } from "react";
-import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, Text, View } from "react-native";
 import { InputField } from "../components/InputField";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { SectionTitle } from "../components/SectionTitle";
+import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
 import { CommunityKind, CommunityVisibility } from "../types/models";
-import { palette, radii, spacing } from "../theme";
+import { palette, radii, spacing, createThemedStyles } from "../theme";
 
 const communityKinds: CommunityKind[] = ["page", "group", "channel"];
 const visibilityOptions: CommunityVisibility[] = ["public", "private"];
 
 export function CreateCommunityScreen({ navigation }: { navigation: any }) {
-  const { createCommunity } = useAppState();
+  const { language, createCommunity } = useAppState();
+  const copy = getCopy(language);
   const [kind, setKind] = useState<CommunityKind>("page");
   const [visibility, setVisibility] = useState<CommunityVisibility>("public");
   const [name, setName] = useState("");
@@ -24,7 +27,7 @@ export function CreateCommunityScreen({ navigation }: { navigation: any }) {
   async function handlePickCover() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert("Photo access needed", "Allow photo library access so you can upload a cover image.");
+      Alert.alert(copy.profilePhotoAccessTitle, copy.profilePhotoAccessBody);
       return;
     }
 
@@ -42,7 +45,7 @@ export function CreateCommunityScreen({ navigation }: { navigation: any }) {
 
     const asset = result.assets[0];
     if (!asset.base64) {
-      Alert.alert("Image issue", "The selected cover image could not be prepared. Try another image.");
+      Alert.alert(copy.imageIssueTitle, copy.imageIssueBody);
       return;
     }
 
@@ -52,7 +55,7 @@ export function CreateCommunityScreen({ navigation }: { navigation: any }) {
 
   async function handleCreate() {
     if (!name.trim() || !description.trim() || !category.trim() || !coverImage.trim()) {
-      Alert.alert("Missing details", "Add a name, description, category, and cover image first.");
+      Alert.alert(copy.communityMissingDetailsTitle, copy.communityMissingDetailsBody);
       return;
     }
 
@@ -66,11 +69,11 @@ export function CreateCommunityScreen({ navigation }: { navigation: any }) {
     });
 
     if (!result.ok) {
-      Alert.alert("Creation unavailable", result.message ?? "This page, group, or channel could not be created.");
+      Alert.alert(copy.communityCreationUnavailable, result.message ?? copy.communityCreationUnavailableBody);
       return;
     }
 
-    Alert.alert("Created", `Your ${kind} is now live inside Pulseora.`);
+    Alert.alert(copy.createdTitle, copy.communityLiveBody);
     navigation.navigate("Communities");
   }
 
@@ -78,28 +81,28 @@ export function CreateCommunityScreen({ navigation }: { navigation: any }) {
     <Screen scrollable>
       <View style={styles.heroCard}>
         <SectionTitle
-          title="Create a page, group, or channel"
-          subtitle="Build your own space for branding, discussion, or broadcasts."
+          title={copy.createCommunityTitle}
+          subtitle={copy.createCommunityBody}
         />
       </View>
 
       <View style={styles.formCard}>
-        <Text style={styles.sectionLabel}>Type</Text>
+        <Text style={styles.sectionLabel}>{copy.type}</Text>
         <View style={styles.choiceRow}>
           {communityKinds.map((item) => (
-            <ChoiceChip key={item} active={kind === item} label={item} onPress={() => setKind(item)} />
+            <ChoiceChip key={item} active={kind === item} label={communityKindLabel(item, copy)} onPress={() => setKind(item)} />
           ))}
         </View>
 
-        <Text style={styles.sectionLabel}>Visibility</Text>
+        <Text style={styles.sectionLabel}>{copy.visibility}</Text>
         <View style={styles.choiceRow}>
           {visibilityOptions.map((item) => (
-            <ChoiceChip key={item} active={visibility === item} label={item} onPress={() => setVisibility(item)} />
+            <ChoiceChip key={item} active={visibility === item} label={visibilityLabel(item, copy)} onPress={() => setVisibility(item)} />
           ))}
         </View>
 
         <PrimaryButton
-          label={coverImage ? "Change cover image" : "Upload cover image"}
+          label={coverImage ? copy.changeCoverImage : copy.uploadCoverImage}
           onPress={() => {
             void handlePickCover();
           }}
@@ -107,18 +110,18 @@ export function CreateCommunityScreen({ navigation }: { navigation: any }) {
         />
         {coverImage ? <Image source={{ uri: coverImage }} style={styles.coverPreview} /> : null}
 
-        <InputField label="Name" onChangeText={setName} placeholder="Creator Growth Circle" value={name} />
-        <InputField label="Category" onChangeText={setCategory} placeholder="Business, Fashion, Productivity..." value={category} />
+        <InputField label={copy.name} onChangeText={setName} placeholder={copy.communityNamePlaceholder} value={name} />
+        <InputField label={copy.category} onChangeText={setCategory} placeholder={copy.communityCategoryPlaceholder} value={category} />
         <InputField
-          label="Description"
+          label={copy.productDescription}
           onChangeText={setDescription}
-          placeholder="Tell people what this space is for and why they should join."
+          placeholder={copy.communityDescriptionPlaceholder}
           value={description}
           multiline
         />
 
         <PrimaryButton
-          label={`Create ${kind}`}
+          label={fill(copy.createKind, { kind: communityKindLabel(kind, copy).toLowerCase() })}
           onPress={() => {
             void handleCreate();
           }}
@@ -144,7 +147,7 @@ function ChoiceChip({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
   heroCard: {
     backgroundColor: palette.card,
     borderColor: palette.borderStrong,

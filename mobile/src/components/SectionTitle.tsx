@@ -1,5 +1,5 @@
-import { StyleSheet, Text, View } from "react-native";
-import { palette } from "../theme";
+import { Text, View } from "react-native";
+import { palette, createThemedStyles } from "../theme";
 
 interface SectionTitleProps {
   title: string;
@@ -16,7 +16,7 @@ export function SectionTitle({ title, subtitle }: SectionTitleProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
   container: {
     gap: 6,
   },

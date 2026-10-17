@@ -1,16 +1,19 @@
 import { useEffect } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { communityKindLabel, visibilityLabel } from "../utils/labels";
+import { Image, Pressable, Text, View } from "react-native";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { SectionTitle } from "../components/SectionTitle";
+import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
 import { CommunityKind } from "../types/models";
-import { palette, radii, spacing } from "../theme";
+import { palette, radii, spacing, createThemedStyles } from "../theme";
 
 const communityKinds: CommunityKind[] = ["page", "group", "channel"];
 
 export function CommunitiesScreen({ navigation }: { navigation: any }) {
-  const { communities, currentUser, getUserById, refreshCommunities } = useAppState();
+  const { language, communities, currentUser, getUserById, refreshCommunities } = useAppState();
+  const copy = getCopy(language);
 
   useEffect(() => {
     void refreshCommunities();
@@ -27,14 +30,14 @@ export function CommunitiesScreen({ navigation }: { navigation: any }) {
     <Screen scrollable>
       <View style={styles.heroCard}>
         <SectionTitle
-          title="Pages, groups, and channels"
-          subtitle="Create branded spaces, private communities, and broadcast channels inside Pulseora."
+          title={copy.communitiesTitle}
+          subtitle={copy.pagesGroupsChannelsBody}
         />
         <View style={styles.heroStats}>
-          <HeroStat label="Total spaces" value={communities.length} />
-          <HeroStat label="Owned by you" value={ownedCount} />
+          <HeroStat label={copy.totalSpaces} value={communities.length} />
+          <HeroStat label={copy.ownedByYou} value={ownedCount} />
         </View>
-        <PrimaryButton label="Create page, group, or channel" onPress={() => navigation.navigate("CreateCommunity")} />
+        <PrimaryButton label={copy.createCommunityButton} onPress={() => navigation.navigate("CreateCommunity")} />
       </View>
 
       {communityKinds.map((kind) => {
@@ -42,11 +45,11 @@ export function CommunitiesScreen({ navigation }: { navigation: any }) {
 
         return (
           <View key={kind} style={styles.section}>
-            <SectionTitle title={formatKindLabel(kind)} subtitle={`Browse ${kind}s already created in the app.`} />
+            <SectionTitle title={formatKindLabel(kind)} subtitle={copy.browseKindInApp} />
             {items.length === 0 ? (
               <View style={styles.emptyCard}>
-                <Text style={styles.emptyTitle}>No {kind}s yet</Text>
-                <Text style={styles.emptyBody}>Create the first {kind} and start building your community around a topic or brand.</Text>
+                <Text style={styles.emptyTitle}>{copy.noSpacesYetTitle}</Text>
+                <Text style={styles.emptyBody}>{copy.noSpacesYetBody}</Text>
               </View>
             ) : (
               <View style={styles.list}>
@@ -63,18 +66,18 @@ export function CommunitiesScreen({ navigation }: { navigation: any }) {
                       <View style={styles.communityBody}>
                         <View style={styles.row}>
                           <View style={styles.kindBadge}>
-                            <Text style={styles.kindBadgeLabel}>{community.kind}</Text>
+                            <Text style={styles.kindBadgeLabel}>{communityKindLabel(community.kind, copy)}</Text>
                           </View>
-                          <Text style={styles.memberCount}>{community.memberIds.length} members</Text>
+                          <Text style={styles.memberCount}>{community.memberIds.length} {copy.members}</Text>
                         </View>
                         <Text style={styles.communityTitle}>{community.name}</Text>
                         <Text numberOfLines={2} style={styles.communityDescription}>
                           {community.description}
                         </Text>
                         <Text style={styles.communityMeta}>
-                          {community.category} | {community.visibility}
+                          {community.category} · {visibilityLabel(community.visibility, copy)}
                         </Text>
-                        <Text style={styles.communityOwner}>Owner: {owner?.name ?? "Creator"}</Text>
+                        <Text style={styles.communityOwner}>{copy.owner}: {owner?.name ?? copy.creatorStudio}</Text>
                       </View>
                     </Pressable>
                   );
@@ -101,7 +104,7 @@ function formatKindLabel(kind: CommunityKind) {
   return kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
   heroCard: {
     backgroundColor: palette.card,
     borderColor: palette.borderStrong,

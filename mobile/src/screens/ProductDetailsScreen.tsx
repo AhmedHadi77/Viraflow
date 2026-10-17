@@ -1,11 +1,13 @@
-import { Alert, Image, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, ScrollView, Text, View } from "react-native";
+import { categoryLabel, conditionLabel } from "../utils/labels";
+import { usePriceTools } from "../utils/priceFormatting";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { SectionTitle } from "../components/SectionTitle";
 import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
 import { Product } from "../types/models";
-import { palette, radii, spacing } from "../theme";
+import { palette, radii, spacing, createThemedStyles } from "../theme";
 
 const listingStatusOptions: Product["listingStatus"][] = ["available", "pending", "sold"];
 
@@ -18,15 +20,17 @@ export function ProductDetailsScreen({ navigation, route }: { navigation: any; r
     isProductSaved,
     toggleSaveProduct,
     updateProductListingStatus,
+    deleteProduct,
     startMarketplaceChat,
   } = useAppState();
   const copy = getCopy(language);
+  const { getPriceParts } = usePriceTools();
   const product = products.find((item) => item.id === route.params.productId);
 
   if (!product) {
     return (
       <Screen contentContainerStyle={styles.missingWrap}>
-        <Text style={styles.missingText}>Product not found.</Text>
+        <Text style={styles.missingText}>{copy.listingNotFound}</Text>
       </Screen>
     );
   }
@@ -44,21 +48,42 @@ export function ProductDetailsScreen({ navigation, route }: { navigation: any; r
   async function handleSave() {
     const result = await toggleSaveProduct(activeProduct.id);
     if (!result.ok) {
-      Alert.alert("Save unavailable", result.message ?? "This product could not be saved right now.");
+      Alert.alert(copy.saveUnavailableTitle, result.message ?? copy.saveUnavailableBody);
     }
   }
 
   async function handleListingStatusChange(nextStatus: Product["listingStatus"]) {
     const result = await updateProductListingStatus(activeProduct.id, nextStatus);
     if (!result.ok) {
-      Alert.alert("Listing update unavailable", result.message ?? "This listing could not be updated right now.");
+      Alert.alert(copy.notificationUnavailableTitle, result.message ?? copy.notificationUnavailableBody);
     }
+  }
+
+  async function handleDeleteProduct() {
+    Alert.alert(copy.pdDeleteListing, copy.pdDeleteListingBody, [
+      { text: copy.cancel, style: "cancel" },
+      {
+        text: copy.delete,
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            const result = await deleteProduct(activeProduct.id);
+            if (!result.ok) {
+              Alert.alert(copy.deleteUnavailableTitle, result.message ?? copy.deleteUnavailableBody);
+              return;
+            }
+
+            navigation.goBack();
+          })();
+        },
+      },
+    ]);
   }
 
   async function handleStartChat() {
     const result = await startMarketplaceChat(activeProduct.id);
     if (!result.ok || !result.threadId) {
-      Alert.alert("Chat unavailable", result.message ?? "This chat could not be opened right now.");
+      Alert.alert(copy.directChatUnavailableTitle, result.message ?? copy.directChatUnavailableBody);
       return;
     }
 
@@ -77,30 +102,35 @@ export function ProductDetailsScreen({ navigation, route }: { navigation: any; r
       ) : null}
       <SectionTitle title={activeProduct.title} subtitle={copy.productDetails} />
       <View style={styles.priceRow}>
-        <Text style={styles.price}>${activeProduct.price}</Text>
+        <View style={styles.priceStack}>
+          <Text style={styles.price}>{getPriceParts(activeProduct).original}</Text>
+          {getPriceParts(activeProduct).approx ? (
+            <Text style={styles.priceApprox}>{getPriceParts(activeProduct).approx}</Text>
+          ) : null}
+        </View>
         <View style={styles.categoryBadge}>
-          <Text style={styles.categoryLabel}>{activeProduct.category}</Text>
+          <Text style={styles.categoryLabel}>{categoryLabel(activeProduct.category, copy)}</Text>
         </View>
       </View>
       <View style={styles.marketMetaRow}>
-        <MarketMeta label="Condition" value={activeProduct.condition} />
-        <MarketMeta label="Availability" value={formatListingStatus(activeProduct.listingStatus)} />
+        <MarketMeta label={copy.condition} value={conditionLabel(activeProduct.condition, copy)} />
+        <MarketMeta label={copy.availability} value={formatListingStatus(activeProduct.listingStatus, copy)} />
       </View>
       <View style={styles.locationCard}>
-        <Text style={styles.locationLabel}>Location</Text>
+        <Text style={styles.locationLabel}>{copy.location}</Text>
         <Text style={styles.locationValue}>{activeProduct.location}</Text>
       </View>
       <Text style={styles.description}>{activeProduct.description}</Text>
 
       {isOwnProduct ? (
         <View style={styles.manageCard}>
-          <Text style={styles.manageTitle}>Manage listing</Text>
-          <Text style={styles.manageBody}>Update the listing status the same way sellers do in Facebook-style marketplace flows.</Text>
+          <Text style={styles.manageTitle}>{copy.manageListing}</Text>
+          <Text style={styles.manageBody}>{copy.manageListingBody}</Text>
           <View style={styles.manageActions}>
             {listingStatusOptions.map((status) => (
               <PrimaryButton
                 key={status}
-                label={status === activeProduct.listingStatus ? `${formatListingStatus(status)} now` : `Mark ${formatListingStatus(status)}`}
+                label={status === activeProduct.listingStatus ? `${formatListingStatus(status, copy)} ${copy.live.toLowerCase()}` : `${copy.mark} ${formatListingStatus(status, copy)}`}
                 onPress={() => {
                   void handleListingStatusChange(status);
                 }}
@@ -109,7 +139,14 @@ export function ProductDetailsScreen({ navigation, route }: { navigation: any; r
               />
             ))}
           </View>
-          <PrimaryButton label="Open marketplace inbox" onPress={() => navigation.navigate("MarketplaceInbox")} variant="ghost" />
+          <PrimaryButton label={copy.marketplaceInboxTitle} onPress={() => navigation.navigate("MarketplaceInbox")} variant="ghost" />
+          <PrimaryButton
+            label={copy.pdDeleteListing}
+            onPress={() => {
+              void handleDeleteProduct();
+            }}
+            variant="ghost"
+          />
         </View>
       ) : null}
 
@@ -124,19 +161,19 @@ export function ProductDetailsScreen({ navigation, route }: { navigation: any; r
       {!isOwnProduct ? (
         <>
           <PrimaryButton
-            label={canBuyNow ? "Buy now" : activeProduct.listingStatus === "pending" ? "Currently pending" : "Listing sold"}
+            label={canBuyNow ? copy.buyNow : activeProduct.listingStatus === "pending" ? copy.currentlyPending : copy.listingSoldLabel}
             onPress={() => navigation.navigate("MarketplaceCheckout", { productId: activeProduct.id })}
             disabled={!canBuyNow}
           />
           <PrimaryButton
-            label="Chat seller"
+            label={copy.contactSeller}
             onPress={() => {
               void handleStartChat();
             }}
             variant="ghost"
           />
           <PrimaryButton
-            label={saved ? "Saved product" : "Save product"}
+            label={saved ? copy.savedProduct : copy.saveProduct}
             onPress={() => {
               void handleSave();
             }}
@@ -157,11 +194,19 @@ function MarketMeta({ label, value }: { label: string; value: string }) {
   );
 }
 
-function formatListingStatus(value: Product["listingStatus"]) {
-  return value.charAt(0).toUpperCase() + value.slice(1);
+function formatListingStatus(value: Product["listingStatus"], copy: ReturnType<typeof getCopy>) {
+  if (value === "available") {
+    return copy.available;
+  }
+
+  if (value === "pending") {
+    return copy.pending;
+  }
+
+  return copy.sold;
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
   missingWrap: {
     alignItems: "center",
     justifyContent: "center",
@@ -192,6 +237,15 @@ const styles = StyleSheet.create({
     color: palette.text,
     fontSize: 30,
     fontWeight: "900",
+  },
+  priceStack: {
+    flexShrink: 1,
+    gap: 2,
+  },
+  priceApprox: {
+    color: palette.muted,
+    fontSize: 15,
+    fontWeight: "600",
   },
   categoryBadge: {
     backgroundColor: "rgba(32,201,151,0.16)",

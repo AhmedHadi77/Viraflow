@@ -2,14 +2,16 @@ import { AppNotification } from "../types/models";
 
 export interface NotificationNavigationTarget {
   name: string;
-  params?: Record<string, string>;
+  params?: Record<string, string | boolean>;
 }
 
 export function buildNotificationNavigationData(notification: Pick<
   AppNotification,
-  "conversationId" | "conversationType" | "entityType" | "entityId" | "actorId"
+  "conversationId" | "conversationType" | "entityType" | "entityId" | "actorId" | "type" | "userId"
 >) {
   return compactNotificationFields({
+    userId: notification.userId,
+    type: notification.type,
     conversationId: notification.conversationId,
     conversationType: notification.conversationType,
     entityType: notification.entityType,
@@ -20,6 +22,25 @@ export function buildNotificationNavigationData(notification: Pick<
 
 export function getNotificationNavigationTarget(input: Partial<AppNotification> | Record<string, unknown>) {
   const payload = normalizeNotificationNavigationPayload(input);
+
+  if (payload.type === "call" && payload.entityId) {
+    return {
+      name: "Call",
+      params: {
+        callId: payload.entityId,
+      },
+    } satisfies NotificationNavigationTarget;
+  }
+
+  if (payload.type === "story_view" && payload.entityId && payload.userId) {
+    return {
+      name: "StoryViewer",
+      params: {
+        storyId: payload.entityId,
+        userId: payload.userId,
+      },
+    } satisfies NotificationNavigationTarget;
+  }
 
   if (payload.conversationId && payload.conversationType === "direct") {
     return {
@@ -57,6 +78,19 @@ export function getNotificationNavigationTarget(input: Partial<AppNotification> 
     } satisfies NotificationNavigationTarget;
   }
 
+  if (payload.entityType === "post" && payload.entityId) {
+    return {
+      name: "PostDetails",
+      params: {
+        postId: payload.entityId,
+        openComments:
+          payload.type === "post_comment" ||
+          payload.type === "mention" ||
+          payload.type === "comment",
+      },
+    } satisfies NotificationNavigationTarget;
+  }
+
   if (payload.actorId) {
     return {
       name: "PublicProfile",
@@ -71,6 +105,8 @@ export function getNotificationNavigationTarget(input: Partial<AppNotification> 
 
 function normalizeNotificationNavigationPayload(input: Partial<AppNotification> | Record<string, unknown>) {
   return {
+    userId: readOptionalString(input.userId),
+    type: normalizeNotificationType(input.type),
     conversationId: readOptionalString(input.conversationId),
     conversationType: normalizeConversationType(input.conversationType),
     entityType: normalizeEntityType(input.entityType),
@@ -92,5 +128,30 @@ function normalizeConversationType(value: unknown) {
 }
 
 function normalizeEntityType(value: unknown) {
-  return value === "reel" || value === "product" ? value : undefined;
+  return value === "reel" || value === "product" || value === "post" ? value : undefined;
+}
+
+function normalizeNotificationType(value: unknown) {
+  if (
+    value === "post_like" ||
+    value === "post_comment" ||
+    value === "reel_like" ||
+    value === "reel_comment" ||
+    value === "story_view" ||
+    value === "mention" ||
+    value === "like" ||
+    value === "comment" ||
+    value === "follow" ||
+    value === "repost" ||
+    value === "boost" ||
+    value === "save" ||
+    value === "message" ||
+    value === "order" ||
+    value === "call" ||
+    value === "system"
+  ) {
+    return value;
+  }
+
+  return undefined;
 }

@@ -1,26 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import React, { createContext, useContext, useEffect, useRef, useState } from "react";
-import { Linking } from "react-native";
-import {
-  seedCommunityChatMessages,
-  seedCommunityPosts,
-  seedCommunities,
-  seedDirectMessages,
-  seedDirectThreads,
-  seedMarketplaceMessages,
-  seedMarketplaceOrders,
-  seedMarketplaceThreads,
-  reelBoostPlans,
-  seedComments,
-  seedNotifications,
-  seedProducts,
-  seedReelBoosts,
-  seedReels,
-  seedSavedPosts,
-  seedStories,
-  seedUsers,
-  subscriptionPlans,
-} from "../data/mockData";
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { I18nManager, Linking } from "react-native";
+import { applyLayoutDirection, isRtlLanguage } from "../utils/layoutDirection";
+import { reelBoostPlans, subscriptionPlans } from "../data/catalog";
 import {
   AppApiError,
   ApiUserPayload,
@@ -33,6 +15,10 @@ import {
   createReelWithApi,
   createSubscriptionCheckoutSessionWithApi,
   createStoryWithApi,
+  deleteCommunityPostWithApi,
+  deleteProductWithApi,
+  deleteStoryWithApi,
+  deleteReelWithApi,
   derivePlanType,
   fetchApiMe,
   deliverNotificationWithApi,
@@ -47,6 +33,7 @@ import {
   fetchNotificationsWithApi,
   isAppApiConfigured,
   loginWithApi,
+  markStoryViewedWithApi,
   mapApiDirectMessageToMobile,
   mapApiDirectThreadToMobile,
   mapApiMarketplaceMessageToMobile,
@@ -62,18 +49,21 @@ import {
   mapApiSavedPostToMobile,
   mapApiStoryToMobile,
   mapApiUserToMobile,
+  markNotificationReadWithApi,
   markAllNotificationsReadWithApi,
   repostReelWithApi,
   registerWithApi,
   sendCommunityChatMessageWithApi,
   sendDirectMessageWithApi,
   sendMarketplaceMessageWithApi,
+  setUserBanStatusWithApi,
   startDirectChatWithApi,
   startMarketplaceChatWithApi,
   toggleFollowWithApi,
   toggleLikeWithApi,
   toggleSaveProductWithApi,
   toggleSaveReelWithApi,
+  updateStoryHighlightWithApi,
   updateProductListingStatusWithApi,
   updateProfileWithApi,
 } from "../services/appApi";
@@ -99,6 +89,7 @@ import {
 import {
   createFirebaseCommunity,
   createFirebaseCommunityPost,
+  deleteFirebaseCommunityPost,
   createFirebaseMarketplaceOrder,
   fetchFirebaseCommunityActivity,
   fetchFirebaseCommunityCommerceSnapshot,
@@ -109,46 +100,77 @@ import {
   createFirebaseProduct,
   createFirebaseReel,
   createFirebaseStory,
+  deleteFirebaseStory,
+  deleteFirebaseStoryAsAdmin,
+  deleteFirebaseReel,
+  deleteFirebaseReelAsAdmin,
+  deleteFirebaseProduct,
   fetchFirebaseCatalogFromFirestore,
   getFirebaseContentErrorMessage,
   isFirebaseContentConfigured,
+  markFirebaseStoryViewed,
+  updateFirebaseStoryHighlight,
   updateFirebaseProductListingStatus,
 } from "../services/firebaseContent";
 import {
   addFirebaseReelComment,
   fetchFirebaseEngagementSnapshot,
   getFirebaseEngagementErrorMessage,
+  recordFirebaseReelView,
   repostFirebaseReel,
   subscribeToFirebaseEngagement,
   toggleFirebaseFollow,
   toggleFirebaseReelLike,
 } from "../services/firebaseEngagement";
 import {
+  addFirebasePostComment,
+  createFirebasePost,
+  deleteFirebasePost,
+  deleteFirebasePostAsAdmin,
+  fetchFirebasePostsSnapshot,
+  getFirebasePostsErrorMessage,
+  subscribeToFirebasePosts,
+  toggleFirebasePostLike,
+} from "../services/firebasePosts";
+import {
   createFirebaseNotification,
   fetchFirebaseInboxSnapshot,
   getFirebaseInboxErrorMessage,
+  markFirebaseNotificationRead,
   markAllFirebaseNotificationsRead,
   subscribeToFirebaseInbox,
   toggleFirebaseSavedPost,
 } from "../services/firebaseInbox";
 import {
-  activateFirebaseSubscription,
-  createFirebaseReelBoost,
   fetchFirebaseMonetizationSnapshot,
-  getFirebaseMonetizationErrorMessage,
   subscribeToFirebaseMonetization,
 } from "../services/firebaseMonetization";
 import {
+  continueWithFirebaseGoogleProfile,
   getCurrentFirebaseIdToken,
   getFirebaseProfileById,
   getFirebaseProfileErrorMessage,
+  getGoogleSignInUnavailableMessage,
+  isGoogleSignInConfigured,
   isFirebaseProfilesConfigured,
   loginWithFirebaseProfile,
   logoutFromFirebaseProfile,
   registerWithFirebaseProfile,
+  setFirebaseUserBanStatus,
+  updateFirebaseUserPreferences,
   updateFirebaseUserProfile,
 } from "../services/firebaseProfiles";
 import {
+  getSupabaseProfileErrorMessage,
+  isSupabaseAuthConfigured,
+  loginWithSupabaseProfile,
+  logoutFromSupabaseProfile,
+  refreshSupabaseProfileSession,
+  registerWithSupabaseProfile,
+} from "../services/supabaseAuth";
+import {
+  buildCloudinaryEditedImageUrl,
+  buildCloudinaryEditedVideoUrl,
   buildCloudinaryVideoThumbnailUrl,
   checkUploadedMediaSafety,
   isMediaApiConfigured,
@@ -172,6 +194,8 @@ import {
   emitTypingRealtime,
   isRealtimeConfigured,
   MarketplaceMessageRealtimeEvent,
+  NotificationRealtimeEvent,
+  NotificationsReadAllRealtimeEvent,
   PresenceRealtimeEvent,
   ReadRealtimeEvent,
   TypingRealtimeEvent,
@@ -180,24 +204,30 @@ import {
   AppSubscription,
   PushNotificationsStatus,
   AppNotification,
+  ContentReport,
   CommunityChatMessage,
   CommunityPost,
   CommunitySpace,
   CreateCommunityPayload,
   CreateCommunityPostPayload,
+  CreateDirectMessagePayload,
   AuthSession,
   DirectChatMessage,
   DirectChatThread,
   CreateMarketplaceOrderPayload,
+  CreatePostPayload,
   CreateProductPayload,
   CreateReelBoostPayload,
   CreateReelPayload,
   CreateStoryPayload,
+  isLanguageOption,
   LanguageOption,
   MarketplaceChatMessage,
   MarketplaceChatThread,
   MarketplaceOrder,
   PlanType,
+  Post,
+  PostComment,
   Product,
   Reel,
   ReelBoostCampaign,
@@ -212,24 +242,47 @@ import {
   UserPresence,
 } from "../types/models";
 import { blockedUserContentMessage, containsSexualContent } from "../utils/contentSafety";
+import {
+  getUsernameValidationMessage,
+  getWebsiteValidationMessage,
+  normalizeUsernameInput,
+  normalizeWebsiteInput,
+} from "../utils/profileValidation";
+import { MEDIA_UNAVAILABLE_IMAGE } from "../data/defaultMedia";
+import { buildLocaleTag, detectDeviceRegion, getRegion, isKnownRegion } from "../data/regions";
+import { setActiveFormattingLocale } from "../utils/timeFormatting";
+import { CallType, startCall } from "../services/calls";
+import { adminApi } from "../services/adminApi";
+import { createFirebaseReport, NewReportInput, normalizeReport } from "../services/reports";
 
 const STORAGE_KEYS = {
   language: "viraflow.language",
+  region: "pulseora.region",
   session: "viraflow.session",
   firebaseUser: "viraflow.firebaseUser",
   bootVersion: "viraflow.bootVersion",
 } as const;
 
-const APP_BOOT_VERSION = "2026-04-25-safe-startup-1";
+const APP_BOOT_VERSION = "2026-05-01-startup-recovery-2";
 const SESSION_REFRESH_MESSAGE = "Your session expired. Please log in again.";
+const PAYMENTS_UNAVAILABLE_MESSAGE = "Secure checkout is unavailable right now. Please check your connection and try again.";
+const AUTH_UNAVAILABLE_MESSAGE = "Sign-in is unavailable right now. Please check your connection and try again.";
+const POST_UPLOAD_FOLDER: MediaFolder = "posts";
+const POST_UPLOAD_FALLBACK_FOLDER: MediaFolder = "reels";
 
 interface AppContextValue {
   isBootstrapping: boolean;
   language: LanguageOption | null;
+  /** ISO country code of the user's region (picked in Settings, or guessed from the phone). */
+  region: string;
+  /** BCP-47 tag built from language + region, used for dates, numbers and prices. */
+  localeTag: string;
   session: AuthSession | null;
   currentUser: User | null;
   users: User[];
   stories: Story[];
+  posts: Post[];
+  postComments: PostComment[];
   reels: Reel[];
   products: Product[];
   communities: CommunitySpace[];
@@ -239,6 +292,7 @@ interface AppContextValue {
   directMessages: DirectChatMessage[];
   comments: ReelComment[];
   notifications: AppNotification[];
+  reports: ContentReport[];
   savedPosts: SavedPost[];
   marketplaceThreads: MarketplaceChatThread[];
   marketplaceMessages: MarketplaceChatMessage[];
@@ -255,12 +309,27 @@ interface AppContextValue {
   refreshCommunities: () => Promise<void>;
   openCommunityActivity: (communityId: string) => Promise<{ ok: boolean; message?: string }>;
   setLanguage: (language: LanguageOption) => Promise<void>;
+  setRegion: (region: string) => Promise<void>;
+  /** Starts a free voice/video call and rings the other person (push notification if their app is closed). */
+  placeCall: (calleeId: string, type: CallType) => Promise<{ ok: boolean; callId?: string; message?: string }>;
+  /** True for the app owner (OWNER_EMAILS on the server), who can choose admins. */
+  isOwner: boolean;
+  submitReport: (input: Omit<NewReportInput, "reporterId">) => Promise<{ ok: boolean; message?: string }>;
+  refreshReports: () => Promise<void>;
+  adminSetUserRole: (userId: string, role: "admin" | "user") => Promise<{ ok: boolean; message?: string }>;
+  adminDeleteUserAccount: (userId: string) => Promise<{ ok: boolean; message?: string }>;
   login: (email: string, password: string) => Promise<{ ok: boolean; message?: string }>;
+  continueWithGoogle: () => Promise<{ ok: boolean; message?: string }>;
   register: (payload: RegisterPayload) => Promise<{ ok: boolean; message?: string }>;
   logout: () => Promise<void>;
+  googleSignInEnabled: boolean;
+  googleSignInMessage: string | null;
+  isAdmin: boolean;
   markAllNotificationsRead: () => Promise<{ ok: boolean; message?: string }>;
+  markNotificationRead: (notificationId: string) => Promise<{ ok: boolean; message?: string }>;
   toggleLike: (reelId: string) => Promise<{ ok: boolean; message?: string }>;
   repostReel: (reelId: string) => Promise<{ ok: boolean; message?: string }>;
+  recordReelView: (reelId: string) => void;
   addComment: (reelId: string, text: string) => Promise<{ ok: boolean; message?: string }>;
   toggleFollow: (targetUserId: string) => Promise<{ ok: boolean; message?: string }>;
   toggleSaveReel: (reelId: string) => Promise<{ ok: boolean; message?: string; saved?: boolean }>;
@@ -273,7 +342,7 @@ interface AppContextValue {
   openDirectThread: (threadId: string) => Promise<{ ok: boolean; message?: string }>;
   markDirectThreadRead: (threadId: string) => void;
   setDirectTyping: (threadId: string, isTyping: boolean) => void;
-  sendDirectMessage: (threadId: string, text: string) => Promise<{ ok: boolean; message?: string }>;
+  sendDirectMessage: (threadId: string, payload: CreateDirectMessagePayload) => Promise<{ ok: boolean; message?: string }>;
   startMarketplaceChat: (productId: string) => Promise<{ ok: boolean; message?: string; threadId?: string }>;
   openMarketplaceThread: (threadId: string) => Promise<{ ok: boolean; message?: string }>;
   markMarketplaceThreadRead: (threadId: string) => void;
@@ -282,18 +351,39 @@ interface AppContextValue {
   createMarketplaceOrder: (
     payload: CreateMarketplaceOrderPayload
   ) => Promise<{ ok: boolean; message?: string; threadId?: string }>;
-  createStory: (payload: CreateStoryPayload) => Promise<{ ok: boolean; message?: string }>;
-  createReel: (payload: CreateReelPayload) => Promise<{ ok: boolean; message?: string }>;
+  createStory: (payload: CreateStoryPayload) => Promise<{ ok: boolean; message?: string; story?: Story }>;
+  markStoryViewed: (storyId: string) => Promise<void>;
+  deleteStory: (storyId: string) => Promise<{ ok: boolean; message?: string }>;
+  adminDeleteStory: (storyId: string) => Promise<{ ok: boolean; message?: string }>;
+  deleteReel: (reelId: string) => Promise<{ ok: boolean; message?: string }>;
+  toggleStoryHighlight: (
+    storyId: string,
+    payload?: { highlighted?: boolean; highlightLabel?: string }
+  ) => Promise<{ ok: boolean; message?: string }>;
+  createPost: (payload: CreatePostPayload) => Promise<{ ok: boolean; message?: string }>;
+  createReel: (payload: CreateReelPayload) => Promise<{ ok: boolean; message?: string; reel?: Reel }>;
   subscribeToPlan: (planType: PlanType) => Promise<{ ok: boolean; message?: string; subscription?: AppSubscription }>;
   boostReel: (payload: CreateReelBoostPayload) => Promise<{ ok: boolean; message?: string; boost?: ReelBoostCampaign }>;
   createProduct: (payload: CreateProductPayload) => Promise<{ ok: boolean; message?: string }>;
+  deleteProduct: (productId: string) => Promise<{ ok: boolean; message?: string }>;
   createCommunity: (payload: CreateCommunityPayload) => Promise<{ ok: boolean; message?: string }>;
   createCommunityPost: (payload: CreateCommunityPostPayload) => Promise<{ ok: boolean; message?: string }>;
+  deleteCommunityPost: (communityId: string, postId: string) => Promise<{ ok: boolean; message?: string }>;
   markCommunityChatRead: (communityId: string) => void;
   setCommunityTyping: (communityId: string, isTyping: boolean) => void;
   sendCommunityChatMessage: (communityId: string, text: string) => Promise<{ ok: boolean; message?: string }>;
   updateProfile: (payload: UpdateProfilePayload) => Promise<{ ok: boolean; message?: string }>;
+  togglePostLike: (postId: string) => Promise<{ ok: boolean; message?: string }>;
+  addPostComment: (postId: string, text: string) => Promise<{ ok: boolean; message?: string }>;
+  deletePost: (postId: string) => Promise<{ ok: boolean; message?: string }>;
+  adminDeletePost: (postId: string) => Promise<{ ok: boolean; message?: string }>;
+  adminDeleteReel: (reelId: string) => Promise<{ ok: boolean; message?: string }>;
+  setUserBanStatus: (userId: string, banned: boolean) => Promise<{ ok: boolean; message?: string }>;
+  updateReportStatus: (reportId: string, status: ContentReport["status"]) => Promise<{ ok: boolean; message?: string }>;
+  toggleSavePost: (postId: string) => Promise<{ ok: boolean; message?: string; saved?: boolean }>;
   getUserById: (userId: string) => User | undefined;
+  getPostById: (postId: string) => Post | undefined;
+  getCommentsForPost: (postId: string) => PostComment[];
   getCommunityById: (communityId: string) => CommunitySpace | undefined;
   getCommunityPosts: (communityId: string) => CommunityPost[];
   getCommunityChatMessages: (communityId: string) => CommunityChatMessage[];
@@ -310,92 +400,134 @@ interface AppContextValue {
   getUserPresence: (userId: string) => UserPresence;
   getBoostForReel: (reelId: string) => ReelBoostCampaign | undefined;
   canDirectMessageUser: (targetUserId: string) => boolean;
+  isPostSaved: (postId: string) => boolean;
   isReelSaved: (reelId: string) => boolean;
   isProductSaved: (productId: string) => boolean;
+  startupDiagnostics: string[];
 }
 
 const AppContext = createContext<AppContextValue | undefined>(undefined);
 
-function delay(ms: number) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [language, setLanguageState] = useState<LanguageOption | null>(null);
+  const [region, setRegionState] = useState<string>(() => detectDeviceRegion());
+  const localeTag = useMemo(() => {
+    setActiveFormattingLocale(language, region);
+    return buildLocaleTag(language, region);
+  }, [language, region]);
   const [session, setSession] = useState<AuthSession | null>(null);
-  const [users, setUsers] = useState<User[]>(seedUsers);
-  const [stories, setStories] = useState<Story[]>(seedStories);
-  const [reels, setReels] = useState<Reel[]>(seedReels);
-  const [products, setProducts] = useState<Product[]>(seedProducts);
-  const [communities, setCommunities] = useState<CommunitySpace[]>(seedCommunities);
-  const [communityPosts, setCommunityPosts] = useState<CommunityPost[]>(seedCommunityPosts);
-  const [communityChatMessages, setCommunityChatMessages] = useState<CommunityChatMessage[]>(seedCommunityChatMessages);
+  const [users, setUsers] = useState<User[]>([]);
+  const [stories, setStories] = useState<Story[]>([]);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [postComments, setPostComments] = useState<PostComment[]>([]);
+  const [reels, setReels] = useState<Reel[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [communities, setCommunities] = useState<CommunitySpace[]>([]);
+  const [communityPosts, setCommunityPosts] = useState<CommunityPost[]>([]);
+  const [communityChatMessages, setCommunityChatMessages] = useState<CommunityChatMessage[]>([]);
   const [communityTypingById, setCommunityTypingById] = useState<Record<string, string[]>>({});
   const [presenceByUserId, setPresenceByUserId] = useState<Record<string, UserPresence>>({});
-  const [directThreads, setDirectThreads] = useState<DirectChatThread[]>(seedDirectThreads);
-  const [directMessages, setDirectMessages] = useState<DirectChatMessage[]>(seedDirectMessages);
+  const [directThreads, setDirectThreads] = useState<DirectChatThread[]>([]);
+  const [directMessages, setDirectMessages] = useState<DirectChatMessage[]>([]);
   const [directTypingByThread, setDirectTypingByThread] = useState<Record<string, string[]>>({});
-  const [comments, setComments] = useState<ReelComment[]>(seedComments);
-  const [notifications, setNotifications] = useState<AppNotification[]>(seedNotifications);
-  const [savedPosts, setSavedPosts] = useState<SavedPost[]>(seedSavedPosts);
-  const [marketplaceThreads, setMarketplaceThreads] = useState<MarketplaceChatThread[]>(seedMarketplaceThreads);
-  const [marketplaceMessages, setMarketplaceMessages] = useState<MarketplaceChatMessage[]>(seedMarketplaceMessages);
+  const [comments, setComments] = useState<ReelComment[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [reports, setReports] = useState<ContentReport[]>([]);
+  const [isOwner, setIsOwner] = useState(false);
+  const [savedPosts, setSavedPosts] = useState<SavedPost[]>([]);
+  const [marketplaceThreads, setMarketplaceThreads] = useState<MarketplaceChatThread[]>([]);
+  const [marketplaceMessages, setMarketplaceMessages] = useState<MarketplaceChatMessage[]>([]);
   const [marketplaceTypingByThread, setMarketplaceTypingByThread] = useState<Record<string, string[]>>({});
-  const [marketplaceOrders, setMarketplaceOrders] = useState<MarketplaceOrder[]>(seedMarketplaceOrders);
+  const [marketplaceOrders, setMarketplaceOrders] = useState<MarketplaceOrder[]>([]);
   const [activeSubscription, setActiveSubscription] = useState<AppSubscription | null>(null);
   const [pushNotificationsStatus, setPushNotificationsStatus] = useState<PushNotificationsStatus>(
     DEFAULT_PUSH_NOTIFICATIONS_STATUS
   );
-  const [reelBoosts, setReelBoosts] = useState<ReelBoostCampaign[]>(seedReelBoosts);
+  const [reelBoosts, setReelBoosts] = useState<ReelBoostCampaign[]>([]);
+  const [startupDiagnostics, setStartupDiagnostics] = useState<string[]>(["Initializing Sohba..."]);
   const knownNotificationIdsRef = useRef<Set<string>>(new Set());
   const hasPrimedNotificationFeedRef = useRef(false);
+  const reachedReelIdsRef = useRef<Set<string>>(new Set());
+
+  const addDiagnostic = (message: string) => {
+    setStartupDiagnostics((current) => [...current.slice(-14), `${new Date().toLocaleTimeString()}: ${message}`]);
+  };
 
   useEffect(() => {
+    const startupSafetyTimer = setTimeout(() => {
+      addDiagnostic("Startup safety timeout reached. Opening app shell.");
+      setIsBootstrapping(false);
+    }, 3500);
+
     async function bootstrap() {
+      addDiagnostic("Starting bootstrap...");
       try {
-        const [storedLanguage, storedSession, storedFirebaseUser, storedBootVersion] = await AsyncStorage.multiGet([
+        const [storedLanguage, storedSession, storedFirebaseUser, storedBootVersion, storedRegion] = await AsyncStorage.multiGet([
           STORAGE_KEYS.language,
           STORAGE_KEYS.session,
           STORAGE_KEYS.firebaseUser,
           STORAGE_KEYS.bootVersion,
+          STORAGE_KEYS.region,
         ]);
+        if (isKnownRegion(storedRegion[1])) {
+          setRegionState(storedRegion[1].toUpperCase());
+        }
+        addDiagnostic("Storage keys read.");
 
-        if (storedBootVersion[1] !== APP_BOOT_VERSION) {
+        if (storedBootVersion[1] && storedBootVersion[1] !== APP_BOOT_VERSION) {
+          addDiagnostic(`Version mismatch: ${storedBootVersion[1]} vs ${APP_BOOT_VERSION}. Clearing old session.`);
           await AsyncStorage.multiRemove([STORAGE_KEYS.session, STORAGE_KEYS.firebaseUser]);
           await AsyncStorage.setItem(STORAGE_KEYS.bootVersion, APP_BOOT_VERSION);
           storedSession[1] = null;
           storedFirebaseUser[1] = null;
+        } else if (!storedBootVersion[1]) {
+          addDiagnostic("First boot or version unset. Tagging version.");
+          await AsyncStorage.setItem(STORAGE_KEYS.bootVersion, APP_BOOT_VERSION);
         }
 
-        const languageValue = storedLanguage[1] as LanguageOption | null;
+        const languageValue = isLanguageOption(storedLanguage[1]) ? storedLanguage[1] : null;
         if (languageValue) {
+          addDiagnostic(`Language restored: ${languageValue}`);
           setLanguageState(languageValue);
+        }
+        // Keep the native layout direction in step with the saved language (e.g. after an app update).
+        if (languageValue) {
+          void applyLayoutDirection(languageValue);
         }
 
         const parsedSession = parseStoredSession(storedSession[1]);
         const parsedFirebaseUser = parseStoredUser(storedFirebaseUser[1]);
         const shouldUseFirebaseSession = Boolean(
-          parsedSession && isFirebaseProfilesConfigured() && !isDemoAccessToken(parsedSession.token)
+          parsedSession && isFirebaseProfilesConfigured() && !isLegacyLocalAccessToken(parsedSession.token)
         );
 
         if (parsedSession && shouldUseFirebaseSession) {
-          const refreshedToken = await resolveAccessToken(parsedSession);
+          addDiagnostic("Verifying Firebase session...");
+          const refreshedToken = await resolveAccessToken(parsedSession).catch((err) => {
+            addDiagnostic(`Token resolve failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+            return null;
+          });
+
           if (!refreshedToken) {
+            addDiagnostic("No refreshed token. Clearing session.");
             await AsyncStorage.multiRemove([STORAGE_KEYS.session, STORAGE_KEYS.firebaseUser]);
           } else {
             if (isAppApiConfigured()) {
+              addDiagnostic("Checking API health...");
               const verified = await fetchApiMe(refreshedToken)
                 .then(() => true)
-                .catch(() => false);
+                .catch((err) => {
+                  addDiagnostic(`API check failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+                  return false;
+                });
 
               if (!verified) {
+                addDiagnostic("API identity verification failed. Logging out.");
                 await AsyncStorage.multiRemove([STORAGE_KEYS.session, STORAGE_KEYS.firebaseUser]);
                 await logoutFromFirebaseProfile().catch(() => undefined);
                 setSession(null);
-                setUsers(seedUsers);
+                setUsers([]);
                 return;
               }
             }
@@ -407,90 +539,191 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
             setSession(nextSession);
             await AsyncStorage.setItem(STORAGE_KEYS.session, JSON.stringify(nextSession));
+            addDiagnostic("Session restored and updated.");
 
             if (parsedFirebaseUser?.id === parsedSession.userId) {
               setUsers((current) => withOwnedContent(upsertUser(current, parsedFirebaseUser), reels, products));
             } else {
               try {
+                addDiagnostic("Restoring user profile...");
                 const firebaseProfile = await getFirebaseProfileById(parsedSession.userId);
                 if (firebaseProfile) {
                   setUsers((current) => withOwnedContent(upsertUser(current, firebaseProfile), reels, products));
                   await AsyncStorage.setItem(STORAGE_KEYS.firebaseUser, JSON.stringify(firebaseProfile));
                 }
-              } catch {
-                // Keep the cached session; Firebase Auth may restore a token after boot on slow devices.
+              } catch (err) {
+                addDiagnostic("Profile restore skipped. Using local cache.");
               }
             }
 
-            await hydrateCatalogFromFirebase(parsedFirebaseUser ?? undefined);
+            addDiagnostic("Hydrating Firebase catalog...");
+            await hydrateCatalogFromFirebase(parsedFirebaseUser ?? undefined).catch((err) => {
+              addDiagnostic(`Catalog hydration failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+            });
           }
-        } else if (parsedSession && (isAppApiConfigured() || seedUsers.some((item) => item.id === parsedSession.userId))) {
+        } else if (parsedSession && (isAppApiConfigured() || Boolean(parsedFirebaseUser))) {
+          addDiagnostic("Restoring local session.");
           setSession(parsedSession);
         }
 
         if (isAppApiConfigured() && !shouldUseFirebaseSession) {
-          await hydrateCatalogFromApi();
+          addDiagnostic("Hydrating API catalog...");
+          await hydrateCatalogFromApi().catch(() => undefined);
 
           if (parsedSession && !shouldUseFirebaseSession) {
-            const synced = await hydrateSessionFromApi(parsedSession);
+            addDiagnostic("Syncing session from API...");
+            const synced = await hydrateSessionFromApi(parsedSession).catch(() => false);
             if (!synced) {
+              addDiagnostic("API session sync failed. Resetting.");
               setSession(null);
-              setStories(seedStories);
+              setStories([]);
+              setPosts([]);
+              setPostComments([]);
               setSavedPosts([]);
               setNotifications([]);
-              setCommunities(seedCommunities);
-              setCommunityPosts(seedCommunityPosts);
-              setCommunityChatMessages(seedCommunityChatMessages);
+              setCommunities([]);
+              setCommunityPosts([]);
+              setCommunityChatMessages([]);
               setCommunityTypingById({});
-              setDirectThreads(seedDirectThreads);
-              setDirectMessages(seedDirectMessages);
+              setDirectThreads([]);
+              setDirectMessages([]);
               setDirectTypingByThread({});
-              setMarketplaceThreads(seedMarketplaceThreads);
-              setMarketplaceMessages(seedMarketplaceMessages);
+              setMarketplaceThreads([]);
+              setMarketplaceMessages([]);
               setMarketplaceTypingByThread({});
-              setMarketplaceOrders(seedMarketplaceOrders);
+              setMarketplaceOrders([]);
               await AsyncStorage.removeItem(STORAGE_KEYS.session);
               await AsyncStorage.removeItem(STORAGE_KEYS.firebaseUser);
             }
           }
         }
 
-        await delay(900);
+        addDiagnostic("Bootstrap complete.");
       } catch (error) {
-      console.error("Pulseora bootstrap failed. Falling back to clean local state.", error);
+        const message = error instanceof Error ? error.message : "Unknown fatal error";
+        addDiagnostic(`Bootstrap failed: ${message}`);
+        console.error("Sohba bootstrap failed. Falling back to clean local state.", error);
         setSession(null);
-        setUsers(seedUsers);
-        setStories(seedStories);
-        setReels(seedReels);
-        setProducts(seedProducts);
-        setCommunities(seedCommunities);
-        setCommunityPosts(seedCommunityPosts);
-        setCommunityChatMessages(seedCommunityChatMessages);
+        setUsers([]);
+        setStories([]);
+        setPosts([]);
+        setPostComments([]);
+        setReels([]);
+        setProducts([]);
+        setCommunities([]);
+        setCommunityPosts([]);
+        setCommunityChatMessages([]);
         setCommunityTypingById({});
         setPresenceByUserId({});
-        setDirectThreads(seedDirectThreads);
-        setDirectMessages(seedDirectMessages);
+        setDirectThreads([]);
+        setDirectMessages([]);
         setDirectTypingByThread({});
-        setComments(seedComments);
-        setNotifications(seedNotifications);
-        setSavedPosts(seedSavedPosts);
-        setMarketplaceThreads(seedMarketplaceThreads);
-        setMarketplaceMessages(seedMarketplaceMessages);
+        setComments([]);
+        setNotifications([]);
+        setSavedPosts([]);
+        setMarketplaceThreads([]);
+        setMarketplaceMessages([]);
         setMarketplaceTypingByThread({});
-        setMarketplaceOrders(seedMarketplaceOrders);
+        setMarketplaceOrders([]);
         setActiveSubscription(null);
         setPushNotificationsStatus(DEFAULT_PUSH_NOTIFICATIONS_STATUS);
-        setReelBoosts(seedReelBoosts);
+        setReelBoosts([]);
         await AsyncStorage.multiRemove([STORAGE_KEYS.session, STORAGE_KEYS.firebaseUser]);
       } finally {
+        clearTimeout(startupSafetyTimer);
         setIsBootstrapping(false);
       }
     }
 
     void bootstrap();
+
+    return () => {
+      clearTimeout(startupSafetyTimer);
+    };
   }, []);
 
   const currentUser = users.find((item) => item.id === session?.userId) ?? null;
+  const isAdmin = currentUser?.role === "admin";
+  const googleSignInEnabled = isGoogleSignInConfigured();
+  const googleSignInMessage = getGoogleSignInUnavailableMessage();
+
+  async function completeFirebaseAuth(response: { token: string; user: User }) {
+    const nextSession: AuthSession = {
+      token: response.token,
+      userId: response.user.id,
+      provider: "firebase",
+    };
+
+    if (isAppApiConfigured()) {
+      await fetchApiMe(nextSession.token);
+    }
+
+    setSession(nextSession);
+    setUsers((current) => withOwnedContent(upsertUser(current, response.user), reels, products));
+    setStories([]);
+    setPosts([]);
+    setPostComments([]);
+    setSavedPosts([]);
+    setNotifications([]);
+    setCommunities([]);
+    setCommunityPosts([]);
+    setCommunityChatMessages([]);
+    setCommunityTypingById({});
+    setDirectThreads([]);
+    setDirectMessages([]);
+    setDirectTypingByThread({});
+    setMarketplaceThreads([]);
+    setMarketplaceMessages([]);
+    setMarketplaceTypingByThread({});
+    setMarketplaceOrders([]);
+    await AsyncStorage.multiSet([
+      [STORAGE_KEYS.session, JSON.stringify(nextSession)],
+      [STORAGE_KEYS.firebaseUser, JSON.stringify(response.user)],
+    ]);
+    await hydrateCatalogFromFirebase(response.user);
+  }
+
+  async function completeSupabaseAuth(response: {
+    token: string;
+    refreshToken?: string;
+    expiresAt?: number;
+    user: User;
+  }) {
+    const nextSession: AuthSession = {
+      token: response.token,
+      userId: response.user.id,
+      provider: "supabase",
+      refreshToken: response.refreshToken,
+      expiresAt: response.expiresAt,
+    };
+
+    if (isAppApiConfigured()) {
+      await fetchApiMe(nextSession.token);
+    }
+
+    setSession(nextSession);
+    setUsers((current) => withOwnedContent(upsertUser(current, response.user), reels, products));
+    setStories([]);
+    setPosts([]);
+    setPostComments([]);
+    setSavedPosts([]);
+    setNotifications([]);
+    setCommunities([]);
+    setCommunityPosts([]);
+    setCommunityChatMessages([]);
+    setCommunityTypingById({});
+    setDirectThreads([]);
+    setDirectMessages([]);
+    setDirectTypingByThread({});
+    setMarketplaceThreads([]);
+    setMarketplaceMessages([]);
+    setMarketplaceTypingByThread({});
+    setMarketplaceOrders([]);
+    await AsyncStorage.multiSet([
+      [STORAGE_KEYS.session, JSON.stringify(nextSession)],
+      [STORAGE_KEYS.firebaseUser, JSON.stringify(response.user)],
+    ]);
+  }
 
   async function persistSessionSnapshot(nextSession: AuthSession) {
     setSession((current) =>
@@ -507,7 +740,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return null;
     }
 
-    if (!isDemoAccessToken(currentSession.token) && isFirebaseProfilesConfigured()) {
+    if (isSupabaseBackedSession(currentSession)) {
+      const shouldRefresh = Boolean(
+        currentSession.expiresAt && currentSession.expiresAt <= Math.floor(Date.now() / 1000) + 60
+      );
+
+      if (!shouldRefresh) {
+        return currentSession.token;
+      }
+
+      const refreshedSession = currentSession.refreshToken
+        ? await refreshSupabaseProfileSession(currentSession.refreshToken).catch(() => null)
+        : null;
+
+      if (refreshedSession?.token) {
+        await persistSessionSnapshot({
+          ...currentSession,
+          token: refreshedSession.token,
+          refreshToken: refreshedSession.refreshToken ?? currentSession.refreshToken,
+          expiresAt: refreshedSession.expiresAt ?? currentSession.expiresAt,
+        });
+        return refreshedSession.token;
+      }
+
+      return options?.allowStoredFallback ? currentSession.token : null;
+    }
+
+    if (isFirebaseBackedSession(currentSession)) {
       const refreshedToken = await getCurrentFirebaseIdToken(true).catch(() => null);
 
       if (refreshedToken) {
@@ -543,6 +802,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return {
         token: null,
         message: SESSION_REFRESH_MESSAGE,
+      };
+    }
+
+    return {
+      token,
+      message: null,
+    };
+  }
+
+  async function ensureFirebaseWriteSessionReady(
+    currentSession: AuthSession | null,
+    missingMessage = "Your Firebase session is still loading. Please log in again."
+  ) {
+    if (!currentSession?.token || !isFirebaseBackedSession(currentSession)) {
+      return {
+        token: null,
+        message: missingMessage,
+      };
+    }
+
+    const token = await resolveAccessToken(currentSession, { allowStoredFallback: true });
+    if (!token) {
+      return {
+        token: null,
+        message: "Your login session is still waking up. Please wait a moment and try again.",
       };
     }
 
@@ -680,6 +964,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setCommunityChatMessages((current) => applyDeliveredStateToMessages(current, payload.messageIds, payload.userId));
         };
 
+        const handleNotification = (payload: NotificationRealtimeEvent) => {
+          if (!payload.notification) {
+            return;
+          }
+
+          const nextNotification = mapApiNotificationToMobile(payload.notification);
+          if (nextNotification.userId !== session.userId) {
+            return;
+          }
+
+          setNotifications((current) => mergeNotificationsById([nextNotification], current));
+        };
+
+        const handleNotificationsReadAll = (payload: NotificationsReadAllRealtimeEvent) => {
+          if (!Array.isArray(payload.notifications)) {
+            return;
+          }
+
+          const nextNotifications = payload.notifications
+            .map(mapApiNotificationToMobile)
+            .filter((notification) => notification.userId === session.userId);
+          if (nextNotifications.length === 0) {
+            return;
+          }
+
+          setNotifications((current) => mergeNotificationsById(nextNotifications, current));
+        };
+
         const handlePresenceSnapshot = (payload: PresenceRealtimeEvent[]) => {
           setPresenceByUserId(
             payload.reduce<Record<string, UserPresence>>((next, item) => {
@@ -702,6 +1014,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         socket.on("chat:delivered", handleDelivered);
         socket.on("chat:typing", handleTyping);
         socket.on("chat:read", handleRead);
+        socket.on("notification:new", handleNotification);
+        socket.on("notification:read", handleNotification);
+        socket.on("notifications:read-all", handleNotificationsReadAll);
         socket.on("presence:snapshot", handlePresenceSnapshot);
         socket.on("presence:update", handlePresenceUpdate);
 
@@ -712,12 +1027,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           socket.off("chat:delivered", handleDelivered);
           socket.off("chat:typing", handleTyping);
           socket.off("chat:read", handleRead);
+          socket.off("notification:new", handleNotification);
+          socket.off("notification:read", handleNotification);
+          socket.off("notifications:read-all", handleNotificationsReadAll);
           socket.off("presence:snapshot", handlePresenceSnapshot);
           socket.off("presence:update", handlePresenceUpdate);
           disconnectRealtime();
         };
       } catch (error) {
-        console.warn("Pulseora realtime startup was skipped for safety.", error);
+        console.warn("Sohba realtime startup was skipped for safety.", error);
         disconnectRealtime();
       }
     })();
@@ -739,14 +1057,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setUsers((current) => mergeUsersById(nextUsers, current));
         },
         onReels: (nextReels) => {
-          setReels(mergeReelsById(nextReels, seedReels));
+          setReels(mergeReelsById(nextReels, []));
         },
         onComments: (nextComments) => {
-          setComments(mergeCommentsById(nextComments, seedComments));
+          setComments(mergeCommentsById(nextComments, []));
         },
       });
     } catch (error) {
-      console.warn("Pulseora engagement sync was skipped for safety.", error);
+      console.warn("Sohba engagement sync was skipped for safety.", error);
+      return;
+    }
+  }, [session?.token]);
+
+  useEffect(() => {
+    if (!isFirebaseBackedSession(session)) {
+      return;
+    }
+
+    try {
+      return subscribeToFirebasePosts({
+        onPosts: (nextPosts) => {
+          setPosts(mergePostsById(nextPosts, []));
+        },
+        onComments: (nextComments) => {
+          setPostComments(mergePostCommentsById(nextComments, []));
+        },
+      });
+    } catch (error) {
+      console.warn("Sohba post sync was skipped for safety.", error);
       return;
     }
   }, [session?.token]);
@@ -763,7 +1101,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         onNotifications: setNotifications,
       });
     } catch (error) {
-      console.warn("Pulseora inbox sync was skipped for safety.", error);
+      console.warn("Sohba inbox sync was skipped for safety.", error);
       return;
     }
   }, [session?.token, session?.userId]);
@@ -783,7 +1121,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         onCommunityMessages: setCommunityChatMessages,
       });
     } catch (error) {
-      console.warn("Pulseora chat sync was skipped for safety.", error);
+      console.warn("Sohba chat sync was skipped for safety.", error);
       return;
     }
   }, [session?.token, session?.userId]);
@@ -801,7 +1139,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         onMarketplaceOrders: setMarketplaceOrders,
       });
     } catch (error) {
-      console.warn("Pulseora community sync was skipped for safety.", error);
+      console.warn("Sohba community sync was skipped for safety.", error);
       return;
     }
   }, [session?.token, session?.userId]);
@@ -822,7 +1160,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         onBoosts: setReelBoosts,
       });
     } catch (error) {
-      console.warn("Pulseora monetization sync was skipped for safety.", error);
+      console.warn("Sohba monetization sync was skipped for safety.", error);
       return;
     }
   }, [session?.token, session?.userId]);
@@ -890,9 +1228,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const firebaseUserId = preferredUser?.id ?? session?.userId;
-      const [catalog, engagement, inbox, chat, communityCommerce, monetization] = await Promise.all([
+      const [catalog, engagement, postsSnapshot, inbox, chat, communityCommerce, monetization] = await Promise.all([
         fetchFirebaseCatalogFromFirestore(),
         fetchFirebaseEngagementSnapshot(),
+        fetchFirebasePostsSnapshot(),
         firebaseUserId ? fetchFirebaseInboxSnapshot(firebaseUserId) : Promise.resolve({ savedPosts: [], notifications: [] }),
         firebaseUserId
           ? fetchFirebaseChatSnapshot(firebaseUserId)
@@ -917,14 +1256,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               boosts: [],
             }),
       ]);
-      const nextStories = filterActiveStories(mergeStoriesById(catalog.stories, seedStories));
-      const nextReels = mergeReelsById(catalog.reels, seedReels);
-      const nextProducts = mergeProductsById(catalog.products, seedProducts);
+      const nextStories = pruneStoriesForState(mergeStoriesById(catalog.stories, []));
+      const nextPosts = mergePostsById(postsSnapshot.posts, []);
+      const nextReels = mergeReelsById(catalog.reels, []);
+      const nextProducts = mergeProductsById(catalog.products, []);
 
       setStories(nextStories);
+      setPosts(nextPosts);
+      setPostComments(mergePostCommentsById(postsSnapshot.comments, []));
       setReels(nextReels);
       setProducts(nextProducts);
-      setComments(mergeCommentsById(engagement.comments, seedComments));
+      setComments(mergeCommentsById(engagement.comments, []));
       setSavedPosts(inbox.savedPosts);
       setNotifications(inbox.notifications);
       setCommunities(communityCommerce.communities);
@@ -1021,6 +1363,149 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   async function setLanguage(languageValue: LanguageOption) {
     setLanguageState(languageValue);
     await AsyncStorage.setItem(STORAGE_KEYS.language, languageValue);
+    let profileWrite: Promise<unknown> = Promise.resolve();
+    if (currentUser && currentUser.language !== languageValue) {
+      setUsers((current) => current.map((user) => (user.id === currentUser.id ? { ...user, language: languageValue } : user)));
+      if (isFirebaseBackedSession(session)) {
+        profileWrite = updateFirebaseUserPreferences(currentUser.id, { language: languageValue }).catch(() => undefined);
+      }
+    }
+    // Arabic and Urdu mirror the whole layout; switching direction needs one quick app reload.
+    if (isRtlLanguage(languageValue) !== I18nManager.isRTL) {
+      await Promise.race([profileWrite, new Promise((resolve) => setTimeout(resolve, 3000))]);
+      await applyLayoutDirection(languageValue);
+    }
+  }
+
+  async function submitReport(input: Omit<NewReportInput, "reporterId">) {
+    if (!currentUser) {
+      return { ok: false, message: "Log in to report content." };
+    }
+    try {
+      const report = await createFirebaseReport({ ...input, reporterId: currentUser.id });
+      setReports((current) => [report, ...current]);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : "The report could not be sent." };
+    }
+  }
+
+  async function refreshReports() {
+    if (currentUser?.role !== "admin") {
+      return;
+    }
+    try {
+      const rows = await adminApi.reports();
+      setReports(rows.map((row) => normalizeReport(row)).filter((row): row is ContentReport => Boolean(row)));
+    } catch {
+      // Keep what we have; the dashboard shows the error when it loads its own data.
+    }
+  }
+
+  async function adminSetUserRole(userId: string, role: "admin" | "user") {
+    try {
+      await adminApi.setRole(userId, role);
+      setUsers((current) => current.map((user) => (user.id === userId ? { ...user, role } : user)));
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : "The role could not be changed." };
+    }
+  }
+
+  async function adminDeleteUserAccount(userId: string) {
+    try {
+      await adminApi.deleteUser(userId);
+      setUsers((current) =>
+        current
+          .filter((user) => user.id !== userId)
+          .map((user) => ({
+            ...user,
+            followers: user.followers.filter((id) => id !== userId),
+            following: user.following.filter((id) => id !== userId),
+          }))
+      );
+      setPosts((current) => current.filter((item) => item.userId !== userId));
+      setReels((current) => current.filter((item) => item.userId !== userId));
+      setStories((current) => current.filter((item) => item.userId !== userId));
+      setProducts((current) => current.filter((item) => item.userId !== userId));
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : "The account could not be deleted." };
+    }
+  }
+
+  // Ask the server whether this account is the owner/admin. The owner is promoted automatically.
+  useEffect(() => {
+    if (!currentUser?.id || !isFirebaseBackedSession(session)) {
+      setIsOwner(false);
+      return;
+    }
+    let active = true;
+    const userId = currentUser.id;
+    adminApi
+      .me()
+      .then((result) => {
+        if (!active) {
+          return;
+        }
+        setIsOwner(result.isOwner || Boolean(result.canManageRoles));
+        if (result.isAdmin) {
+          setUsers((current) => current.map((user) => (user.id === userId && user.role !== "admin" ? { ...user, role: "admin" } : user)));
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [currentUser?.id, session?.token]);
+
+  useEffect(() => {
+    if (currentUser?.role === "admin") {
+      void refreshReports();
+    }
+  }, [currentUser?.role]);
+
+  async function placeCall(calleeId: string, type: CallType) {
+    if (!currentUser) {
+      return { ok: false, message: "Log in to make calls." };
+    }
+    if (calleeId === currentUser.id) {
+      return { ok: false, message: "You can't call yourself." };
+    }
+    const callee = users.find((user) => user.id === calleeId);
+    if (callee?.isBanned) {
+      return { ok: false, message: "This account is not available." };
+    }
+    try {
+      const callId = await startCall({ callerId: currentUser.id, calleeId, type });
+      void publishFirebaseNotification({
+        userId: calleeId,
+        type: "call",
+        title: type === "video" ? `${currentUser.name} is video calling you` : `${currentUser.name} is calling you`,
+        body: "Tap to answer on Sohba.",
+        actor: currentUser,
+        entityId: callId,
+        dedupeId: `call-${callId}`,
+      }).catch(() => undefined);
+      return { ok: true, callId };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : "The call could not be started." };
+    }
+  }
+
+  async function setRegion(regionValue: string) {
+    if (!isKnownRegion(regionValue)) {
+      return;
+    }
+    const nextRegion = regionValue.toUpperCase();
+    setRegionState(nextRegion);
+    await AsyncStorage.setItem(STORAGE_KEYS.region, nextRegion);
+    if (currentUser && currentUser.region !== nextRegion) {
+      setUsers((current) => current.map((user) => (user.id === currentUser.id ? { ...user, region: nextRegion } : user)));
+      if (isFirebaseBackedSession(session)) {
+        void updateFirebaseUserPreferences(currentUser.id, { region: nextRegion }).catch(() => undefined);
+      }
+    }
   }
 
   async function publishFirebaseNotification(input: Parameters<typeof createFirebaseNotification>[0]) {
@@ -1038,21 +1523,51 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return null;
   }
 
-  async function persistCurrentFirebaseUser(nextUser: User, nextToken = session?.token) {
-    if (!nextToken || isDemoAccessToken(nextToken)) {
+  async function publishMentionNotifications(input: {
+    text: string;
+    entityType: "reel" | "post";
+    entityId: string;
+    dedupeSourceId: string;
+  }) {
+    if (!currentUser) {
       return;
     }
 
-    await AsyncStorage.multiSet([
-      [
-        STORAGE_KEYS.session,
-        JSON.stringify({
-          token: nextToken,
-          userId: nextUser.id,
-        }),
-      ],
-      [STORAGE_KEYS.firebaseUser, JSON.stringify(nextUser)],
-    ]);
+    const mentionedUsers = findMentionTargetsByUsername(input.text, users, [currentUser.id]);
+    if (mentionedUsers.length === 0) {
+      return;
+    }
+
+    await Promise.allSettled(
+      mentionedUsers.map((mentionedUser) =>
+        publishFirebaseNotification({
+          userId: mentionedUser.id,
+          type: "mention",
+          title: `${currentUser.name} mentioned you in a comment`,
+          body: truncateForNotification(input.text),
+          actor: currentUser,
+          entityType: input.entityType,
+          entityId: input.entityId,
+          dedupeId: `mention-${input.dedupeSourceId}-${mentionedUser.id}`,
+        })
+      )
+    );
+  }
+
+  async function publishStoryViewNotification(story: Story) {
+    if (!currentUser || story.userId === currentUser.id) {
+      return;
+    }
+
+    await publishFirebaseNotification({
+      userId: story.userId,
+      type: "story_view",
+      title: `${currentUser.name} viewed your story`,
+      body: "Your story reached another viewer.",
+      actor: currentUser,
+      entityId: story.id,
+      dedupeId: `story-view-${story.id}-${currentUser.id}`,
+    }).catch(() => undefined);
   }
 
   async function refreshCatalog() {
@@ -1534,48 +2049,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (isFirebaseProfilesConfigured()) {
       try {
         const response = await loginWithFirebaseProfile(email, password);
-        const nextSession = {
-          token: response.token,
-          userId: response.user.id,
-        };
-
-        if (isAppApiConfigured()) {
-          await fetchApiMe(nextSession.token);
-        }
-
-        setSession(nextSession);
-        setUsers((current) => withOwnedContent(upsertUser(current, response.user), reels, products));
-        setStories(seedStories);
-        setSavedPosts([]);
-        setNotifications([]);
-        setCommunities(seedCommunities);
-        setCommunityPosts(seedCommunityPosts);
-        setCommunityChatMessages(seedCommunityChatMessages);
-        setCommunityTypingById({});
-        setDirectThreads([]);
-        setDirectMessages([]);
-        setDirectTypingByThread({});
-        setMarketplaceThreads([]);
-        setMarketplaceMessages([]);
-        setMarketplaceTypingByThread({});
-        setMarketplaceOrders([]);
-        await AsyncStorage.multiSet([
-          [STORAGE_KEYS.session, JSON.stringify(nextSession)],
-          [STORAGE_KEYS.firebaseUser, JSON.stringify(response.user)],
-        ]);
-        await hydrateCatalogFromFirebase(response.user);
+        await completeFirebaseAuth(response);
         return { ok: true };
       } catch (error) {
         return { ok: false, message: getFirebaseProfileErrorMessage(error) };
       }
     }
 
+    if (isSupabaseAuthConfigured()) {
+      try {
+        const response = await loginWithSupabaseProfile(email, password);
+        await completeSupabaseAuth(response);
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: getSupabaseProfileErrorMessage(error) };
+      }
+    }
+
     if (isAppApiConfigured()) {
       try {
         const response = await loginWithApi(email.trim(), password);
-        const nextSession = {
+        const nextSession: AuthSession = {
           token: response.token,
           userId: response.user.id,
+          provider: "api",
         };
 
         setSession(nextSession);
@@ -1593,83 +2090,45 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    const matchedUser = users.find((item) => item.email.toLowerCase() === email.trim().toLowerCase());
-    if (!matchedUser) {
-      return { ok: false, message: "No user found with that email." };
+    return { ok: false, message: AUTH_UNAVAILABLE_MESSAGE };
+  }
+
+  async function continueWithGoogle() {
+    if (!isFirebaseProfilesConfigured()) {
+      return { ok: false, message: "Firebase Auth is not configured in this app yet." };
     }
 
-    const nextSession = {
-      token: `viraflow-token-${matchedUser.id}`,
-      userId: matchedUser.id,
-    };
+    if (!googleSignInEnabled) {
+      return { ok: false, message: googleSignInMessage ?? "Google sign-in is not available right now." };
+    }
 
-    setSession(nextSession);
-    setStories(seedStories);
-    setSavedPosts(seedSavedPosts.filter((item) => item.userId === matchedUser.id));
-    setNotifications(seedNotifications.filter((item) => item.userId === matchedUser.id));
-    setCommunities(seedCommunities);
-    setCommunityPosts(seedCommunityPosts);
-    setCommunityChatMessages(seedCommunityChatMessages);
-    setCommunityTypingById({});
-    const nextDirectThreads = seedDirectThreads.filter(
-      (item) =>
-        item.participantIds.includes(matchedUser.id) &&
-        item.participantIds.length === 2 &&
-        canUsersMutuallyDirectMessage(users, item.participantIds[0], item.participantIds[1])
-    );
-    setDirectThreads(nextDirectThreads);
-    setDirectMessages(seedDirectMessages.filter((item) => nextDirectThreads.some((thread) => thread.id === item.threadId)));
-    setDirectTypingByThread({});
-    const nextThreads = seedMarketplaceThreads.filter(
-      (item) => item.buyerId === matchedUser.id || item.sellerId === matchedUser.id
-    );
-    setMarketplaceThreads(nextThreads);
-    setMarketplaceMessages(seedMarketplaceMessages.filter((item) => nextThreads.some((thread) => thread.id === item.threadId)));
-    setMarketplaceTypingByThread({});
-    setMarketplaceOrders(
-      seedMarketplaceOrders.filter((item) => item.buyerId === matchedUser.id || item.sellerId === matchedUser.id)
-    );
-    await AsyncStorage.setItem(STORAGE_KEYS.session, JSON.stringify(nextSession));
-    return { ok: true };
+    try {
+      const response = await continueWithFirebaseGoogleProfile(language ?? "en");
+      await completeFirebaseAuth(response);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: getFirebaseProfileErrorMessage(error) };
+    }
   }
 
   async function register(payload: RegisterPayload) {
     if (isFirebaseProfilesConfigured()) {
       try {
         const response = await registerWithFirebaseProfile(payload, language ?? "en");
-        const nextSession = {
-          token: response.token,
-          userId: response.user.id,
-        };
-
-        if (isAppApiConfigured()) {
-          await fetchApiMe(nextSession.token);
-        }
-
-        setSession(nextSession);
-        setUsers((current) => withOwnedContent(upsertUser(current, response.user), reels, products));
-        setStories(seedStories);
-        setSavedPosts([]);
-        setNotifications([]);
-        setCommunities(seedCommunities);
-        setCommunityPosts(seedCommunityPosts);
-        setCommunityChatMessages(seedCommunityChatMessages);
-        setCommunityTypingById({});
-        setDirectThreads([]);
-        setDirectMessages([]);
-        setDirectTypingByThread({});
-        setMarketplaceThreads([]);
-        setMarketplaceMessages([]);
-        setMarketplaceTypingByThread({});
-        setMarketplaceOrders([]);
-        await AsyncStorage.multiSet([
-          [STORAGE_KEYS.session, JSON.stringify(nextSession)],
-          [STORAGE_KEYS.firebaseUser, JSON.stringify(response.user)],
-        ]);
-        await hydrateCatalogFromFirebase(response.user);
+        await completeFirebaseAuth(response);
         return { ok: true };
       } catch (error) {
         return { ok: false, message: getFirebaseProfileErrorMessage(error) };
+      }
+    }
+
+    if (isSupabaseAuthConfigured()) {
+      try {
+        const response = await registerWithSupabaseProfile(payload, language ?? "en");
+        await completeSupabaseAuth(response);
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: getSupabaseProfileErrorMessage(error) };
       }
     }
 
@@ -1679,9 +2138,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ...payload,
           language: language ?? "en",
         });
-        const nextSession = {
+        const nextSession: AuthSession = {
           token: response.token,
           userId: response.user.id,
+          provider: "api",
         };
 
         setSession(nextSession);
@@ -1700,47 +2160,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    const alreadyExists = users.some(
-      (item) =>
-        item.email.toLowerCase() === payload.email.trim().toLowerCase() ||
-        item.username.toLowerCase() === payload.username.trim().toLowerCase()
-    );
+    return { ok: false, message: AUTH_UNAVAILABLE_MESSAGE };
+  }
 
-    if (alreadyExists) {
-      return { ok: false, message: "That email or username is already in use." };
+  async function logout() {
+    const activeSession = session;
+    if (isFirebaseProfilesConfigured()) {
+      await logoutFromFirebaseProfile().catch(() => {
+        // Local app state still needs to clear even if Firebase is already signed out.
+      });
+    }
+    if (activeSession?.provider === "supabase") {
+      await logoutFromSupabaseProfile(activeSession.token).catch(() => undefined);
     }
 
-    const newUser: User = {
-      id: `user-${Date.now()}`,
-      name: payload.name.trim(),
-      username: payload.username.trim().replace(/\s+/g, "").toLowerCase(),
-      email: payload.email.trim().toLowerCase(),
-      profileImage:
-        "https://images.unsplash.com/photo-1502685104226-ee32379fefbe?auto=format&fit=crop&w=400&q=80",
-      bio: "New creator on Pulseora.",
-      headline: "Creator in progress",
-      language: language ?? "en",
-      planType: "free",
-      followers: [],
-      following: [],
-      reelIds: [],
-      productIds: [],
-    };
-
-    setUsers((current) => [newUser, ...current]);
-
-    const nextSession = {
-      token: `viraflow-token-${newUser.id}`,
-      userId: newUser.id,
-    };
-
-    setSession(nextSession);
-    setStories(seedStories);
+    setSession(null);
+    setStories([]);
+    setPosts([]);
+    setPostComments([]);
     setSavedPosts([]);
     setNotifications([]);
-    setCommunities(seedCommunities);
-    setCommunityPosts(seedCommunityPosts);
-    setCommunityChatMessages(seedCommunityChatMessages);
+    setCommunities([]);
+    setCommunityPosts([]);
+    setCommunityChatMessages([]);
     setCommunityTypingById({});
     setDirectThreads([]);
     setDirectMessages([]);
@@ -1749,33 +2191,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setMarketplaceMessages([]);
     setMarketplaceTypingByThread({});
     setMarketplaceOrders([]);
-    await AsyncStorage.setItem(STORAGE_KEYS.session, JSON.stringify(nextSession));
-    return { ok: true };
+    await AsyncStorage.multiRemove([STORAGE_KEYS.session, STORAGE_KEYS.firebaseUser]);
   }
 
-  async function logout() {
-    if (isFirebaseProfilesConfigured()) {
-      await logoutFromFirebaseProfile().catch(() => {
-        // Local app state still needs to clear even if Firebase is already signed out.
-      });
+  function recordReelView(reelId: string) {
+    if (!currentUser || !isFirebaseBackedSession(session)) {
+      return;
     }
 
-    setSession(null);
-    setStories(seedStories);
-    setSavedPosts([]);
-    setNotifications([]);
-    setCommunities(seedCommunities);
-    setCommunityPosts(seedCommunityPosts);
-    setCommunityChatMessages(seedCommunityChatMessages);
-    setCommunityTypingById({});
-    setDirectThreads(seedDirectThreads);
-    setDirectMessages(seedDirectMessages);
-    setDirectTypingByThread({});
-    setMarketplaceThreads(seedMarketplaceThreads);
-    setMarketplaceMessages(seedMarketplaceMessages);
-    setMarketplaceTypingByThread({});
-    setMarketplaceOrders(seedMarketplaceOrders);
-    await AsyncStorage.multiRemove([STORAGE_KEYS.session, STORAGE_KEYS.firebaseUser]);
+    const reel = reels.find((item) => item.id === reelId);
+    if (!reel || reel.userId === currentUser.id) {
+      return;
+    }
+
+    const countReach = !reachedReelIdsRef.current.has(reelId);
+    reachedReelIdsRef.current.add(reelId);
+    setReels((current) =>
+      current.map((item) =>
+        item.id === reelId
+          ? { ...item, viewCount: item.viewCount + 1, reachCount: item.reachCount + (countReach ? 1 : 0) }
+          : item
+      )
+    );
+    void recordFirebaseReelView(reelId, { countReach }).catch(() => undefined);
   }
 
   async function toggleLike(reelId: string) {
@@ -1790,7 +2228,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (updatedReel.likedBy.includes(currentUser.id)) {
           await publishFirebaseNotification({
             userId: updatedReel.userId,
-            type: "like",
+            type: "reel_like",
             title: `${currentUser.name} liked your reel`,
             body: `"${truncateForNotification(updatedReel.caption)}"`,
             actor: currentUser,
@@ -1840,6 +2278,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       return { ok: false, message: getApiErrorMessage(error) };
     }
+  }
+
+  async function togglePostLike(postId: string) {
+    if (!currentUser) {
+      return { ok: false, message: "Login required before liking a post." };
+    }
+
+    if (isFirebaseBackedSession(session)) {
+      try {
+        const updatedPost = await toggleFirebasePostLike(currentUser.id, postId, posts.find((item) => item.id === postId));
+        setPosts((current) => upsertPost(current, updatedPost));
+        if (updatedPost.likedBy.includes(currentUser.id)) {
+          await publishFirebaseNotification({
+            userId: updatedPost.userId,
+            type: "post_like",
+            title: `${currentUser.name} liked your post`,
+            body: truncateForNotification(updatedPost.caption || updatedPost.hashtags.map((tag) => `#${tag}`).join(" ")),
+            actor: currentUser,
+            entityType: "post",
+            entityId: updatedPost.id,
+            dedupeId: `post-like-${currentUser.id}-${updatedPost.id}`,
+          }).catch(() => undefined);
+        }
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: getFirebasePostsErrorMessage(error) };
+      }
+    }
+
+    setPosts((current) =>
+      current.map((post) => {
+        if (post.id !== postId) {
+          return post;
+        }
+
+        const hasLiked = post.likedBy.includes(currentUser.id);
+        return {
+          ...post,
+          likedBy: hasLiked ? post.likedBy.filter((item) => item !== currentUser.id) : [currentUser.id, ...post.likedBy],
+        };
+      })
+    );
+    return { ok: true };
   }
 
   async function repostReel(reelId: string) {
@@ -1897,34 +2378,73 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return { ok: false, message: "Comment is empty." };
     }
 
+    const nextText = text.trim();
+
     if (isFirebaseBackedSession(session)) {
-      if (containsSexualContent([text])) {
+      if (containsSexualContent([nextText])) {
         return { ok: false, message: blockedUserContentMessage };
       }
 
-      try {
-        const newComment = await addFirebaseReelComment(reelId, currentUser, text);
+      const firebaseSessionResult = await ensureFirebaseWriteSessionReady(session);
+      if (!firebaseSessionResult.token) {
+        return { ok: false, message: firebaseSessionResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+
+      const createFirebaseComment = async () => {
+        const newComment = await addFirebaseReelComment(reelId, currentUser, nextText);
         setComments((current) => mergeCommentsById([newComment], current));
         const targetReel = reels.find((item) => item.id === reelId);
+        const mentionedUsers = findMentionTargetsByUsername(nextText, users, [currentUser.id]);
         if (targetReel) {
-          await publishFirebaseNotification({
-            userId: targetReel.userId,
-            type: "comment",
-            title: `${currentUser.name} commented on your reel`,
-            body: truncateForNotification(text),
-            actor: currentUser,
-            entityType: "reel",
-            entityId: reelId,
-          }).catch(() => undefined);
+          if (targetReel.userId !== currentUser.id && !mentionedUsers.some((user) => user.id === targetReel.userId)) {
+            await publishFirebaseNotification({
+              userId: targetReel.userId,
+              type: "reel_comment",
+              title: `${currentUser.name} commented on your reel`,
+              body: truncateForNotification(nextText),
+              actor: currentUser,
+              entityType: "reel",
+              entityId: reelId,
+            }).catch(() => undefined);
+          }
         }
+        await publishMentionNotifications({
+          text: nextText,
+          entityType: "reel",
+          entityId: reelId,
+          dedupeSourceId: newComment.id,
+        });
+
+        return newComment;
+      };
+
+      try {
+        await createFirebaseComment();
         return { ok: true };
       } catch (error) {
+        const nextMessage = getFirebaseEngagementErrorMessage(error);
+        const looksLikeSessionProblem = /permission|auth|credential|login|session|unauth/i.test(nextMessage);
+
+        if (looksLikeSessionProblem) {
+          const retrySessionResult = await ensureFirebaseWriteSessionReady(session);
+          if (!retrySessionResult.token) {
+            return { ok: false, message: retrySessionResult.message ?? nextMessage };
+          }
+
+          try {
+            await createFirebaseComment();
+            return { ok: true };
+          } catch (retryError) {
+            return { ok: false, message: getFirebaseEngagementErrorMessage(retryError) };
+          }
+        }
+
         return { ok: false, message: getFirebaseEngagementErrorMessage(error) };
       }
     }
 
     if (!isAppApiConfigured()) {
-      if (containsSexualContent([text])) {
+      if (containsSexualContent([nextText])) {
         return { ok: false, message: blockedUserContentMessage };
       }
 
@@ -1934,7 +2454,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         userId: currentUser.id,
         userName: currentUser.name,
         userAvatar: currentUser.profileImage,
-        text: text.trim(),
+        text: nextText,
         createdAt: new Date().toISOString(),
       };
 
@@ -1951,7 +2471,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!accessTokenResult.token) {
         return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
       }
-      const created = await createCommentWithApi(accessTokenResult.token, reelId, text);
+      const created = await createCommentWithApi(accessTokenResult.token, reelId, nextText);
       const newComment: ReelComment = {
         id: created.id,
         reelId: created.reelId,
@@ -1963,10 +2483,388 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
 
       setComments((current) => [newComment, ...current.filter((item) => item.id !== newComment.id)]);
+      await publishMentionNotifications({
+        text: nextText,
+        entityType: "reel",
+        entityId: reelId,
+        dedupeSourceId: newComment.id,
+      });
       return { ok: true };
     } catch (error) {
       return { ok: false, message: getApiErrorMessage(error) };
     }
+  }
+
+  async function addPostComment(postId: string, text: string) {
+    if (!currentUser || !text.trim()) {
+      return { ok: false, message: "Comment is empty." };
+    }
+
+    const nextText = text.trim();
+    if (containsSexualContent([nextText])) {
+      return { ok: false, message: blockedUserContentMessage };
+    }
+
+    if (isFirebaseBackedSession(session)) {
+      const firebaseSessionResult = await ensureFirebaseWriteSessionReady(session);
+      if (!firebaseSessionResult.token) {
+        return { ok: false, message: firebaseSessionResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+
+      try {
+        const response = await addFirebasePostComment(postId, currentUser, nextText, posts.find((item) => item.id === postId));
+        setPostComments((current) => mergePostCommentsById([response.comment], current));
+        setPosts((current) => upsertPost(current, response.post));
+        const mentionedUsers = findMentionTargetsByUsername(nextText, users, [currentUser.id]);
+        if (response.post.userId !== currentUser.id && !mentionedUsers.some((user) => user.id === response.post.userId)) {
+          await publishFirebaseNotification({
+            userId: response.post.userId,
+            type: "post_comment",
+            title: `${currentUser.name} commented on your post`,
+            body: truncateForNotification(nextText),
+            actor: currentUser,
+            entityType: "post",
+            entityId: postId,
+          }).catch(() => undefined);
+        }
+        await publishMentionNotifications({
+          text: nextText,
+          entityType: "post",
+          entityId: postId,
+          dedupeSourceId: response.comment.id,
+        });
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: getFirebasePostsErrorMessage(error) };
+      }
+    }
+
+    const nextComment: PostComment = {
+      id: `post-comment-${Date.now()}`,
+      postId,
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userAvatar: currentUser.profileImage,
+      text: nextText,
+      createdAt: new Date().toISOString(),
+    };
+
+    setPostComments((current) => [nextComment, ...current]);
+    setPosts((current) =>
+      current.map((post) => (post.id === postId ? { ...post, commentCount: post.commentCount + 1 } : post))
+    );
+    await publishMentionNotifications({
+      text: nextText,
+      entityType: "post",
+      entityId: postId,
+      dedupeSourceId: nextComment.id,
+    });
+    return { ok: true };
+  }
+
+  async function deletePost(postId: string) {
+    if (!currentUser) {
+      return { ok: false, message: "Login required before deleting a post." };
+    }
+
+    const targetPost = posts.find((item) => item.id === postId);
+    if (!targetPost) {
+      return { ok: false, message: "Post not found." };
+    }
+
+    if (targetPost.userId !== currentUser.id) {
+      return { ok: false, message: "You can only delete your own post." };
+    }
+
+    if (isFirebaseBackedSession(session)) {
+      try {
+        const response = await deleteFirebasePost(currentUser.id, postId);
+        setPosts((current) => current.filter((item) => item.id !== response.deletedPostId));
+        setPostComments((current) => current.filter((item) => !response.deletedCommentIds.includes(item.id)));
+        setSavedPosts((current) => current.filter((item) => !(item.entityType === "post" && item.entityId === postId)));
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: getFirebasePostsErrorMessage(error) };
+      }
+    }
+
+    setPosts((current) => current.filter((item) => item.id !== postId));
+    setPostComments((current) => current.filter((item) => item.postId !== postId));
+    setSavedPosts((current) => current.filter((item) => !(item.entityType === "post" && item.entityId === postId)));
+    return { ok: true };
+  }
+
+  async function deleteReel(reelId: string) {
+    if (!currentUser) {
+      return { ok: false, message: "Login required before deleting a reel." };
+    }
+
+    const targetReel = reels.find((item) => item.id === reelId);
+    if (!targetReel) {
+      return { ok: false, message: "Reel not found." };
+    }
+
+    if (targetReel.userId !== currentUser.id) {
+      return { ok: false, message: "You can only delete your own reel." };
+    }
+
+    if (isFirebaseBackedSession(session)) {
+      try {
+        await deleteFirebaseReel(currentUser.id, reelId, targetReel);
+        removeReelLocally(reelId);
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: getFirebaseContentErrorMessage(error) };
+      }
+    }
+
+    if (!isAppApiConfigured()) {
+      removeReelLocally(reelId);
+      return { ok: true };
+    }
+
+    if (!session?.token) {
+      return { ok: false, message: "Backend session missing. Please log in again." };
+    }
+
+    try {
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      await deleteReelWithApi(accessTokenResult.token, reelId);
+      removeReelLocally(reelId);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: getApiErrorMessage(error) };
+    }
+  }
+
+  function updateRelatedReportStatus(entityType: ContentReport["entityType"], entityId: string, status: ContentReport["status"]) {
+    reports
+      .filter((report) => report.entityType === entityType && report.entityId === entityId && report.status !== status)
+      .forEach((report) => void adminApi.setReportStatus(report.id, status).catch(() => undefined));
+    setReports((current) =>
+      current.map((report) =>
+        report.entityType === entityType && report.entityId === entityId
+          ? { ...report, status }
+          : report
+      )
+    );
+  }
+
+  function removePostLocally(postId: string) {
+    setPosts((current) => current.filter((item) => item.id !== postId));
+    setPostComments((current) => current.filter((item) => item.postId !== postId));
+    setSavedPosts((current) => current.filter((item) => !(item.entityType === "post" && item.entityId === postId)));
+    setNotifications((current) => current.filter((item) => !(item.entityType === "post" && item.entityId === postId)));
+    updateRelatedReportStatus("post", postId, "resolved");
+  }
+
+  function removeProductLocally(productId: string) {
+    setProducts((current) => current.filter((item) => item.id !== productId));
+    setSavedPosts((current) => current.filter((item) => !(item.entityType === "product" && item.entityId === productId)));
+    setNotifications((current) => current.filter((item) => !(item.entityType === "product" && item.entityId === productId)));
+    setMarketplaceThreads((current) => current.filter((item) => item.productId !== productId));
+    setMarketplaceMessages((current) =>
+      current.filter((message) => {
+        const thread = marketplaceThreads.find((item) => item.id === message.threadId);
+        return thread?.productId !== productId;
+      })
+    );
+    setMarketplaceOrders((current) => current.filter((item) => item.productId !== productId));
+    setUsers((current) =>
+      current.map((user) => ({
+        ...user,
+        productIds: user.productIds.filter((id) => id !== productId),
+      }))
+    );
+  }
+
+  function removeReelLocally(reelId: string) {
+    setReels((current) => current.filter((item) => item.id !== reelId));
+    setComments((current) => current.filter((item) => item.reelId !== reelId));
+    setSavedPosts((current) => current.filter((item) => !(item.entityType === "reel" && item.entityId === reelId)));
+    setNotifications((current) => current.filter((item) => !(item.entityType === "reel" && item.entityId === reelId)));
+    setReelBoosts((current) => current.filter((item) => item.reelId !== reelId));
+    setUsers((current) =>
+      current.map((user) => ({
+        ...user,
+        reelIds: user.reelIds.filter((id) => id !== reelId),
+      }))
+    );
+    updateRelatedReportStatus("reel", reelId, "resolved");
+  }
+
+  function removeStoryLocally(storyId: string) {
+    setStories((current) => current.filter((item) => item.id !== storyId));
+    setNotifications((current) => current.filter((item) => item.entityId !== storyId));
+    updateRelatedReportStatus("story", storyId, "resolved");
+  }
+
+  function requireAdminAccess() {
+    if (!currentUser) {
+      return { ok: false, message: "Login required before using admin controls." } as const;
+    }
+
+    if (currentUser.role !== "admin") {
+      return { ok: false, message: "Only admin users can access this area." } as const;
+    }
+
+    return { ok: true } as const;
+  }
+
+  async function adminDeletePost(postId: string) {
+    const access = requireAdminAccess();
+    if (!access.ok) {
+      return access;
+    }
+
+    const targetPost = posts.find((item) => item.id === postId);
+    if (!targetPost) {
+      return { ok: false, message: "Post not found." };
+    }
+
+    if (isFirebaseBackedSession(session)) {
+      try {
+        await deleteFirebasePostAsAdmin(postId);
+        removePostLocally(postId);
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: getFirebasePostsErrorMessage(error) };
+      }
+    }
+
+    removePostLocally(postId);
+    return { ok: true };
+  }
+
+  async function adminDeleteReel(reelId: string) {
+    const access = requireAdminAccess();
+    if (!access.ok) {
+      return access;
+    }
+
+    const targetReel = reels.find((item) => item.id === reelId);
+    if (!targetReel) {
+      return { ok: false, message: "Reel not found." };
+    }
+
+    if (isFirebaseBackedSession(session)) {
+      try {
+        await deleteFirebaseReelAsAdmin(reelId, targetReel);
+        removeReelLocally(reelId);
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: getFirebaseContentErrorMessage(error) };
+      }
+    }
+
+    if (session?.token && isAppApiConfigured()) {
+      try {
+        const accessTokenResult = await requireApiAccessToken(session);
+        if (!accessTokenResult.token) {
+          return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+        }
+
+        await deleteReelWithApi(accessTokenResult.token, reelId);
+        removeReelLocally(reelId);
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: getApiErrorMessage(error) };
+      }
+    }
+
+    removeReelLocally(reelId);
+    return { ok: true };
+  }
+
+  async function setUserBanStatus(userId: string, banned: boolean) {
+    const access = requireAdminAccess();
+    if (!access.ok) {
+      return access;
+    }
+
+    if (currentUser?.id === userId && banned) {
+      return { ok: false, message: "You cannot ban your own admin account." };
+    }
+
+    const targetUser = users.find((item) => item.id === userId);
+    if (!targetUser) {
+      return { ok: false, message: "User not found." };
+    }
+
+    if (isFirebaseBackedSession(session)) {
+      try {
+        const updatedUser = await setFirebaseUserBanStatus(userId, banned);
+        setUsers((current) => mergeUsersById([updatedUser], current));
+        updateRelatedReportStatus("user", userId, banned ? "resolved" : "reviewed");
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: getFirebaseProfileErrorMessage(error) };
+      }
+    }
+
+    if (session?.token && isAppApiConfigured()) {
+      try {
+        const accessTokenResult = await requireApiAccessToken(session);
+        if (!accessTokenResult.token) {
+          return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+        }
+
+        const updatedUser = mapApiUserToMobile(await setUserBanStatusWithApi(accessTokenResult.token, userId, banned), {
+          existing: targetUser,
+        });
+        setUsers((current) => mergeUsersById([updatedUser], current));
+        updateRelatedReportStatus("user", userId, banned ? "resolved" : "reviewed");
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: getApiErrorMessage(error) };
+      }
+    }
+
+    setUsers((current) =>
+      current.map((user) =>
+        user.id === userId
+          ? {
+              ...user,
+              isBanned: banned,
+              bannedAt: banned ? new Date().toISOString() : undefined,
+            }
+          : user
+      )
+    );
+    updateRelatedReportStatus("user", userId, banned ? "resolved" : "reviewed");
+    return { ok: true };
+  }
+
+  async function updateReportStatus(reportId: string, status: ContentReport["status"]) {
+    const access = requireAdminAccess();
+    if (!access.ok) {
+      return access;
+    }
+
+    const targetReport = reports.find((item) => item.id === reportId);
+    if (!targetReport) {
+      return { ok: false, message: "Report not found." };
+    }
+    try {
+      await adminApi.setReportStatus(reportId, status);
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : "The report could not be updated." };
+    }
+
+    setReports((current) =>
+      current.map((report) =>
+        report.id === reportId
+          ? {
+              ...report,
+              status,
+            }
+          : report
+      )
+    );
+    return { ok: true };
   }
 
   async function toggleFollow(targetUserId: string) {
@@ -1988,7 +2886,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             userId: targetUser.id,
             type: "follow",
             title: `${currentUser.name} followed you`,
-      body: "You have a new follower on Pulseora.",
+      body: "You have a new follower on Sohba.",
             actor: currentUser,
             dedupeId: `follow-${currentUser.id}-${targetUser.id}`,
           }).catch(() => undefined);
@@ -2069,6 +2967,87 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       return { ok: false, message: getApiErrorMessage(error) };
     }
+  }
+
+  async function markNotificationRead(notificationId: string) {
+    if (!currentUser) {
+      return { ok: false, message: "Login required before updating notifications." };
+    }
+
+    const targetNotification = notifications.find((item) => item.id === notificationId && item.userId === currentUser.id);
+    if (!targetNotification || targetNotification.readAt) {
+      return { ok: true };
+    }
+
+    if (isFirebaseBackedSession(session)) {
+      try {
+        const nextNotification = await markFirebaseNotificationRead(currentUser.id, notificationId);
+        setNotifications((current) =>
+          current.map((notification) => (notification.id === notificationId ? nextNotification : notification))
+        );
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: getFirebaseInboxErrorMessage(error) };
+      }
+    }
+
+    if (!isAppApiConfigured()) {
+      const readAt = new Date().toISOString();
+      setNotifications((current) =>
+        current.map((notification) =>
+          notification.id === notificationId
+            ? {
+                ...notification,
+                readAt,
+              }
+            : notification
+        )
+      );
+      return { ok: true };
+    }
+
+    if (!session?.token) {
+      return { ok: false, message: "Backend session missing. Please log in again." };
+    }
+
+    try {
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+      const nextNotification = await markNotificationReadWithApi(accessTokenResult.token, notificationId);
+      const mappedNotification = mapApiNotificationToMobile(nextNotification);
+      setNotifications((current) =>
+        current.map((notification) => (notification.id === notificationId ? mappedNotification : notification))
+      );
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: getApiErrorMessage(error) };
+    }
+  }
+
+  async function toggleSavePost(postId: string) {
+    if (!currentUser) {
+      return { ok: false, message: "Login required before saving a post." };
+    }
+
+    if (isFirebaseBackedSession(session)) {
+      try {
+        const response = await toggleFirebaseSavedPost(currentUser.id, "post", postId);
+        setSavedPosts((current) =>
+          response.saved && response.savedPost
+            ? upsertSavedPost(current, response.savedPost)
+            : current.filter((item) => !(item.entityType === "post" && item.entityId === postId && item.userId === currentUser.id))
+        );
+        return { ok: true, saved: response.saved };
+      } catch (error) {
+        return { ok: false, message: getFirebaseInboxErrorMessage(error) };
+      }
+    }
+
+    const result = toggleLocalSavedPost(savedPosts, currentUser.id, "post", postId);
+    setSavedPosts(result.savedPosts);
+    return { ok: true, saved: result.saved };
   }
 
   async function toggleSaveReel(reelId: string) {
@@ -2217,6 +3196,53 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function deleteProduct(productId: string) {
+    if (!currentUser) {
+      return { ok: false, message: "Login required before deleting a product." };
+    }
+
+    const targetProduct = products.find((item) => item.id === productId);
+    if (!targetProduct) {
+      return { ok: false, message: "Product not found." };
+    }
+
+    if (targetProduct.userId !== currentUser.id) {
+      return { ok: false, message: "You can only delete your own listing." };
+    }
+
+    if (isFirebaseBackedSession(session)) {
+      try {
+        await deleteFirebaseProduct(currentUser.id, productId, targetProduct);
+        removeProductLocally(productId);
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: getFirebaseContentErrorMessage(error) };
+      }
+    }
+
+    if (!isAppApiConfigured()) {
+      removeProductLocally(productId);
+      return { ok: true };
+    }
+
+    if (!session?.token) {
+      return { ok: false, message: "Backend session missing. Please log in again." };
+    }
+
+    try {
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+
+      await deleteProductWithApi(accessTokenResult.token, productId);
+      removeProductLocally(productId);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: getApiErrorMessage(error) };
+    }
+  }
+
   async function startDirectChat(targetUserId: string) {
     if (!currentUser || currentUser.id === targetUserId) {
       return { ok: false, message: "You can only start a direct chat with another creator." };
@@ -2353,13 +3379,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function sendDirectMessage(threadId: string, text: string) {
+  async function sendDirectMessage(threadId: string, payload: CreateDirectMessagePayload) {
     if (!currentUser) {
       return { ok: false, message: "Login required before sending a direct message." };
     }
 
-    if (!text.trim()) {
-      return { ok: false, message: "Message is empty." };
+    const normalizedText = payload.text?.trim() ?? "";
+    const hasMedia = Boolean(payload.mediaUri?.trim());
+    if (!normalizedText && !hasMedia) {
+      return { ok: false, message: "Add a message, photo, or video first." };
     }
 
     const targetThread = directThreads.find((item) => item.id === threadId);
@@ -2373,19 +3401,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (isFirebaseBackedSession(session)) {
-      if (containsSexualContent([text])) {
+      if (containsSexualContent(normalizedText ? [normalizedText] : [])) {
         return { ok: false, message: blockedUserContentMessage };
       }
 
       try {
-        const response = await sendFirebaseDirectMessage(targetThread, currentUser, text);
+        const firebaseSessionResult = await ensureFirebaseWriteSessionReady(
+          session,
+          "Login required before sending a direct message."
+        );
+        if (!firebaseSessionResult.token) {
+          return { ok: false, message: firebaseSessionResult.message ?? SESSION_REFRESH_MESSAGE };
+        }
+
+        const preparedPayload = await prepareDirectMessagePayloadForSend({
+          token: firebaseSessionResult.token,
+          currentUser,
+          payload,
+        });
+        const response = await sendFirebaseDirectMessage(targetThread, currentUser, {
+          ...payload,
+          ...preparedPayload,
+          text: normalizedText,
+        });
         setDirectThreads((current) => upsertDirectThread(current, response.thread));
         setDirectMessages((current) => mergeDirectMessages(current, [response.message]));
         await publishFirebaseNotification({
           userId: counterpartId,
           type: "message",
           title: `${currentUser.name} sent you a message`,
-          body: truncateForNotification(text),
+          body: buildDirectMessageNotificationBody(normalizedText, response.message.mediaType),
           actor: currentUser,
           conversationId: response.thread.id,
           conversationType: "direct",
@@ -2397,7 +3442,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (!isAppApiConfigured()) {
-      if (containsSexualContent([text])) {
+      if (containsSexualContent(normalizedText ? [normalizedText] : [])) {
         return { ok: false, message: blockedUserContentMessage };
       }
 
@@ -2408,7 +3453,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         senderId: currentUser.id,
         senderName: currentUser.name,
         senderAvatar: currentUser.profileImage,
-        text: text.trim(),
+        text: normalizedText,
+        mediaType: payload.mediaType,
+        mediaUrl: payload.mediaUri?.trim() || undefined,
+        thumbnailUrl: payload.mediaThumbnailUri?.trim() || undefined,
+        durationSeconds: payload.mediaDurationSeconds,
         createdAt,
         deliveredToUserIds: [currentUser.id],
         seenByUserIds: [currentUser.id],
@@ -2423,7 +3472,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   ...thread,
                   updatedAt: createdAt,
                   lastMessageAt: createdAt,
-                  lastMessagePreview: nextMessage.text,
+                  lastMessagePreview: buildDirectMessagePreview(nextMessage),
                 }
               : thread
           )
@@ -2441,7 +3490,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!accessTokenResult.token) {
         return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
       }
-      const response = await sendDirectMessageWithApi(accessTokenResult.token, threadId, text);
+      const preparedPayload = await prepareDirectMessagePayloadForSend({
+        token: accessTokenResult.token,
+        currentUser,
+        payload,
+      });
+      const response = await sendDirectMessageWithApi(accessTokenResult.token, threadId, {
+        ...payload,
+        ...preparedPayload,
+        text: normalizedText,
+      });
       const nextThread = mapApiDirectThreadToMobile(response.thread);
       const nextMessage = mapApiDirectMessageToMobile(
         response.message,
@@ -2449,6 +3507,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       );
       setDirectThreads((current) => upsertDirectThread(current, nextThread));
       setDirectMessages((current) => mergeDirectMessages(current, [nextMessage]));
+      await deliverNotificationWithApi(accessTokenResult.token, {
+        userId: counterpartId,
+        type: "message",
+        title: `${currentUser.name} sent you a message`,
+        body: buildDirectMessageNotificationBody(normalizedText, nextMessage.mediaType),
+        conversationId: response.thread.id,
+        conversationType: "direct",
+      }).catch(() => undefined);
       return { ok: true };
     } catch (error) {
       return { ok: false, message: getApiErrorMessage(error) };
@@ -2812,37 +3878,67 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (!payload.imageUrl.trim()) {
-      return { ok: false, message: "Pick a story photo first." };
+      return { ok: false, message: "Pick a story photo or video first." };
     }
+
+    const normalizedMediaType = payload.mediaType ?? (payload.videoUrl?.trim() ? "video" : "image");
 
     if (isFirebaseBackedSession(session)) {
       if (containsSexualContent([payload.caption])) {
         return { ok: false, message: blockedUserContentMessage };
       }
 
-      if (!session?.token) {
-        return { ok: false, message: "Firebase session missing. Please log in again." };
+      const firebaseSessionResult = await ensureFirebaseWriteSessionReady(
+        session,
+        "Login required before posting a story."
+      );
+      if (!firebaseSessionResult.token) {
+        return { ok: false, message: firebaseSessionResult.message ?? SESSION_REFRESH_MESSAGE };
       }
 
       try {
-        const token = await resolveAccessToken(session);
-        if (!token) {
-          return { ok: false, message: SESSION_REFRESH_MESSAGE };
-        }
-        const imageUrl = await uploadImageSourceForFirebaseContent({
-          token,
-          source: payload.imageUrl,
-          folder: "stories",
-          publicIdPrefix: normalizeUploadPrefix(`${currentUser.username}-story`),
-          label: "story image",
-        });
+        const publicIdPrefix = normalizeUploadPrefix(`${currentUser.username}-story`);
+        const uploadedVideo =
+          normalizedMediaType === "video" && payload.videoUrl?.trim()
+            ? await uploadVideoSourceForFirebaseContent({
+                token: firebaseSessionResult.token,
+                source: payload.videoUrl,
+                mimeType: payload.videoMimeType,
+                fileName: payload.videoFileName,
+                durationSeconds: payload.videoDurationSeconds,
+                publicIdPrefix,
+                editConfig: payload.editConfig,
+              })
+            : null;
+        const imageUrl =
+          normalizedMediaType === "video" && uploadedVideo
+            ? payload.imageUrl.trim()
+              ? await uploadImageSourceForFirebaseContent({
+                  token: firebaseSessionResult.token,
+                  source: payload.imageUrl,
+                  folder: "stories",
+                  publicIdPrefix: `${publicIdPrefix}-cover`,
+                  label: "story cover",
+                  editConfig: payload.editConfig,
+                })
+              : uploadedVideo.thumbnailUrl
+            : await uploadImageSourceForFirebaseContent({
+                token: firebaseSessionResult.token,
+                source: payload.imageUrl,
+                folder: "stories",
+                publicIdPrefix,
+                label: "story image",
+                editConfig: payload.editConfig,
+              });
         const story = await createFirebaseStory(currentUser.id, {
           ...payload,
+          mediaType: normalizedMediaType,
           imageUrl,
+          videoUrl: uploadedVideo?.videoUrl ?? undefined,
         });
 
-        setStories((current) => [story, ...filterActiveStories(current.filter((item) => item.id !== story.id))]);
-        return { ok: true };
+        setStories((current) => [story, ...pruneStoriesForState(current.filter((item) => item.id !== story.id))]);
+        return { ok: true, story };
       } catch (error) {
         return { ok: false, message: getFirebaseContentErrorMessage(error) };
       }
@@ -2858,13 +3954,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         id: `story-${Date.now()}`,
         userId: currentUser.id,
         imageUrl: payload.imageUrl.trim(),
+        mediaType: normalizedMediaType,
+        videoUrl: normalizedMediaType === "video" ? payload.videoUrl?.trim() || undefined : undefined,
+        videoDurationSeconds: normalizedMediaType === "video" ? payload.videoDurationSeconds : undefined,
         caption: payload.caption?.trim() || undefined,
         createdAt: now.toISOString(),
         expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+        viewerIds: [],
+        highlightedAt: payload.saveToHighlights ? now.toISOString() : undefined,
+        highlightLabel: payload.saveToHighlights
+          ? payload.highlightLabel?.trim() || payload.caption?.trim() || "Highlight"
+          : undefined,
       };
 
-      setStories((current) => [story, ...filterActiveStories(current)]);
-      return { ok: true };
+      setStories((current) => [story, ...pruneStoriesForState(current)]);
+      return { ok: true, story };
     }
 
     if (!session?.token) {
@@ -2876,22 +3980,376 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!accessTokenResult.token) {
           return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
         }
-        const imageUrl = await uploadImageSourceForFirebaseContent({
-          token: accessTokenResult.token,
-          source: payload.imageUrl,
-          folder: "stories",
-          publicIdPrefix: normalizeUploadPrefix(`${currentUser.username}-story`),
-          label: "story image",
-        });
+        const publicIdPrefix = normalizeUploadPrefix(`${currentUser.username}-story`);
+        const uploadedVideo =
+          normalizedMediaType === "video" && payload.videoUrl?.trim()
+            ? await uploadVideoSourceForFirebaseContent({
+                token: accessTokenResult.token,
+                source: payload.videoUrl,
+                mimeType: payload.videoMimeType,
+                fileName: payload.videoFileName,
+                durationSeconds: payload.videoDurationSeconds,
+                publicIdPrefix,
+                editConfig: payload.editConfig,
+              })
+            : null;
+        const imageUrl =
+          normalizedMediaType === "video" && uploadedVideo
+            ? payload.imageUrl.trim()
+              ? await uploadImageSourceForFirebaseContent({
+                  token: accessTokenResult.token,
+                  source: payload.imageUrl,
+                  folder: "stories",
+                  publicIdPrefix: `${publicIdPrefix}-cover`,
+                  label: "story cover",
+                  editConfig: payload.editConfig,
+                })
+              : uploadedVideo.thumbnailUrl
+            : await uploadImageSourceForFirebaseContent({
+                token: accessTokenResult.token,
+                source: payload.imageUrl,
+                folder: "stories",
+                publicIdPrefix,
+                label: "story image",
+                editConfig: payload.editConfig,
+              });
         const created = await createStoryWithApi(accessTokenResult.token, {
           ...payload,
+          mediaType: normalizedMediaType,
           imageUrl,
+          videoUrl: uploadedVideo?.videoUrl ?? payload.videoUrl,
         });
         const nextStory = mapApiStoryToMobile(created);
-        setStories((current) => [nextStory, ...filterActiveStories(current.filter((item) => item.id !== nextStory.id))]);
-        return { ok: true };
+        setStories((current) => [nextStory, ...pruneStoriesForState(current.filter((item) => item.id !== nextStory.id))]);
+        return { ok: true, story: nextStory };
     } catch (error) {
       return { ok: false, message: getApiErrorMessage(error) };
+    }
+  }
+
+  async function markStoryViewed(storyId: string) {
+    if (!currentUser) {
+      return;
+    }
+
+    const targetStory = stories.find((item) => item.id === storyId);
+    if (!targetStory || targetStory.userId === currentUser.id || targetStory.viewerIds.includes(currentUser.id)) {
+      return;
+    }
+
+    const applyViewedState = (nextStory: Story) => {
+      setStories((current) => current.map((item) => (item.id === nextStory.id ? nextStory : item)));
+    };
+
+    if (isFirebaseBackedSession(session)) {
+      try {
+        const nextStory = await markFirebaseStoryViewed(currentUser.id, storyId, targetStory);
+        applyViewedState(nextStory);
+        await publishStoryViewNotification(nextStory);
+      } catch {
+        applyViewedState({
+          ...targetStory,
+          viewerIds: [...targetStory.viewerIds, currentUser.id],
+        });
+      }
+      return;
+    }
+
+    if (session?.token && isAppApiConfigured()) {
+      try {
+        const accessTokenResult = await requireApiAccessToken(session);
+        if (!accessTokenResult.token) {
+          return;
+        }
+
+        const nextStory = mapApiStoryToMobile(await markStoryViewedWithApi(accessTokenResult.token, storyId));
+        applyViewedState(nextStory);
+        await publishStoryViewNotification(nextStory);
+        return;
+      } catch {
+        // Fall back to local optimistic state below.
+      }
+    }
+
+    applyViewedState({
+      ...targetStory,
+      viewerIds: [...targetStory.viewerIds, currentUser.id],
+    });
+  }
+
+  async function deleteStory(storyId: string) {
+    if (!currentUser) {
+      return { ok: false, message: "Login required before deleting a story." };
+    }
+
+    const targetStory = stories.find((item) => item.id === storyId);
+    if (!targetStory) {
+      return { ok: false, message: "Story not found." };
+    }
+
+    if (targetStory.userId !== currentUser.id) {
+      return { ok: false, message: "You can only delete your own story." };
+    }
+
+    if (isFirebaseBackedSession(session)) {
+      try {
+        await deleteFirebaseStory(currentUser.id, storyId, targetStory);
+        removeStoryLocally(storyId);
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: getFirebaseContentErrorMessage(error) };
+      }
+    }
+
+    if (session?.token && isAppApiConfigured()) {
+      try {
+        const accessTokenResult = await requireApiAccessToken(session);
+        if (!accessTokenResult.token) {
+          return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+        }
+
+        await deleteStoryWithApi(accessTokenResult.token, storyId);
+        removeStoryLocally(storyId);
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: getApiErrorMessage(error) };
+      }
+    }
+
+    removeStoryLocally(storyId);
+    return { ok: true };
+  }
+
+  async function adminDeleteStory(storyId: string) {
+    const access = requireAdminAccess();
+    if (!access.ok) {
+      return access;
+    }
+
+    const targetStory = stories.find((item) => item.id === storyId);
+    if (!targetStory) {
+      return { ok: false, message: "Story not found." };
+    }
+
+    if (isFirebaseBackedSession(session)) {
+      try {
+        await deleteFirebaseStoryAsAdmin(storyId, targetStory);
+        removeStoryLocally(storyId);
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: getFirebaseContentErrorMessage(error) };
+      }
+    }
+
+    if (session?.token && isAppApiConfigured()) {
+      try {
+        const accessTokenResult = await requireApiAccessToken(session);
+        if (!accessTokenResult.token) {
+          return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+        }
+
+        await deleteStoryWithApi(accessTokenResult.token, storyId);
+        removeStoryLocally(storyId);
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: getApiErrorMessage(error) };
+      }
+    }
+
+    removeStoryLocally(storyId);
+    return { ok: true };
+  }
+
+  async function toggleStoryHighlight(
+    storyId: string,
+    payload?: { highlighted?: boolean; highlightLabel?: string }
+  ) {
+    if (!currentUser) {
+      return { ok: false, message: "Login required before managing highlights." };
+    }
+
+    const targetStory = stories.find((item) => item.id === storyId);
+    if (!targetStory) {
+      return { ok: false, message: "Story not found." };
+    }
+
+    if (targetStory.userId !== currentUser.id) {
+      return { ok: false, message: "You can only manage your own highlights." };
+    }
+
+    const highlighted = payload?.highlighted ?? !targetStory.highlightedAt;
+    const highlightLabel = highlighted
+      ? payload?.highlightLabel?.trim() || targetStory.highlightLabel || targetStory.caption || "Highlight"
+      : undefined;
+
+    const applyHighlight = (nextStory: Story) => {
+      setStories((current) =>
+        pruneStoriesForState(current.map((item) => (item.id === nextStory.id ? nextStory : item)))
+      );
+    };
+
+    if (isFirebaseBackedSession(session)) {
+      try {
+        const nextStory = await updateFirebaseStoryHighlight(
+          currentUser.id,
+          storyId,
+          { highlighted, highlightLabel },
+          targetStory
+        );
+        applyHighlight(nextStory);
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: getFirebaseContentErrorMessage(error) };
+      }
+    }
+
+    if (session?.token && isAppApiConfigured()) {
+      try {
+        const accessTokenResult = await requireApiAccessToken(session);
+        if (!accessTokenResult.token) {
+          return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+        }
+
+        const nextStory = mapApiStoryToMobile(
+          await updateStoryHighlightWithApi(accessTokenResult.token, storyId, { highlighted, highlightLabel })
+        );
+        applyHighlight(nextStory);
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: getApiErrorMessage(error) };
+      }
+    }
+
+    applyHighlight({
+      ...targetStory,
+      highlightedAt: highlighted ? new Date().toISOString() : undefined,
+      highlightLabel,
+    });
+    return { ok: true };
+  }
+
+  async function createPost(payload: CreatePostPayload) {
+    if (!currentUser) {
+      return { ok: false, message: "Login required before publishing a post." };
+    }
+
+    if (payload.mediaItems.length === 0) {
+      return { ok: false, message: "Add at least one photo or video first." };
+    }
+
+    const normalizedCaption = payload.caption.trim();
+    const normalizedLocation = payload.location?.trim() || undefined;
+    const normalizedHashtags = normalizePostHashtags(payload.hashtags, normalizedCaption);
+    const moderationInputs = [
+      normalizedCaption,
+      normalizedLocation,
+      ...normalizedHashtags.map((tag) => `#${tag}`),
+      ...payload.mediaItems.map((item) => item.uri),
+    ];
+
+    if (containsSexualContent(moderationInputs)) {
+      return { ok: false, message: blockedUserContentMessage };
+    }
+
+    const createLocalPost = () => {
+      const createdAt = new Date().toISOString();
+      const nextPost: Post = {
+        id: `post-${Date.now()}`,
+        userId: currentUser.id,
+        caption: normalizedCaption,
+        hashtags: normalizedHashtags,
+        location: normalizedLocation,
+        media: payload.mediaItems.map((item, index) => ({
+          id: `post-media-${Date.now()}-${index + 1}`,
+          type: item.type,
+          url: item.uri.trim(),
+          mimeType: item.mimeType,
+          durationSeconds: item.durationSeconds,
+        })),
+        likedBy: [],
+        commentCount: 0,
+        createdAt,
+      };
+
+      setPosts((current) => upsertPost(current, nextPost));
+      return { ok: true as const };
+    };
+
+    if (!isFirebaseBackedSession(session)) {
+      return createLocalPost();
+    }
+
+    const firebaseSessionResult = await ensureFirebaseWriteSessionReady(
+      session,
+      "Login required before publishing a post."
+    );
+    if (!firebaseSessionResult.token) {
+      return { ok: false, message: firebaseSessionResult.message ?? SESSION_REFRESH_MESSAGE };
+    }
+
+    try {
+      const prefixBase = normalizeUploadPrefix(`${currentUser.username}-post-${Date.now()}`);
+      const uploadedMedia: Post["media"] = [];
+
+      for (let index = 0; index < payload.mediaItems.length; index += 1) {
+        const item = payload.mediaItems[index];
+
+        try {
+          if (item.type === "video") {
+            const uploadedVideo = await uploadPostVideoSourceForFirebaseContent({
+              token: firebaseSessionResult.token,
+              source: item.uri,
+              label: `post video ${index + 1}`,
+              mimeType: item.mimeType,
+              fileName: item.fileName,
+              durationSeconds: item.durationSeconds,
+              publicIdPrefix: buildUploadPublicIdPrefix(prefixBase, `video-${index + 1}`),
+              editConfig: item.editConfig,
+            });
+
+            uploadedMedia.push({
+              id: `${prefixBase}-media-${index + 1}`,
+              type: "video",
+              url: uploadedVideo.videoUrl,
+              thumbnailUrl: uploadedVideo.thumbnailUrl,
+              mimeType: item.mimeType || "video/mp4",
+              durationSeconds: item.durationSeconds,
+            });
+            continue;
+          }
+
+          const imageUrl = await uploadPostImageSourceForFirebaseContent({
+            token: firebaseSessionResult.token,
+            source: item.uri,
+            publicIdPrefix: buildUploadPublicIdPrefix(prefixBase, `image-${index + 1}`),
+            label: `post image ${index + 1}`,
+            mimeType: item.mimeType,
+            fileName: item.fileName,
+            editConfig: item.editConfig,
+          });
+
+          uploadedMedia.push({
+            id: `${prefixBase}-media-${index + 1}`,
+            type: "image",
+            url: imageUrl,
+            mimeType: item.mimeType || "image/jpeg",
+          });
+        } catch (mediaError) {
+          throw new Error(`Media ${index + 1} could not be uploaded. ${readUploadErrorMessage(mediaError)}`);
+        }
+      }
+
+      const createdPost = await createFirebasePost(currentUser.id, {
+        caption: normalizedCaption,
+        hashtags: normalizedHashtags,
+        location: normalizedLocation,
+        media: uploadedMedia,
+      });
+
+      setPosts((current) => upsertPost(current, createdPost));
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: getFirebasePostsErrorMessage(error) };
     }
   }
 
@@ -2900,12 +4358,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return { ok: false, message: "Login required before posting a reel." };
     }
 
+    const normalizedCaption = payload.caption.trim();
+    const normalizedTags = normalizeReelHashtags(payload.hashtags, normalizedCaption);
+
     if (!payload.videoUrl.trim()) {
       return { ok: false, message: "Pick or paste a reel video first." };
     }
 
     if (isFirebaseBackedSession(session)) {
-      if (containsSexualContent([payload.caption, payload.videoUrl, payload.thumbnailUrl])) {
+      if (containsSexualContent([normalizedCaption, payload.videoUrl, payload.thumbnailUrl, ...normalizedTags.map((tag) => `#${tag}`)])) {
         return { ok: false, message: blockedUserContentMessage };
       }
 
@@ -2925,6 +4386,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           fileName: payload.videoFileName,
           durationSeconds: payload.videoDurationSeconds,
           publicIdPrefix: normalizeUploadPrefix(`${currentUser.username}-reel`),
+          editConfig: payload.editConfig,
         });
         const thumbnailUrl = payload.thumbnailUrl.trim()
           ? await uploadImageSourceForFirebaseContent({
@@ -2935,10 +4397,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               label: "reel thumbnail",
               mimeType: payload.thumbnailMimeType,
               fileName: payload.thumbnailFileName,
+              editConfig: payload.editConfig,
             })
           : uploadedVideo.thumbnailUrl;
         const newReel = await createFirebaseReel(currentUser.id, {
           ...payload,
+          caption: normalizedCaption,
+          hashtags: normalizedTags,
           videoUrl: uploadedVideo.videoUrl,
           thumbnailUrl,
         });
@@ -2946,14 +4411,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         setReels(nextReels);
         setUsers((current) => withOwnedContent(upsertUser(current, currentUser), nextReels, products));
-        return { ok: true };
+        return { ok: true, reel: newReel };
       } catch (error) {
         return { ok: false, message: getFirebaseContentErrorMessage(error) };
       }
     }
 
     if (!isAppApiConfigured()) {
-      if (containsSexualContent([payload.caption, payload.videoUrl, payload.thumbnailUrl])) {
+      if (containsSexualContent([normalizedCaption, payload.videoUrl, payload.thumbnailUrl, ...normalizedTags.map((tag) => `#${tag}`)])) {
         return { ok: false, message: blockedUserContentMessage };
       }
 
@@ -2961,12 +4426,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         id: `reel-${Date.now()}`,
         userId: currentUser.id,
         videoUrl: payload.videoUrl.trim(),
-        caption: payload.caption.trim(),
+        caption: normalizedCaption,
         thumbnailUrl:
           payload.thumbnailUrl.trim() ||
-          "https://images.unsplash.com/photo-1524250502761-1ac6f2e30d43?auto=format&fit=crop&w=1000&q=80",
+          MEDIA_UNAVAILABLE_IMAGE,
         createdAt: new Date().toISOString(),
-        tags: ["new", "creator"],
+        tags: normalizedTags.length > 0 ? normalizedTags : ["new", "creator"],
         likedBy: [],
         repostCount: 0,
         viewCount: 120,
@@ -2984,7 +4449,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           products
         )
       );
-      return { ok: true };
+      return { ok: true, reel: newReel };
     }
 
     if (!session?.token) {
@@ -3003,6 +4468,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           fileName: payload.videoFileName,
           durationSeconds: payload.videoDurationSeconds,
           publicIdPrefix: normalizeUploadPrefix(`${currentUser.username}-reel`),
+          editConfig: payload.editConfig,
         });
         const thumbnailUrl = payload.thumbnailUrl.trim()
           ? await uploadImageSourceForFirebaseContent({
@@ -3013,14 +4479,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               label: "reel thumbnail",
               mimeType: payload.thumbnailMimeType,
               fileName: payload.thumbnailFileName,
+              editConfig: payload.editConfig,
             })
           : uploadedVideo.thumbnailUrl;
         const created = await createReelWithApi(accessTokenResult.token, {
           ...payload,
+          caption: normalizedCaption,
+          hashtags: normalizedTags,
           videoUrl: uploadedVideo.videoUrl,
           thumbnailUrl,
         });
-        const nextReel = mapApiReelToMobile(created, reels.find((item) => item.id === created.id));
+        const mappedReel = mapApiReelToMobile(created, reels.find((item) => item.id === created.id));
+        const nextReel = {
+          ...mappedReel,
+          tags: normalizedTags.length > 0 ? normalizedTags : mappedReel.tags,
+        };
         const nextReels = [nextReel, ...reels.filter((item) => item.id !== nextReel.id)];
         setReels(nextReels);
       setUsers((current) => {
@@ -3034,6 +4507,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             profileImage: currentUser.profileImage,
             bio: currentUser.bio,
             headline: currentUser.headline,
+            website: currentUser.website,
             language: currentUser.language,
           };
         const nextCreator = mapApiUserToMobile(creatorSource, {
@@ -3045,7 +4519,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         return withOwnedContent(upsertUser(current, nextCreator), nextReels, products);
       });
-      return { ok: true };
+      return { ok: true, reel: nextReel };
     } catch (error) {
       return { ok: false, message: getApiErrorMessage(error) };
     }
@@ -3081,46 +4555,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    if (isFirebaseBackedSession(session)) {
-      try {
-        const response = await activateFirebaseSubscription(currentUser, planType);
-        setActiveSubscription(response.subscription);
-        setUsers((current) => withOwnedContent(upsertUser(current, response.user), reels, products));
-        await persistCurrentFirebaseUser(response.user);
-        await publishFirebaseNotification({
-          userId: currentUser.id,
-          type: "system",
-          title: `${response.subscription.planType} plan active`,
-          body: response.subscription.endsAt
-            ? `Premium access is live until ${new Date(response.subscription.endsAt).toLocaleString()}.`
-            : "Premium access is now active on your account.",
-          dedupeId: `subscription-${currentUser.id}-${response.subscription.planType}`,
-        }).catch(() => undefined);
-        return { ok: true, subscription: response.subscription };
-      } catch (error) {
-        return { ok: false, message: getFirebaseMonetizationErrorMessage(error) };
-      }
-    }
-
-    const now = new Date();
-    const endsAt = new Date(now.getTime() + (planType === "weekly" ? 7 : planType === "monthly" ? 30 : 365) * 24 * 60 * 60 * 1000);
-    const nextSubscription: AppSubscription = {
-      id: `subscription-${currentUser.id}`,
-      userId: currentUser.id,
-      planType,
-      status: "active",
-      startedAt: now.toISOString(),
-      endsAt: endsAt.toISOString(),
-      autoRenew: true,
-    };
-    const nextUser = {
-      ...currentUser,
-      planType,
-    };
-
-    setActiveSubscription(nextSubscription);
-    setUsers((current) => withOwnedContent(upsertUser(current, nextUser), reels, products));
-    return { ok: true, subscription: nextSubscription };
+    return { ok: false, message: PAYMENTS_UNAVAILABLE_MESSAGE };
   }
 
   async function boostReel(payload: CreateReelBoostPayload) {
@@ -3168,64 +4603,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    if (isFirebaseBackedSession(session)) {
-      try {
-        const response = await createFirebaseReelBoost(currentUser, targetReel, selectedPlan);
-        setReelBoosts((current) => upsertBoost(current, response.boost));
-        setReels((current) => upsertReel(current, response.reel));
-        await publishFirebaseNotification({
-          userId: currentUser.id,
-          type: "boost",
-          title: `${selectedPlan.title} boost is live`,
-          body: `${selectedPlan.estimatedViews.toLocaleString()} extra views and ${selectedPlan.estimatedReach.toLocaleString()} extra reach are now running for this reel.`,
-          entityType: "reel",
-          entityId: targetReel.id,
-          dedupeId: `boost-${response.boost.id}`,
-        }).catch(() => undefined);
-        return { ok: true, boost: response.boost };
-      } catch (error) {
-        return { ok: false, message: getFirebaseMonetizationErrorMessage(error) };
-      }
-    }
-
-    const now = new Date();
-    const endsAt = new Date(now.getTime() + selectedPlan.durationDays * 24 * 60 * 60 * 1000);
-    const boost: ReelBoostCampaign = {
-      id: `boost-${Date.now()}`,
-      reelId: payload.reelId,
-      userId: currentUser.id,
-      planId: selectedPlan.id,
-      planTitle: selectedPlan.title,
-      amountUsd: selectedPlan.budgetUsd,
-      estimatedViews: selectedPlan.estimatedViews,
-      estimatedReach: selectedPlan.estimatedReach,
-      status: "active",
-      startedAt: now.toISOString(),
-      endsAt: endsAt.toISOString(),
-      targetAudience: currentUser.headline || "Short-form viewers who engage with creator-led content.",
-      note: "Your ad campaign is live and pushing this reel to more high-fit viewers now.",
-    };
-
-    setReelBoosts((current) => [boost, ...current]);
-    setReels((current) =>
-      current.map((reel) =>
-        reel.id === payload.reelId
-          ? {
-              ...reel,
-              viewCount: reel.viewCount + selectedPlan.estimatedViews,
-              reachCount: reel.reachCount + selectedPlan.estimatedReach,
-            }
-          : reel
-      )
-    );
-
-    return { ok: true, boost };
+    return { ok: false, message: PAYMENTS_UNAVAILABLE_MESSAGE };
   }
 
-  async function createProduct(payload: CreateProductPayload) {
+  async function createProduct(inputPayload: CreateProductPayload) {
     if (!currentUser) {
       return { ok: false, message: "Login required before posting a product." };
     }
+    const payload: CreateProductPayload = {
+      ...inputPayload,
+      currency: inputPayload.currency ?? getRegion(region).currency,
+      region: inputPayload.region ?? region,
+    };
 
     if (isFirebaseBackedSession(session)) {
       if (containsSexualContent([payload.title, payload.description, payload.category, payload.location, ...payload.imageUrls])) {
@@ -3279,15 +4668,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         price: Number(payload.price) || 0,
         imageUrl:
           payload.imageUrls[0]?.trim() ||
-          "https://images.unsplash.com/photo-1520607162513-77705c0f0d4a?auto=format&fit=crop&w=900&q=80",
+          MEDIA_UNAVAILABLE_IMAGE,
         imageUrls:
           payload.imageUrls.length > 0
             ? payload.imageUrls.map((item) => item.trim()).filter(Boolean)
-            : ["https://images.unsplash.com/photo-1520607162513-77705c0f0d4a?auto=format&fit=crop&w=900&q=80"],
+            : [MEDIA_UNAVAILABLE_IMAGE],
         category: payload.category.trim() || "Home Goods",
         condition: payload.condition,
-        location: payload.location.trim() || "Kuala Lumpur, Malaysia",
+        location: payload.location.trim(),
         listingStatus: "available",
+        currency: payload.currency,
+        region: payload.region,
         createdAt: new Date().toISOString(),
       };
 
@@ -3329,7 +4720,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ...payload,
           imageUrls,
         });
-        const nextProduct = mapApiProductToMobile(created, products.find((item) => item.id === created.id));
+        const nextProduct: Product = {
+          ...mapApiProductToMobile(created, products.find((item) => item.id === created.id)),
+          currency: payload.currency,
+          region: payload.region,
+        };
         const nextProducts = [nextProduct, ...products.filter((item) => item.id !== nextProduct.id)];
         setProducts(nextProducts);
       setUsers((current) => {
@@ -3343,6 +4738,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             profileImage: currentUser.profileImage,
             bio: currentUser.bio,
             headline: currentUser.headline,
+            website: currentUser.website,
             language: currentUser.language,
           };
         const nextSeller = mapApiUserToMobile(sellerSource, {
@@ -3550,6 +4946,53 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function deleteCommunityPost(communityId: string, postId: string) {
+    if (!currentUser) {
+      return { ok: false, message: "Login required before deleting a community post." };
+    }
+
+    const targetPost = communityPosts.find((item) => item.id === postId && item.communityId === communityId);
+    if (!targetPost) {
+      return { ok: false, message: "Community post not found." };
+    }
+
+    if (targetPost.authorId !== currentUser.id) {
+      return { ok: false, message: "You can only delete your own community post." };
+    }
+
+    if (isFirebaseBackedSession(session)) {
+      try {
+        await deleteFirebaseCommunityPost(currentUser.id, postId, targetPost);
+        setCommunityPosts((current) => current.filter((item) => item.id !== postId));
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: getFirebaseCommunityCommerceErrorMessage(error) };
+      }
+    }
+
+    if (!isAppApiConfigured()) {
+      setCommunityPosts((current) => current.filter((item) => item.id !== postId));
+      return { ok: true };
+    }
+
+    if (!session?.token) {
+      return { ok: false, message: "Backend session missing. Please log in again." };
+    }
+
+    try {
+      const accessTokenResult = await requireApiAccessToken(session);
+      if (!accessTokenResult.token) {
+        return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
+      }
+
+      await deleteCommunityPostWithApi(accessTokenResult.token, communityId, postId);
+      setCommunityPosts((current) => current.filter((item) => item.id !== postId));
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: getApiErrorMessage(error) };
+    }
+  }
+
   async function sendCommunityChatMessage(communityId: string, text: string) {
     if (!currentUser) {
       return { ok: false, message: "Login required before sending a group message." };
@@ -3629,22 +5072,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return { ok: false, message: "Login required before updating your profile." };
     }
 
-    if (isFirebaseProfilesConfigured() && !isDemoAccessToken(session?.token ?? "")) {
-      if (containsSexualContent([payload.name, payload.username, payload.bio, payload.headline, isDataUrl(payload.profileImage) ? "" : payload.profileImage])) {
+    const normalizedUsername = normalizeUsernameInput(payload.username);
+    const usernameValidationMessage = getUsernameValidationMessage(normalizedUsername);
+    if (usernameValidationMessage) {
+      return { ok: false, message: usernameValidationMessage };
+    }
+
+    const normalizedWebsite = normalizeWebsiteInput(payload.website);
+    const websiteValidationMessage = getWebsiteValidationMessage(normalizedWebsite);
+    if (websiteValidationMessage) {
+      return { ok: false, message: websiteValidationMessage };
+    }
+
+    if (isFirebaseProfilesConfigured() && !isLegacyLocalAccessToken(session?.token ?? "")) {
+      if (
+        containsSexualContent([
+          payload.name,
+          normalizedUsername,
+          payload.bio,
+          payload.headline,
+          normalizedWebsite,
+          isDataUrl(payload.profileImage) ? "" : payload.profileImage,
+        ])
+      ) {
         return { ok: false, message: blockedUserContentMessage };
       }
 
-      if (!session?.token) {
-        return { ok: false, message: "Firebase session missing. Please log in again." };
+      const firebaseSessionResult = await ensureFirebaseWriteSessionReady(
+        session,
+        "Login required before updating your profile."
+      );
+      if (!firebaseSessionResult.token) {
+        return { ok: false, message: firebaseSessionResult.message ?? SESSION_REFRESH_MESSAGE };
       }
 
       try {
         let nextProfileImage = payload.profileImage.trim() || currentUser.profileImage;
-        const accessTokenResult = await requireApiAccessToken(session, "Firebase session missing. Please log in again.");
-        if (!accessTokenResult.token) {
-          return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
-        }
-        let nextToken = accessTokenResult.token;
+        let nextToken = firebaseSessionResult.token;
 
         if (isDataUrl(nextProfileImage)) {
           if (!isMediaApiConfigured()) {
@@ -3667,16 +5131,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             url: uploadedPhoto.secureUrl,
             label: "profile photo",
           });
-          nextProfileImage = uploadedPhoto.adaptiveUrl || uploadedPhoto.secureUrl;
+          nextProfileImage = appendCacheBust(uploadedPhoto.adaptiveUrl || uploadedPhoto.secureUrl);
         }
 
         const nextUser = await updateFirebaseUserProfile(currentUser.id, {
           ...payload,
+          username: normalizedUsername,
+          website: normalizedWebsite,
           profileImage: nextProfileImage,
         });
-        const nextSession = {
-          ...session,
+        const nextSession: AuthSession = {
           token: nextToken,
+          userId: session?.userId ?? currentUser.id,
         };
 
         setSession(nextSession);
@@ -3692,7 +5158,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (!isAppApiConfigured()) {
-      if (containsSexualContent([payload.bio, payload.headline, isDataUrl(payload.profileImage) ? "" : payload.profileImage])) {
+      if (
+        containsSexualContent([
+          normalizedUsername,
+          payload.bio,
+          payload.headline,
+          normalizedWebsite,
+          isDataUrl(payload.profileImage) ? "" : payload.profileImage,
+        ])
+      ) {
         return { ok: false, message: blockedUserContentMessage };
       }
 
@@ -3702,9 +5176,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ? {
                 ...user,
                 name: payload.name.trim(),
-                username: payload.username.trim().replace(/\s+/g, "").toLowerCase(),
+                username: normalizedUsername,
                 bio: payload.bio.trim(),
                 headline: payload.headline.trim(),
+                website: normalizedWebsite,
                 profileImage: payload.profileImage.trim() || user.profileImage,
               }
             : user
@@ -3733,7 +5208,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           : "";
         const updatedProfile = await updateProfileWithApi(accessTokenResult.token, {
           ...payload,
-          profileImage,
+          username: normalizedUsername,
+          website: normalizedWebsite,
+          profileImage: profileImage ? appendCacheBust(profileImage) : profileImage,
         });
         const nextUser = mapApiUserToMobile(updatedProfile, {
           existing: currentUser,
@@ -3753,6 +5230,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   function getUserById(userId: string) {
     return users.find((item) => item.id === userId);
+  }
+
+  function getPostById(postId: string) {
+    return posts.find((item) => item.id === postId);
   }
 
   function getCommunityById(communityId: string) {
@@ -3779,6 +5260,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   function getCommentsForReel(reelId: string) {
     return comments.filter((item) => item.reelId === reelId);
+  }
+
+  function getCommentsForPost(postId: string) {
+    return postComments
+      .filter((item) => item.postId === postId)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }
 
   function getDirectMessagesForThread(threadId: string) {
@@ -3861,6 +5348,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return Boolean(currentUser && savedPosts.some((item) => item.userId === currentUser.id && item.entityType === "reel" && item.entityId === reelId));
   }
 
+  function isPostSaved(postId: string) {
+    return Boolean(currentUser && savedPosts.some((item) => item.userId === currentUser.id && item.entityType === "post" && item.entityId === postId));
+  }
+
   function isProductSaved(productId: string) {
     return Boolean(
       currentUser &&
@@ -3873,10 +5364,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       value={{
         isBootstrapping,
         language,
+        region,
+        localeTag,
         session,
         currentUser,
         users,
         stories,
+        posts,
+        postComments,
         reels,
         products,
         communities,
@@ -3886,6 +5381,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         directMessages,
         comments,
         notifications,
+        reports,
         savedPosts,
         marketplaceThreads,
         marketplaceMessages,
@@ -3899,15 +5395,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         refreshNotifications,
         refreshDirectInbox,
         refreshMarketplaceInbox,
-        refreshCommunities,
-        openCommunityActivity,
-        setLanguage,
-        login,
-        register,
-        logout,
-        markAllNotificationsRead,
+          refreshCommunities,
+          openCommunityActivity,
+          setLanguage,
+          setRegion,
+          placeCall,
+          isOwner,
+          submitReport,
+          refreshReports,
+          adminSetUserRole,
+          adminDeleteUserAccount,
+          login,
+          continueWithGoogle,
+          register,
+          logout,
+          googleSignInEnabled,
+          googleSignInMessage,
+          isAdmin,
+          markAllNotificationsRead,
+          markNotificationRead,
         toggleLike,
         repostReel,
+        recordReelView,
         addComment,
         toggleFollow,
         toggleSaveReel,
@@ -3921,17 +5430,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         sendMarketplaceMessage,
         createMarketplaceOrder,
         createStory,
+        markStoryViewed,
+        deleteStory,
+        deleteReel,
+        adminDeleteStory,
+        toggleStoryHighlight,
+        createPost,
         createReel,
         subscribeToPlan,
         boostReel,
         createProduct,
+        deleteProduct,
         createCommunity,
         createCommunityPost,
+        deleteCommunityPost,
         markCommunityChatRead,
         setCommunityTyping,
         sendCommunityChatMessage,
         updateProfile,
+        togglePostLike,
+        addPostComment,
+        deletePost,
+        adminDeletePost,
+        adminDeleteReel,
+        setUserBanStatus,
+        updateReportStatus,
+        toggleSavePost,
         getUserById,
+        getPostById,
+        getCommentsForPost,
         getCommunityById,
         getCommunityPosts,
         getCommunityChatMessages,
@@ -3948,12 +5475,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         getUserPresence,
         getBoostForReel,
         canDirectMessageUser,
+        isPostSaved,
         isReelSaved,
         isProductSaved,
         markDirectThreadRead,
         setDirectTyping,
         markMarketplaceThreadRead,
         setMarketplaceTyping,
+        startupDiagnostics,
       }}
     >
       {children}
@@ -3997,14 +5526,22 @@ function parseStoredSession(value: string | null) {
   }
 }
 
-function isDemoAccessToken(token: string) {
+function isLegacyLocalAccessToken(token: string) {
   return token.startsWith("viraflow-token-");
 }
 
 function isFirebaseBackedSession(session: AuthSession | null) {
+  if (session?.provider) {
+    return session.provider === "firebase";
+  }
+
   return Boolean(
-    session?.token && isFirebaseProfilesConfigured() && !isDemoAccessToken(session.token)
+    session?.token && isFirebaseProfilesConfigured() && !isLegacyLocalAccessToken(session.token)
   );
+}
+
+function isSupabaseBackedSession(session: AuthSession | null) {
+  return session?.provider === "supabase";
 }
 
 function isDataUrl(value: string) {
@@ -4015,9 +5552,50 @@ function normalizeUploadPrefix(value: string) {
   return (value.trim().replace(/\s+/g, "-").replace(/^@+/, "").toLowerCase() || `upload-${Date.now()}`).slice(0, 60);
 }
 
+function buildUploadPublicIdPrefix(base: string, suffix: string) {
+  const normalizedSuffix = normalizeUploadPrefix(suffix);
+  const normalizedBase = normalizeUploadPrefix(base);
+  const maxLength = 60;
+  const baseLength = Math.max(0, maxLength - normalizedSuffix.length - 1);
+  const trimmedBase = normalizedBase.slice(0, baseLength).replace(/-+$/g, "");
+
+  return (trimmedBase ? `${trimmedBase}-${normalizedSuffix}` : normalizedSuffix).slice(0, maxLength);
+}
+
 function truncateForNotification(value: string, maxLength = 92) {
   const trimmed = value.trim();
   return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength - 1)}...` : trimmed;
+}
+
+function findMentionTargetsByUsername(text: string, users: User[], excludedIds: string[] = []) {
+  const usernames = text.match(/@([a-zA-Z0-9_.]+)/g)?.map((match) => match.slice(1).toLowerCase()) ?? [];
+  if (usernames.length === 0) {
+    return [];
+  }
+
+  const excluded = new Set(excludedIds);
+  const seen = new Set<string>();
+
+  return users.filter((user) => {
+    const normalizedUsername = user.username.trim().toLowerCase();
+    if (!normalizedUsername || excluded.has(user.id) || seen.has(user.id) || !usernames.includes(normalizedUsername)) {
+      return false;
+    }
+
+    seen.add(user.id);
+    return true;
+  });
+}
+
+function normalizePostHashtags(values: string[], caption: string) {
+  const fromCaption = caption.match(/#[a-zA-Z0-9_]+/g)?.map((tag) => tag.replace("#", "").toLowerCase()) ?? [];
+  return [...new Set([...values, ...fromCaption].map((item) => item.trim().replace(/^#+/, "").toLowerCase()).filter(Boolean))].slice(0, 8);
+}
+
+function normalizeReelHashtags(values: string[] | undefined, caption: string) {
+  const provided = values ?? [];
+  const fromCaption = caption.match(/#[a-zA-Z0-9_]+/g)?.map((tag) => tag.replace("#", "").toLowerCase()) ?? [];
+  return [...new Set([...provided, ...fromCaption].map((item) => item.trim().replace(/^#+/, "").toLowerCase()).filter(Boolean))].slice(0, 6);
 }
 
 async function uploadImageSourceForFirebaseContent(input: {
@@ -4028,6 +5606,7 @@ async function uploadImageSourceForFirebaseContent(input: {
   label: string;
   mimeType?: string;
   fileName?: string;
+  editConfig?: CreatePostPayload["mediaItems"][number]["editConfig"];
 }) {
   ensureMediaApiConfigured();
   const source = input.source.trim();
@@ -4050,7 +5629,7 @@ async function uploadImageSourceForFirebaseContent(input: {
       url: uploaded.secureUrl,
       label: input.label,
     });
-    return uploaded.adaptiveUrl || uploaded.secureUrl;
+    return buildCloudinaryEditedImageUrl(uploaded.secureUrl, input.editConfig);
   }
 
   if (isLocalMediaUri(source)) {
@@ -4069,7 +5648,7 @@ async function uploadImageSourceForFirebaseContent(input: {
       url: uploaded.secureUrl,
       label: input.label,
     });
-    return uploaded.adaptiveUrl || uploaded.secureUrl;
+    return buildCloudinaryEditedImageUrl(uploaded.secureUrl, input.editConfig);
   }
 
   if (isHttpUrl(source)) {
@@ -4079,25 +5658,47 @@ async function uploadImageSourceForFirebaseContent(input: {
       url: source,
       label: input.label,
     });
-    return source;
+    return source.includes("/image/upload/") ? buildCloudinaryEditedImageUrl(source, input.editConfig) : source;
   }
 
   throw new Error("Use a valid image file or image URL.");
 }
 
+async function uploadPostImageSourceForFirebaseContent(input: Omit<Parameters<typeof uploadImageSourceForFirebaseContent>[0], "folder">) {
+  try {
+    return await uploadImageSourceForFirebaseContent({
+      ...input,
+      folder: POST_UPLOAD_FOLDER,
+    });
+  } catch (error) {
+    if (!isCloudinarySignatureError(error)) {
+      throw error;
+    }
+
+    return uploadImageSourceForFirebaseContent({
+      ...input,
+      folder: POST_UPLOAD_FALLBACK_FOLDER,
+    });
+  }
+}
+
 async function uploadVideoSourceForFirebaseContent(input: {
   token: string;
   source: string;
+  folder?: MediaFolder;
+  label?: string;
   publicIdPrefix: string;
   mimeType?: string;
   fileName?: string;
   durationSeconds?: number;
+  editConfig?: CreateReelPayload["editConfig"];
 }) {
   ensureMediaApiConfigured();
   const source = input.source.trim();
+  const mediaLabel = input.label?.trim() || "reel video";
 
   if (!source) {
-    throw new Error("Pick or paste a reel video first.");
+    throw new Error(`Pick or paste a ${mediaLabel} first.`);
   }
 
   if (isLocalMediaUri(source)) {
@@ -4106,7 +5707,7 @@ async function uploadVideoSourceForFirebaseContent(input: {
       uri: source,
       mimeType: input.mimeType || inferMimeTypeFromUri(source, "video/mp4"),
       fileName: input.fileName || inferFileNameFromUri(source, "reel.mp4"),
-      folder: "reels",
+      folder: input.folder ?? "reels",
       publicIdPrefix: input.publicIdPrefix,
       resourceType: "video",
     });
@@ -4114,13 +5715,20 @@ async function uploadVideoSourceForFirebaseContent(input: {
       token: input.token,
       type: "video",
       url: uploaded.secureUrl,
-      label: "reel video",
-      seconds: Math.round(input.durationSeconds ?? uploaded.duration ?? 12),
+      label: mediaLabel,
+      seconds: normalizeMediaModerationSeconds(input.durationSeconds ?? uploaded.duration ?? 12),
     });
 
+    const videoDuration = input.durationSeconds ?? uploaded.duration;
+
     return {
-      videoUrl: uploaded.adaptiveUrl || uploaded.secureUrl,
-      thumbnailUrl: buildCloudinaryVideoThumbnailUrl(uploaded.secureUrl),
+      videoUrl: buildCloudinaryEditedVideoUrl(uploaded.secureUrl, input.editConfig, {
+        durationSeconds: videoDuration,
+      }),
+      thumbnailUrl: buildCloudinaryVideoThumbnailUrl(uploaded.secureUrl, {
+        editConfig: input.editConfig,
+        durationSeconds: videoDuration,
+      }),
     };
   }
 
@@ -4129,23 +5737,149 @@ async function uploadVideoSourceForFirebaseContent(input: {
       token: input.token,
       type: "video",
       url: source,
-      label: "reel video",
-      seconds: input.durationSeconds,
+      label: mediaLabel,
+      seconds: normalizeMediaModerationSeconds(input.durationSeconds),
     });
 
     return {
-      videoUrl: source,
-      thumbnailUrl: buildCloudinaryVideoThumbnailUrl(source),
+      videoUrl: source.includes("/video/upload/")
+        ? buildCloudinaryEditedVideoUrl(source, input.editConfig, { durationSeconds: input.durationSeconds })
+        : source,
+      thumbnailUrl: buildCloudinaryVideoThumbnailUrl(source, {
+        editConfig: input.editConfig,
+        durationSeconds: input.durationSeconds,
+      }),
     };
   }
 
   throw new Error("Use a valid video file or video URL.");
 }
 
+async function uploadPostVideoSourceForFirebaseContent(input: Omit<Parameters<typeof uploadVideoSourceForFirebaseContent>[0], "folder">) {
+  try {
+    return await uploadVideoSourceForFirebaseContent({
+      ...input,
+      folder: POST_UPLOAD_FOLDER,
+    });
+  } catch (error) {
+    if (!isCloudinarySignatureError(error)) {
+      throw error;
+    }
+
+    return uploadVideoSourceForFirebaseContent({
+      ...input,
+      folder: POST_UPLOAD_FALLBACK_FOLDER,
+    });
+  }
+}
+
+async function prepareDirectMessagePayloadForSend(input: {
+  token: string;
+  currentUser: User;
+  payload: CreateDirectMessagePayload;
+}) {
+  const mediaUri = input.payload.mediaUri?.trim();
+  if (!mediaUri) {
+    return {
+      mediaUri: undefined,
+      mediaThumbnailUri: undefined,
+      mediaType: undefined,
+      mediaDurationSeconds: undefined,
+    };
+  }
+
+  const mediaType = resolveDirectMessageMediaType(input.payload);
+  if (mediaType === "video") {
+    const uploadedVideo = await uploadVideoSourceForFirebaseContent({
+      token: input.token,
+      source: mediaUri,
+      folder: "messages",
+      label: "direct message video",
+      publicIdPrefix: normalizeUploadPrefix(`${input.currentUser.username}-direct-video`),
+      mimeType: input.payload.mediaMimeType,
+      fileName: input.payload.mediaFileName,
+      durationSeconds: input.payload.mediaDurationSeconds,
+    });
+
+    return {
+      mediaUri: uploadedVideo.videoUrl,
+      mediaThumbnailUri: uploadedVideo.thumbnailUrl,
+      mediaType,
+      mediaDurationSeconds: input.payload.mediaDurationSeconds,
+    };
+  }
+
+  const uploadedImage = await uploadImageSourceForFirebaseContent({
+    token: input.token,
+    source: mediaUri,
+    folder: "messages",
+    publicIdPrefix: normalizeUploadPrefix(`${input.currentUser.username}-direct-image`),
+    label: "direct message image",
+    mimeType: input.payload.mediaMimeType,
+    fileName: input.payload.mediaFileName,
+  });
+
+  return {
+    mediaUri: uploadedImage,
+    mediaThumbnailUri: undefined,
+    mediaType: "image" as const,
+    mediaDurationSeconds: undefined,
+  };
+}
+
+function resolveDirectMessageMediaType(payload: CreateDirectMessagePayload) {
+  if (payload.mediaType) {
+    return payload.mediaType;
+  }
+
+  if (payload.mediaMimeType?.startsWith("video/")) {
+    return "video" as const;
+  }
+
+  if (payload.mediaUri && /\.(mp4|mov|m4v|webm)(\?|$)/i.test(payload.mediaUri)) {
+    return "video" as const;
+  }
+
+  return "image" as const;
+}
+
+function buildDirectMessagePreview(message: Pick<DirectChatMessage, "text" | "mediaType">) {
+  if (message.text.trim()) {
+    return message.text.slice(0, 120);
+  }
+
+  if (message.mediaType === "video") {
+    return "Sent a video";
+  }
+
+  if (message.mediaType === "image") {
+    return "Sent a photo";
+  }
+
+  return "Conversation updated";
+}
+
+function buildDirectMessageNotificationBody(text: string, mediaType?: DirectChatMessage["mediaType"]) {
+  if (text.trim()) {
+    return truncateForNotification(text);
+  }
+
+  return mediaType === "video" ? "Sent you a video." : "Sent you a photo.";
+}
+
 function ensureMediaApiConfigured() {
   if (!isMediaApiConfigured()) {
     throw new Error("Cloudinary uploads need EXPO_PUBLIC_API_BASE_URL in mobile/.env and the backend running.");
   }
+}
+
+function appendCacheBust(url: string) {
+  if (!url.trim()) {
+    return url;
+  }
+
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}v=${Date.now()}`;
 }
 
 function isLocalMediaUri(value: string) {
@@ -4184,6 +5918,23 @@ function inferMimeTypeFromUri(uri: string, fallback: string) {
   return extension ? mimeTypes[extension] ?? fallback : fallback;
 }
 
+function normalizeMediaModerationSeconds(value: number | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+
+  return Math.min(300, Math.max(1, Math.round(value)));
+}
+
+function readUploadErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Please try again with another file.";
+}
+
+function isCloudinarySignatureError(error: unknown) {
+  const message = readUploadErrorMessage(error).toLowerCase();
+  return message.includes("cloudinary upload signing failed") || message.includes("upload signing");
+}
+
 function mergeUsersById(primary: User[], fallback: User[]) {
   const byId = new Map<string, User>();
   fallback.forEach((item) => byId.set(item.id, item));
@@ -4214,6 +5965,27 @@ function mergeProductsById(primary: Product[], fallback: Product[]) {
 
 function mergeCommentsById(primary: ReelComment[], fallback: ReelComment[]) {
   const byId = new Map<string, ReelComment>();
+  fallback.forEach((item) => byId.set(item.id, item));
+  primary.forEach((item) => byId.set(item.id, item));
+  return Array.from(byId.values()).sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+}
+
+function mergePostsById(primary: Post[], fallback: Post[]) {
+  const byId = new Map<string, Post>();
+  fallback.forEach((item) => byId.set(item.id, item));
+  primary.forEach((item) => byId.set(item.id, item));
+  return Array.from(byId.values()).sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+}
+
+function mergePostCommentsById(primary: PostComment[], fallback: PostComment[]) {
+  const byId = new Map<string, PostComment>();
+  fallback.forEach((item) => byId.set(item.id, item));
+  primary.forEach((item) => byId.set(item.id, item));
+  return Array.from(byId.values()).sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+}
+
+function mergeNotificationsById(primary: AppNotification[], fallback: AppNotification[]) {
+  const byId = new Map<string, AppNotification>();
   fallback.forEach((item) => byId.set(item.id, item));
   primary.forEach((item) => byId.set(item.id, item));
   return Array.from(byId.values()).sort((left, right) => right.createdAt.localeCompare(left.createdAt));
@@ -4358,9 +6130,13 @@ function upsertReel(current: Reel[], nextReel: Reel) {
   return current.map((item) => (item.id === nextReel.id ? { ...item, ...nextReel } : item));
 }
 
-function upsertBoost(current: ReelBoostCampaign[], nextBoost: ReelBoostCampaign) {
-  const filtered = current.filter((item) => item.id !== nextBoost.id);
-  return [nextBoost, ...filtered];
+function upsertPost(current: Post[], nextPost: Post) {
+  const exists = current.some((item) => item.id === nextPost.id);
+  if (!exists) {
+    return [nextPost, ...current];
+  }
+
+  return current.map((item) => (item.id === nextPost.id ? { ...item, ...nextPost } : item));
 }
 
 function upsertSavedPost(current: SavedPost[], nextSavedPost?: SavedPost) {
@@ -4522,10 +6298,13 @@ function buildPlaceholderIds(count: number | undefined, prefix: string) {
   return Array.from({ length: count ?? 0 }, (_item, index) => `${prefix}-${index + 1}`);
 }
 
-function filterActiveStories(stories: Story[]) {
-  const now = Date.now();
+function isStoryActive(story: Story) {
+  return new Date(story.expiresAt).getTime() > Date.now();
+}
+
+function pruneStoriesForState(stories: Story[]) {
   return stories
-    .filter((story) => new Date(story.expiresAt).getTime() > now)
+    .filter((story) => isStoryActive(story) || Boolean(story.highlightedAt))
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 

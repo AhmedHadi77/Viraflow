@@ -1,24 +1,25 @@
-import { LinearGradient } from "expo-linear-gradient";
 import { useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, Text, View } from "react-native";
 import { PrimaryButton } from "../components/PrimaryButton";
+import { SafeLinearGradient } from "../components/SafeLinearGradient";
 import { Screen } from "../components/Screen";
 import { SectionTitle } from "../components/SectionTitle";
-import { getCopy } from "../data/copy";
+import { getCopy, supportedLanguages } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
-import { LanguageOption } from "../types/models";
-import { palette, radii, spacing } from "../theme";
-
-const languageOptions: Array<{ value: LanguageOption; label: string; helper: string }> = [
-  { value: "en", label: "English", helper: "Global creator mode" },
-  { value: "ar", label: "العربية", helper: "Arabic experience" },
-  { value: "fr", label: "Francais", helper: "French creator mode" },
-  { value: "es", label: "Espanol", helper: "Spanish experience" },
-];
+import { isLanguageOption, LanguageOption } from "../types/models";
+import { palette, radii, spacing, createThemedStyles } from "../theme";
 
 export function LanguageScreen() {
   const { setLanguage } = useAppState();
-  const [selected, setSelected] = useState<LanguageOption>("en");
+  const [selected, setSelected] = useState<LanguageOption>(() => {
+    // Start on the phone's language when we ship it.
+    try {
+      const deviceLanguage = Intl.DateTimeFormat().resolvedOptions().locale.split("-")[0];
+      return isLanguageOption(deviceLanguage) ? deviceLanguage : "en";
+    } catch {
+      return "en";
+    }
+  });
   const copy = getCopy(selected);
 
   async function handleContinue() {
@@ -28,28 +29,30 @@ export function LanguageScreen() {
 
   return (
     <Screen scrollable contentContainerStyle={styles.content}>
-      <LinearGradient colors={["rgba(255,122,47,0.16)", "rgba(54,224,161,0.10)", "rgba(255,255,255,0.02)"]} style={styles.hero}>
-        <Text style={styles.brand}>Pulseora</Text>
-        <Text style={styles.kicker}>Creator commerce, designed to move fast.</Text>
+      <SafeLinearGradient colors={["rgba(255,122,47,0.16)", "rgba(54,224,161,0.10)", "rgba(255,255,255,0.02)"]} style={styles.hero}>
+        <Text style={styles.brand}>{copy.appName}</Text>
+        <Text style={styles.kicker}>{copy.languageKicker}</Text>
         <SectionTitle title={copy.chooseLanguage} subtitle={copy.chooseLanguageBody} />
         <View style={styles.heroStats}>
-          <ValueChip label="Reels" value="Social" />
-          <ValueChip label="Store" value="Commerce" />
-          <ValueChip label="AI" value="Next" />
+          <ValueChip label={copy.languageChipReelsLabel} value={copy.languageChipReelsValue} />
+          <ValueChip label={copy.languageChipStoreLabel} value={copy.languageChipStoreValue} />
+          <ValueChip label={copy.languageChipAiLabel} value={copy.languageChipAiValue} />
         </View>
-      </LinearGradient>
+      </SafeLinearGradient>
 
       <View style={styles.grid}>
-        {languageOptions.map((option) => {
-          const isSelected = option.value === selected;
+        {supportedLanguages.map((option) => {
+          const isSelected = option.code === selected;
           return (
             <Pressable
-              key={option.value}
-              onPress={() => setSelected(option.value)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isSelected }}
+              key={option.code}
+              onPress={() => setSelected(option.code)}
               style={[styles.card, isSelected ? styles.cardActive : null]}
             >
-              <Text style={styles.cardTitle}>{option.label}</Text>
-              <Text style={styles.cardSubtitle}>{option.helper}</Text>
+              <Text style={styles.cardTitle}>{option.nativeName}</Text>
+              <Text style={styles.cardSubtitle}>{option.englishName}</Text>
             </Pressable>
           );
         })}
@@ -63,7 +66,7 @@ export function LanguageScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
   content: {
     flexGrow: 1,
     justifyContent: "space-between",
@@ -94,15 +97,21 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   grid: {
-    gap: spacing.md,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    marginVertical: spacing.lg,
   },
   card: {
     backgroundColor: palette.surface,
     borderColor: palette.borderStrong,
-    borderRadius: radii.xl,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    gap: 8,
-    padding: spacing.xl,
+    flexBasis: "47%",
+    flexGrow: 1,
+    gap: 2,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
   cardActive: {
     borderColor: palette.primary,
@@ -110,13 +119,12 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     color: palette.text,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "900",
   },
   cardSubtitle: {
     color: palette.muted,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 12,
   },
   footer: {
     gap: spacing.md,
@@ -138,7 +146,7 @@ function ValueChip({ label, value }: { label: string; value: string }) {
   );
 }
 
-const stylesChip = StyleSheet.create({
+const stylesChip = createThemedStyles({
   container: {
     backgroundColor: "rgba(255,255,255,0.06)",
     borderColor: "rgba(255,255,255,0.1)",

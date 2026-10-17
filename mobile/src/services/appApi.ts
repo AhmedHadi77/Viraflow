@@ -1,8 +1,10 @@
 import {
   AppNotification,
+  ChatMessageMediaType,
   CommunityChatMessage,
   CommunityPost,
   CommunitySpace,
+  CreateDirectMessagePayload,
   CreateCommunityPayload,
   CreateCommunityPostPayload,
   DirectChatMessage,
@@ -24,8 +26,10 @@ import {
   CreateStoryPayload,
   UpdateProfilePayload,
   User,
+  isLanguageOption,
 } from "../types/models";
 import { getPublicApiBaseUrl } from "./publicEnv";
+import { DEFAULT_PROFILE_IMAGE } from "../data/defaultMedia";
 
 const API_BASE_URL = getPublicApiBaseUrl();
 
@@ -37,9 +41,13 @@ export interface ApiUserPayload {
   profileImage: string;
   bio: string;
   headline: string;
+  website?: string;
   language: string;
   followersCount?: number;
   followingCount?: number;
+  role?: "user" | "admin";
+  isBanned?: boolean;
+  bannedAt?: string;
 }
 
 interface ApiReelPayload {
@@ -56,6 +64,7 @@ interface ApiReelPayload {
   viewCount?: number;
   reachCount?: number;
   activeBoost?: ApiReelBoostPayload | null;
+  boostedUntil?: string;
   creator?: ApiUserPayload | null;
 }
 
@@ -95,9 +104,15 @@ interface ApiStoryPayload {
   id: string;
   userId: string;
   imageUrl: string;
+  mediaType?: "image" | "video";
+  videoUrl?: string;
+  videoDurationSeconds?: number;
   caption?: string;
   createdAt: string;
   expiresAt: string;
+  viewerIds?: string[];
+  highlightedAt?: string;
+  highlightLabel?: string;
   creator?: ApiUserPayload | null;
 }
 
@@ -116,24 +131,42 @@ interface ApiSubscriptionPayload {
 interface ApiSavedPostPayload {
   id: string;
   userId: string;
-  entityType: "reel" | "product";
+  entityType: "reel" | "product" | "post";
   entityId: string;
   createdAt: string;
 }
 
-interface ApiNotificationPayload {
+export interface ApiNotificationPayload {
   id: string;
   userId: string;
-  type: "like" | "comment" | "follow" | "repost" | "boost" | "save" | "message" | "order" | "system";
+  type:
+    | "post_like"
+    | "post_comment"
+    | "reel_like"
+    | "reel_comment"
+    | "story_view"
+    | "mention"
+    | "like"
+    | "comment"
+    | "follow"
+    | "repost"
+    | "boost"
+    | "save"
+    | "message"
+    | "order"
+    | "call"
+    | "system";
   title: string;
   body: string;
   actorId?: string;
-  entityType?: "reel" | "product";
+  entityType?: "reel" | "product" | "post";
   entityId?: string;
   conversationId?: string;
   conversationType?: "marketplace" | "direct";
   createdAt: string;
   readAt?: string;
+  actorName?: string;
+  actorAvatar?: string;
   actor?: ApiUserPayload | null;
 }
 
@@ -187,6 +220,10 @@ export interface ApiDirectChatMessagePayload {
   threadId: string;
   senderId: string;
   text: string;
+  mediaType?: ChatMessageMediaType;
+  mediaUrl?: string;
+  thumbnailUrl?: string;
+  durationSeconds?: number;
   createdAt: string;
   deliveredToUserIds?: string[];
   seenByUserIds?: string[];
@@ -333,6 +370,7 @@ export async function createReelWithApi(token: string, payload: CreateReelPayloa
     token,
     body: {
       caption: payload.caption.trim(),
+      hashtags: payload.hashtags?.map((item) => item.trim().replace(/^#+/, "").toLowerCase()).filter(Boolean),
       videoUrl: payload.videoUrl.trim(),
       thumbnailUrl: payload.thumbnailUrl.trim() || undefined,
     },
@@ -357,6 +395,13 @@ export async function createProductWithApi(token: string, payload: CreateProduct
   });
 
   return response.product;
+}
+
+export async function deleteProductWithApi(token: string, productId: string) {
+  await request<{ ok: true }>(`/products/${productId}`, {
+    method: "DELETE",
+    token,
+  });
 }
 
 export async function createCommunityWithApi(token: string, payload: CreateCommunityPayload) {
@@ -406,6 +451,13 @@ export async function createCommunityPostWithApi(token: string, payload: CreateC
   });
 }
 
+export async function deleteCommunityPostWithApi(token: string, communityId: string, postId: string) {
+  await request<{ ok: true }>(`/communities/${communityId}/posts/${postId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
 export async function sendCommunityChatMessageWithApi(token: string, communityId: string, text: string) {
   return request<{ message: ApiCommunityChatMessagePayload }>(`/communities/${communityId}/chat`, {
     method: "POST",
@@ -440,14 +492,18 @@ export async function fetchDirectThreadWithApi(token: string, threadId: string) 
   });
 }
 
-export async function sendDirectMessageWithApi(token: string, threadId: string, text: string) {
+export async function sendDirectMessageWithApi(token: string, threadId: string, payload: CreateDirectMessagePayload) {
   return request<{ thread: ApiDirectChatThreadPayload; message: ApiDirectChatMessagePayload }>(
     `/direct/threads/${threadId}/messages`,
     {
       method: "POST",
       token,
       body: {
-        text: text.trim(),
+        text: payload.text?.trim() || undefined,
+        mediaType: payload.mediaType,
+        mediaUrl: payload.mediaUri?.trim() || undefined,
+        thumbnailUrl: payload.mediaThumbnailUri?.trim() || undefined,
+        durationSeconds: payload.mediaDurationSeconds,
       },
     }
   );
@@ -459,11 +515,56 @@ export async function createStoryWithApi(token: string, payload: CreateStoryPayl
     token,
     body: {
       imageUrl: payload.imageUrl.trim(),
+      mediaType: payload.mediaType ?? "image",
+      videoUrl: payload.videoUrl?.trim() || undefined,
+      videoDurationSeconds: payload.videoDurationSeconds,
       caption: payload.caption?.trim() || undefined,
+      saveToHighlights: payload.saveToHighlights ?? false,
+      highlightLabel: payload.highlightLabel?.trim() || undefined,
     },
   });
 
   return response.story;
+}
+
+export async function markStoryViewedWithApi(token: string, storyId: string) {
+  const response = await request<{ story: ApiStoryPayload }>(`/stories/${storyId}/view`, {
+    method: "PATCH",
+    token,
+  });
+
+  return response.story;
+}
+
+export async function updateStoryHighlightWithApi(
+  token: string,
+  storyId: string,
+  payload: { highlighted: boolean; highlightLabel?: string }
+) {
+  const response = await request<{ story: ApiStoryPayload }>(`/stories/${storyId}/highlight`, {
+    method: "PATCH",
+    token,
+    body: {
+      highlighted: payload.highlighted,
+      highlightLabel: payload.highlightLabel?.trim() || undefined,
+    },
+  });
+
+  return response.story;
+}
+
+export async function deleteStoryWithApi(token: string, storyId: string) {
+  await request<{ ok: true }>(`/stories/${storyId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function deleteReelWithApi(token: string, reelId: string) {
+  await request<{ ok: true }>(`/reels/${reelId}`, {
+    method: "DELETE",
+    token,
+  });
 }
 
 export async function updateProfileWithApi(token: string, payload: UpdateProfilePayload) {
@@ -475,7 +576,20 @@ export async function updateProfileWithApi(token: string, payload: UpdateProfile
       username: payload.username.trim(),
       bio: payload.bio.trim(),
       headline: payload.headline.trim(),
+      website: payload.website.trim() || undefined,
       profileImage: payload.profileImage.trim() || undefined,
+    },
+  });
+
+  return response.profile;
+}
+
+export async function setUserBanStatusWithApi(token: string, userId: string, banned: boolean) {
+  const response = await request<{ profile: ApiUserPayload }>(`/profiles/users/${userId}/ban`, {
+    method: "PATCH",
+    token,
+    body: {
+      banned,
     },
   });
 
@@ -649,6 +763,15 @@ export async function markAllNotificationsReadWithApi(token: string) {
   return response.notifications;
 }
 
+export async function markNotificationReadWithApi(token: string, notificationId: string) {
+  const response = await request<{ notification: ApiNotificationPayload }>(`/notifications/read/${notificationId}`, {
+    method: "POST",
+    token,
+  });
+
+  return response.notification;
+}
+
 export async function fetchMarketplaceInboxWithApi(token: string) {
   return request<{ threads: ApiMarketplaceChatThreadPayload[]; messages: ApiMarketplaceChatMessagePayload[]; orders: ApiMarketplaceOrderPayload[] }>("/marketplace/inbox/me", {
     method: "GET",
@@ -731,22 +854,26 @@ export function mapApiUserToMobile(
     id: apiUser.id,
     name: apiUser.name,
     username: apiUser.username,
-      email: apiUser.email || options?.existing?.email || `${apiUser.username}@pulseora.app`,
+    email: apiUser.email || options?.existing?.email || `${apiUser.username}@pulseora.app`,
     profileImage: apiUser.profileImage,
     bio: apiUser.bio,
     headline: apiUser.headline,
+    website: apiUser.website ?? options?.existing?.website ?? "",
     language: normalizeLanguage(apiUser.language, options?.existing?.language),
     planType: options?.planType ?? options?.existing?.planType ?? "free",
     followers: options?.followers ?? options?.existing?.followers ?? [],
     following: options?.following ?? options?.existing?.following ?? [],
     reelIds: options?.reelIds ?? options?.existing?.reelIds ?? [],
     productIds: options?.productIds ?? options?.existing?.productIds ?? [],
+    role: apiUser.role ?? options?.existing?.role ?? "user",
+    isBanned: apiUser.isBanned ?? options?.existing?.isBanned ?? false,
+    bannedAt: apiUser.bannedAt ?? options?.existing?.bannedAt,
   };
 }
 
 export function mapApiReelToMobile(apiReel: ApiReelPayload, existing?: Reel): Reel {
   const likedBy = Array.isArray(apiReel.likedBy) ? apiReel.likedBy : existing?.likedBy ?? [];
-  const viewCount = apiReel.viewCount ?? existing?.viewCount ?? Math.max(240, likedBy.length * 320 + 1400);
+  const viewCount = apiReel.viewCount ?? existing?.viewCount ?? 0;
 
   return {
     id: apiReel.id,
@@ -759,7 +886,11 @@ export function mapApiReelToMobile(apiReel: ApiReelPayload, existing?: Reel): Re
     likedBy,
     repostCount: apiReel.repostCount,
     viewCount,
-    reachCount: apiReel.reachCount ?? existing?.reachCount ?? Math.max(viewCount * 3, viewCount + 900),
+    reachCount: apiReel.reachCount ?? existing?.reachCount ?? 0,
+    boostedUntil:
+      apiReel.boostedUntil ??
+      (apiReel.activeBoost && apiReel.activeBoost.status === "active" ? apiReel.activeBoost.endsAt : undefined) ??
+      existing?.boostedUntil,
   };
 }
 
@@ -804,7 +935,7 @@ export function mapApiCommunityPostToMobile(apiPost: ApiCommunityPostPayload, ex
     authorAvatar:
       apiPost.author?.profileImage ??
       existingUser?.profileImage ??
-      "https://images.unsplash.com/photo-1502685104226-ee32379fefbe?auto=format&fit=crop&w=400&q=80",
+      DEFAULT_PROFILE_IMAGE,
     text: apiPost.text,
     imageUrl: apiPost.imageUrl,
     createdAt: apiPost.createdAt,
@@ -823,7 +954,7 @@ export function mapApiCommunityChatMessageToMobile(
     senderAvatar:
       apiMessage.sender?.profileImage ??
       existingUser?.profileImage ??
-      "https://images.unsplash.com/photo-1502685104226-ee32379fefbe?auto=format&fit=crop&w=400&q=80",
+      DEFAULT_PROFILE_IMAGE,
     text: apiMessage.text,
     createdAt: apiMessage.createdAt,
     deliveredToUserIds: apiMessage.deliveredToUserIds ?? [],
@@ -851,8 +982,12 @@ export function mapApiDirectMessageToMobile(apiMessage: ApiDirectChatMessagePayl
     senderAvatar:
       apiMessage.sender?.profileImage ??
       existingUser?.profileImage ??
-      "https://images.unsplash.com/photo-1502685104226-ee32379fefbe?auto=format&fit=crop&w=400&q=80",
+      DEFAULT_PROFILE_IMAGE,
     text: apiMessage.text,
+    mediaType: apiMessage.mediaType,
+    mediaUrl: apiMessage.mediaUrl,
+    thumbnailUrl: apiMessage.thumbnailUrl,
+    durationSeconds: apiMessage.durationSeconds,
     createdAt: apiMessage.createdAt,
     deliveredToUserIds: apiMessage.deliveredToUserIds ?? [],
     seenByUserIds: apiMessage.seenByUserIds ?? [],
@@ -864,9 +999,15 @@ export function mapApiStoryToMobile(apiStory: ApiStoryPayload): Story {
     id: apiStory.id,
     userId: apiStory.userId,
     imageUrl: apiStory.imageUrl,
+    mediaType: apiStory.mediaType ?? (apiStory.videoUrl ? "video" : "image"),
+    videoUrl: apiStory.videoUrl,
+    videoDurationSeconds: apiStory.videoDurationSeconds,
     caption: apiStory.caption,
     createdAt: apiStory.createdAt,
     expiresAt: apiStory.expiresAt,
+    viewerIds: apiStory.viewerIds ?? [],
+    highlightedAt: apiStory.highlightedAt,
+    highlightLabel: apiStory.highlightLabel,
   };
 }
 
@@ -899,22 +1040,35 @@ export function mapApiSavedPostToMobile(apiSavedPost: ApiSavedPostPayload): Save
 }
 
 export function mapApiNotificationToMobile(apiNotification: ApiNotificationPayload): AppNotification {
+  const entityType = apiNotification.entityType;
   return {
     id: apiNotification.id,
     userId: apiNotification.userId,
-    type: apiNotification.type,
+    type: normalizeApiNotificationType(apiNotification.type, entityType),
     title: apiNotification.title,
     body: apiNotification.body,
     actorId: apiNotification.actorId,
-    actorName: apiNotification.actor?.name,
-    actorAvatar: apiNotification.actor?.profileImage,
-    entityType: apiNotification.entityType,
+    actorName: apiNotification.actor?.name ?? apiNotification.actorName,
+    actorAvatar: apiNotification.actor?.profileImage ?? apiNotification.actorAvatar,
+    entityType,
     entityId: apiNotification.entityId,
     conversationId: apiNotification.conversationId,
     conversationType: apiNotification.conversationType,
     createdAt: apiNotification.createdAt,
     readAt: apiNotification.readAt,
   };
+}
+
+function normalizeApiNotificationType(type: ApiNotificationPayload["type"], entityType?: AppNotification["entityType"]): AppNotification["type"] {
+  if (type === "like") {
+    return entityType === "post" ? "post_like" : "reel_like";
+  }
+
+  if (type === "comment") {
+    return entityType === "post" ? "post_comment" : "reel_comment";
+  }
+
+  return type;
 }
 
 export function mapApiMarketplaceThreadToMobile(apiThread: ApiMarketplaceChatThreadPayload): MarketplaceChatThread {
@@ -942,7 +1096,7 @@ export function mapApiMarketplaceMessageToMobile(
     senderAvatar:
       apiMessage.sender?.profileImage ??
       existingUser?.profileImage ??
-      "https://images.unsplash.com/photo-1502685104226-ee32379fefbe?auto=format&fit=crop&w=400&q=80",
+      DEFAULT_PROFILE_IMAGE,
     text: apiMessage.text,
     createdAt: apiMessage.createdAt,
     deliveredToUserIds: apiMessage.deliveredToUserIds ?? [],
@@ -989,7 +1143,7 @@ function buildTagsFromCaption(caption: string) {
 }
 
 function normalizeLanguage(language: string | undefined, fallback?: LanguageOption): LanguageOption {
-  if (language === "en" || language === "ar" || language === "fr" || language === "es") {
+  if (isLanguageOption(language)) {
     return language;
   }
 
@@ -998,7 +1152,7 @@ function normalizeLanguage(language: string | undefined, fallback?: LanguageOpti
 
 async function request<T>(
   path: string,
-  options: { method: "GET" | "POST" | "PATCH"; token?: string; body?: unknown }
+  options: { method: "GET" | "POST" | "PATCH" | "DELETE"; token?: string; body?: unknown }
 ): Promise<T> {
   if (!API_BASE_URL) {
     throw new AppApiError("Missing EXPO_PUBLIC_API_BASE_URL");
@@ -1037,6 +1191,6 @@ async function request<T>(
       throw error;
     }
 
-    throw new AppApiError("Could not reach the Pulseora backend. Start the API and try again.");
+    throw new AppApiError("Could not reach the Sohba backend. Start the API and try again.");
   }
 }

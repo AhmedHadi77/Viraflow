@@ -34,4 +34,9 @@ export const env = {
   openAiVoiceModel: process.env.OPENAI_VOICE_MODEL ?? "gpt-4o-mini-tts",
   openAiTranscriptionModel: process.env.OPENAI_TRANSCRIPTION_MODEL ?? "whisper-1",
   openAiDefaultVoice: process.env.OPENAI_DEFAULT_VOICE ?? "coral",
+  /** Comma-separated sign-in emails of the app owner(s). The owner can choose admins. */
+  ownerEmails: (process.env.OWNER_EMAILS ?? "")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean),
 };

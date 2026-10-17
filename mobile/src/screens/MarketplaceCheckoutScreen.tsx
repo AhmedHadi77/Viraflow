@@ -1,18 +1,22 @@
 import { useState } from "react";
-import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { usePriceTools } from "../utils/priceFormatting";
+import { Alert, Image, Pressable, Text, View } from "react-native";
 import { InputField } from "../components/InputField";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { SectionTitle } from "../components/SectionTitle";
+import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
 import { MarketplaceDeliveryMethod, MarketplacePaymentMethod } from "../types/models";
-import { palette, radii, spacing } from "../theme";
+import { palette, radii, spacing, createThemedStyles } from "../theme";
 
 const deliveryOptions: MarketplaceDeliveryMethod[] = ["pickup", "shipping"];
 const paymentOptions: MarketplacePaymentMethod[] = ["card", "cash"];
 
 export function MarketplaceCheckoutScreen({ navigation, route }: { navigation: any; route: { params: { productId: string } } }) {
-  const { currentUser, products, createMarketplaceOrder } = useAppState();
+  const { language, currentUser, products, createMarketplaceOrder } = useAppState();
+  const copy = getCopy(language);
+  const { formatProductPrice, getPriceParts } = usePriceTools();
   const product = products.find((item) => item.id === route.params.productId);
   const [deliveryMethod, setDeliveryMethod] = useState<MarketplaceDeliveryMethod>("pickup");
   const [paymentMethod, setPaymentMethod] = useState<MarketplacePaymentMethod>("card");
@@ -22,7 +26,7 @@ export function MarketplaceCheckoutScreen({ navigation, route }: { navigation: a
   if (!product || !currentUser) {
     return (
       <Screen contentContainerStyle={styles.emptyWrap}>
-        <Text style={styles.emptyText}>Listing not found.</Text>
+        <Text style={styles.emptyText}>{copy.listingNotFound}</Text>
       </Screen>
     );
   }
@@ -39,11 +43,11 @@ export function MarketplaceCheckoutScreen({ navigation, route }: { navigation: a
     });
 
     if (!result.ok) {
-      Alert.alert("Checkout unavailable", result.message ?? "This order could not be placed right now.");
+      Alert.alert(copy.checkoutUnavailableTitle, result.message ?? copy.checkoutUnavailableBody);
       return;
     }
 
-    Alert.alert("Order placed", "Your marketplace checkout is complete.");
+    Alert.alert(copy.orderPlacedTitle, copy.orderPlacedBody);
     if (result.threadId) {
       navigation.replace?.("MarketplaceChat", { threadId: result.threadId });
       return;
@@ -57,13 +61,13 @@ export function MarketplaceCheckoutScreen({ navigation, route }: { navigation: a
   return (
     <Screen scrollable>
       <View style={styles.heroCard}>
-        <SectionTitle title="Checkout" subtitle="Review the item, choose delivery, and place your marketplace order." />
+        <SectionTitle title={copy.checkoutTitle} subtitle={copy.checkoutBody} />
         <View style={styles.summaryCard}>
           <Image source={{ uri: activeProduct.imageUrl }} style={styles.productImage} />
           <View style={styles.summaryCopy}>
             <Text style={styles.productTitle}>{activeProduct.title}</Text>
             <Text style={styles.productMeta}>
-              ${activeProduct.price} | {activeProduct.location}
+              {formatProductPrice(activeProduct)} | {activeProduct.location}
             </Text>
             <Text style={styles.productStatus}>{activeProduct.listingStatus}</Text>
           </View>
@@ -71,25 +75,25 @@ export function MarketplaceCheckoutScreen({ navigation, route }: { navigation: a
       </View>
 
       <View style={styles.formCard}>
-        <Text style={styles.sectionLabel}>Delivery method</Text>
+        <Text style={styles.sectionLabel}>{copy.deliveryMethod}</Text>
         <View style={styles.choiceRow}>
           {deliveryOptions.map((option) => (
             <ChoiceChip
               key={option}
               active={deliveryMethod === option}
-              label={option === "pickup" ? "Local pickup" : "Shipping"}
+              label={option === "pickup" ? copy.localPickup : copy.shipping}
               onPress={() => setDeliveryMethod(option)}
             />
           ))}
         </View>
 
-        <Text style={styles.sectionLabel}>Payment</Text>
+        <Text style={styles.sectionLabel}>{copy.payment}</Text>
         <View style={styles.choiceRow}>
           {paymentOptions.map((option) => (
             <ChoiceChip
               key={option}
               active={paymentMethod === option}
-              label={option === "card" ? "Card" : "Cash"}
+              label={option === "card" ? copy.card : copy.cash}
               onPress={() => setPaymentMethod(option)}
             />
           ))}
@@ -97,29 +101,37 @@ export function MarketplaceCheckoutScreen({ navigation, route }: { navigation: a
 
         {deliveryMethod === "shipping" ? (
           <InputField
-            label="Shipping address"
+            label={copy.shippingAddress}
             onChangeText={setShippingAddress}
-            placeholder="Street, city, postcode"
+            placeholder={copy.shippingAddressPlaceholder}
             value={shippingAddress}
             multiline
           />
         ) : null}
 
         <InputField
-          label="Note to seller"
+          label={copy.noteToSeller}
           onChangeText={setBuyerNote}
-          placeholder="Ask for pickup time, box condition, accessories..."
+          placeholder={copy.noteToSellerPlaceholder}
           value={buyerNote}
           multiline
         />
 
         <View style={styles.totalCard}>
-          <Text style={styles.totalLabel}>Order total</Text>
-          <Text style={styles.totalValue}>${activeProduct.price}</Text>
+          <Text style={styles.totalLabel}>{copy.orderTotal}</Text>
+          <Text style={styles.totalValue}>{getPriceParts(activeProduct).original}</Text>
+          {getPriceParts(activeProduct).approx ? (
+            <>
+              <Text style={styles.totalApprox}>
+                {copy.approxLabel}: {getPriceParts(activeProduct).approx}
+              </Text>
+              <Text style={styles.totalNote}>{copy.convertPricesBody}</Text>
+            </>
+          ) : null}
         </View>
 
         <PrimaryButton
-          label={unavailable ? `Listing ${activeProduct.listingStatus}` : "Place order"}
+          label={unavailable ? `${copy.listing} ${activeProduct.listingStatus}` : copy.placeOrder}
           onPress={() => {
             void handleCheckout();
           }}
@@ -146,7 +158,7 @@ function ChoiceChip({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
   emptyWrap: {
     alignItems: "center",
     justifyContent: "center",
@@ -256,5 +268,15 @@ const styles = StyleSheet.create({
     color: palette.text,
     fontSize: 26,
     fontWeight: "900",
+  },
+  totalApprox: {
+    color: palette.muted,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  totalNote: {
+    color: palette.muted,
+    fontSize: 12,
+    lineHeight: 17,
   },
 });

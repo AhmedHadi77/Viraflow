@@ -1,14 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
+import { categoryLabel } from "../utils/labels";
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { InputField } from "../components/InputField";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { ProductCard } from "../components/ProductCard";
 import { Screen } from "../components/Screen";
-import { marketplaceCategories } from "../data/mockData";
+import { getCopy } from "../data/copy";
+import { marketplaceCategories } from "../data/catalog";
 import { useAppState } from "../providers/AppProvider";
-import { ProductListingStatus } from "../types/models";
-import { palette, radii, spacing } from "../theme";
+import { Product, ProductListingStatus } from "../types/models";
+import { palette, radii, spacing, createThemedStyles } from "../theme";
+import { usePriceTools } from "../utils/priceFormatting";
 
 const listingStatusFilters: Array<"all" | ProductListingStatus> = ["all", "available", "pending", "sold"];
 const listingStatusRank: Record<ProductListingStatus, number> = {
@@ -18,7 +21,8 @@ const listingStatusRank: Record<ProductListingStatus, number> = {
 };
 
 export function MarketplaceScreen({ navigation }: { navigation: any }) {
-  const { products, getTotalMarketplaceUnreadCount, getUserById, refreshCatalog, refreshMarketplaceInbox } = useAppState();
+  const { language, region, products, getTotalMarketplaceUnreadCount, getUserById, refreshCatalog, refreshMarketplaceInbox } = useAppState();
+  const copy = getCopy(language);
   const rootNavigation = navigation.getParent?.() ?? navigation;
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
@@ -27,11 +31,15 @@ export function MarketplaceScreen({ navigation }: { navigation: any }) {
   const [maximumPrice, setMaximumPrice] = useState("");
   const [listingStatus, setListingStatus] = useState<"all" | ProductListingStatus>("all");
   const totalMarketplaceUnreadCount = getTotalMarketplaceUnreadCount();
+  const { getPriceParts, viewerCurrency } = usePriceTools();
 
   useEffect(() => {
     refreshCatalog().catch(() => undefined);
     refreshMarketplaceInbox().catch(() => undefined);
   }, []);
+
+  const isNearby = (product: Product) =>
+    (product.region ?? getUserById(product.userId)?.region ?? "").toUpperCase() === region;
 
   const filteredProducts = useMemo(() => {
     return products
@@ -51,8 +59,10 @@ export function MarketplaceScreen({ navigation }: { navigation: any }) {
           product.category.toLowerCase().includes(query) ||
           product.location.toLowerCase().includes(query);
         const matchesLocation = !locationQuery || product.location.toLowerCase().includes(locationQuery);
-        const matchesMinimum = !hasMinimumValue || product.price >= minimumValue;
-        const matchesMaximum = !hasMaximumValue || product.price <= maximumValue;
+        // Min/max are typed in the viewer's currency, so compare against the converted price.
+        const comparablePrice = getPriceParts(product).viewerAmount;
+        const matchesMinimum = !hasMinimumValue || comparablePrice >= minimumValue;
+        const matchesMaximum = !hasMaximumValue || comparablePrice <= maximumValue;
 
         return matchesCategory && matchesListingStatus && matchesSearch && matchesLocation && matchesMinimum && matchesMaximum;
       })
@@ -62,9 +72,17 @@ export function MarketplaceScreen({ navigation }: { navigation: any }) {
           return statusDifference;
         }
 
+        // Listings from the viewer's own region come first, like local marketplaces do.
+        const localDifference = Number(isNearby(right)) - Number(isNearby(left));
+        if (localDifference !== 0) {
+          return localDifference;
+        }
+
         return right.createdAt.localeCompare(left.createdAt);
       });
-  }, [category, listingStatus, location, maximumPrice, minimumPrice, products, search]);
+  }, [category, listingStatus, location, maximumPrice, minimumPrice, products, search, region, getPriceParts]);
+
+  const nearbyCount = filteredProducts.filter(isNearby).length;
 
   const featuredProducts = filteredProducts.slice(0, 4);
 
@@ -79,21 +97,27 @@ export function MarketplaceScreen({ navigation }: { navigation: any }) {
 
   function formatListingStatus(value: "all" | ProductListingStatus) {
     if (value === "all") {
-      return "All";
+      return copy.all;
     }
 
-    return value.charAt(0).toUpperCase() + value.slice(1);
+    if (value === "available") {
+      return copy.available;
+    }
+    if (value === "pending") {
+      return copy.pending;
+    }
+    return copy.sold;
   }
 
-  const resultsLabel = filteredProducts.length === 1 ? "1 listing" : `${filteredProducts.length} listings`;
+  const resultsLabel = filteredProducts.length === 1 ? `1 ${copy.listing}` : `${filteredProducts.length} ${copy.listings}`;
 
   return (
     <Screen scrollable contentContainerStyle={styles.content}>
       <View style={styles.hero}>
         <View style={styles.heroHeader}>
           <View>
-            <Text style={styles.kicker}>Marketplace</Text>
-            <Text style={styles.title}>Buy and sell like a real social marketplace.</Text>
+            <Text style={styles.kicker}>{copy.marketplace}</Text>
+            <Text style={styles.title}>{copy.marketplaceTitle}</Text>
           </View>
           <Pressable onPress={() => rootNavigation.navigate("MarketplaceInbox")} style={styles.inboxBubble}>
             <Ionicons color={palette.text} name="chatbubble-ellipses-outline" size={20} />
@@ -106,19 +130,19 @@ export function MarketplaceScreen({ navigation }: { navigation: any }) {
         </View>
 
         <Text style={styles.heroBody}>
-          Discover local finds, creator gear, and home setups with Facebook-style filters, but inside Pulseora's cleaner flow.
+          {copy.marketplaceBody}
         </Text>
 
         <View style={styles.heroStats}>
-          <MetricCard label="Available" value={products.filter((item) => item.listingStatus === "available").length} />
-          <MetricCard label="Pending" value={products.filter((item) => item.listingStatus === "pending").length} />
-          <MetricCard label="Nearby" value={filteredProducts.length} />
+          <MetricCard label={copy.available} value={products.filter((item) => item.listingStatus === "available").length} />
+          <MetricCard label={copy.pending} value={products.filter((item) => item.listingStatus === "pending").length} />
+          <MetricCard label={copy.nearby} value={filteredProducts.length} />
         </View>
 
         <View style={styles.heroActions}>
-          <PrimaryButton label="Sell an item" onPress={() => navigation.navigate("Create", { initialMode: "product" })} />
+          <PrimaryButton label={copy.sellItem} onPress={() => navigation.navigate("Create", { initialMode: "product" })} />
           <PrimaryButton
-            label={totalMarketplaceUnreadCount > 0 ? `Inbox (${totalMarketplaceUnreadCount})` : "Inbox"}
+            label={totalMarketplaceUnreadCount > 0 ? `${copy.inbox} (${totalMarketplaceUnreadCount})` : copy.inbox}
             onPress={() => rootNavigation.navigate("MarketplaceInbox")}
             variant="ghost"
           />
@@ -126,23 +150,23 @@ export function MarketplaceScreen({ navigation }: { navigation: any }) {
       </View>
 
       <View style={styles.searchShell}>
-        <InputField label="Search" onChangeText={setSearch} placeholder="camera, desk, chair, stroller..." value={search} />
-        <InputField label="Location" onChangeText={setLocation} placeholder="Kuala Lumpur, Petaling Jaya..." value={location} />
+        <InputField label={copy.search} onChangeText={setSearch} placeholder={copy.searchPlaceholder} value={search} />
+        <InputField label={copy.location} onChangeText={setLocation} placeholder={copy.locationPlaceholder} value={location} />
         <View style={styles.priceFilters}>
           <View style={styles.priceField}>
-            <InputField label="Min" keyboardType="numeric" onChangeText={setMinimumPrice} placeholder="0" value={minimumPrice} />
+            <InputField label={`${copy.min} (${viewerCurrency})`} keyboardType="numeric" onChangeText={setMinimumPrice} placeholder="0" value={minimumPrice} />
           </View>
           <View style={styles.priceField}>
-            <InputField label="Max" keyboardType="numeric" onChangeText={setMaximumPrice} placeholder="500" value={maximumPrice} />
+            <InputField label={`${copy.max} (${viewerCurrency})`} keyboardType="numeric" onChangeText={setMaximumPrice} placeholder="500" value={maximumPrice} />
           </View>
         </View>
       </View>
 
       <View style={styles.sectionBlock}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Categories</Text>
+          <Text style={styles.sectionTitle}>{copy.categories}</Text>
           <Pressable onPress={resetFilters}>
-            <Text style={styles.sectionLink}>Reset</Text>
+            <Text style={styles.sectionLink}>{copy.reset}</Text>
           </Pressable>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
@@ -150,7 +174,7 @@ export function MarketplaceScreen({ navigation }: { navigation: any }) {
             const active = item === category;
             return (
               <Pressable key={item} onPress={() => setCategory(item)} style={[styles.filterChip, active ? styles.filterChipActive : null]}>
-                <Text style={[styles.filterChipLabel, active ? styles.filterChipLabelActive : null]}>{item}</Text>
+                <Text style={[styles.filterChipLabel, active ? styles.filterChipLabelActive : null]}>{categoryLabel(item, copy)}</Text>
               </Pressable>
             );
           })}
@@ -159,7 +183,7 @@ export function MarketplaceScreen({ navigation }: { navigation: any }) {
 
       <View style={styles.sectionBlock}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Availability</Text>
+          <Text style={styles.sectionTitle}>{copy.availability}</Text>
           <Text style={styles.sectionLink}>{resultsLabel}</Text>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
@@ -181,8 +205,8 @@ export function MarketplaceScreen({ navigation }: { navigation: any }) {
       {featuredProducts.length > 0 ? (
         <View style={styles.sectionBlock}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Featured picks</Text>
-            <Text style={styles.sectionLink}>Swipe</Text>
+            <Text style={styles.sectionTitle}>{copy.featuredPicks}</Text>
+            <Text style={styles.sectionLink}>{copy.swipe}</Text>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.featuredRow}>
             {featuredProducts.map((product) => {
@@ -198,6 +222,7 @@ export function MarketplaceScreen({ navigation }: { navigation: any }) {
                     onSellerPress={() => rootNavigation.navigate("PublicProfile", { userId: seller.id })}
                     product={product}
                     seller={seller}
+                    nearbyLabel={isNearby(product) ? copy.nearYou : undefined}
                   />
                 </View>
               );
@@ -208,9 +233,10 @@ export function MarketplaceScreen({ navigation }: { navigation: any }) {
 
       <View style={styles.sectionBlock}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>All listings</Text>
+          <Text style={styles.sectionTitle}>{copy.allListings}</Text>
           <Text style={styles.sectionLink}>{resultsLabel}</Text>
         </View>
+        {nearbyCount > 0 ? <Text style={styles.localHint}>{copy.localFirstHint}</Text> : null}
 
         <View style={styles.list}>
           {filteredProducts.length > 0 ? (
@@ -227,14 +253,15 @@ export function MarketplaceScreen({ navigation }: { navigation: any }) {
                   onSellerPress={() => rootNavigation.navigate("PublicProfile", { userId: seller.id })}
                   product={product}
                   seller={seller}
+                  nearbyLabel={isNearby(product) ? copy.nearYou : undefined}
                 />
               );
             })
           ) : (
             <View style={styles.emptyCard}>
               <Ionicons color={palette.muted} name="search-outline" size={28} />
-              <Text style={styles.emptyTitle}>No listings match these filters yet.</Text>
-              <Text style={styles.emptyBody}>Try another location, wider price range, or reset the filters and browse again.</Text>
+              <Text style={styles.emptyTitle}>{copy.noListingsTitle}</Text>
+              <Text style={styles.emptyBody}>{copy.noListingsBody}</Text>
             </View>
           )}
         </View>
@@ -252,7 +279,7 @@ function MetricCard({ label, value }: { label: string; value: number }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
   content: {
     paddingBottom: 96,
   },
@@ -353,6 +380,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: spacing.md,
     padding: spacing.lg,
+  },
+  localHint: {
+    color: palette.muted,
+    fontSize: 13,
+    marginTop: -6,
   },
   priceFilters: {
     flexDirection: "row",

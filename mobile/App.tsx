@@ -1,25 +1,44 @@
-import { createNavigationContainerRef, NavigationContainer, DefaultTheme } from "@react-navigation/native";
+import {
+  NavigationContainer,
+  DefaultTheme,
+  LinkingOptions,
+} from "@react-navigation/native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { AppNavigator, RootStackParamList } from "./src/navigation/AppNavigator";
 import { AppProvider } from "./src/providers/AppProvider";
+import { CallCoordinator } from "./src/components/CallCoordinator";
+import { ReportSheetHost } from "./src/components/ReportSheet";
+import { navigationRef } from "./src/navigation/navigationRef";
 import { getNotificationNavigationTarget } from "./src/services/notificationRouting";
-import { palette } from "./src/theme";
+import { palette, createThemedStyles, ThemeMode } from "./src/theme";
+import { ThemeProvider, useThemeMode } from "./src/theme/ThemeProvider";
 
-const navigationTheme = {
-  ...DefaultTheme,
-  colors: {
-    ...DefaultTheme.colors,
-    background: palette.background,
-    card: palette.card,
-    text: palette.text,
-    primary: palette.primary,
-    border: palette.border,
+function buildNavigationTheme(mode: ThemeMode) {
+  return {
+    ...DefaultTheme,
+    dark: mode === "dark",
+    colors: {
+      ...DefaultTheme.colors,
+      background: palette.background,
+      card: palette.card,
+      text: palette.text,
+      primary: palette.primary,
+      border: palette.border,
+    },
+  };
+}
+
+const linking: LinkingOptions<RootStackParamList> = {
+  prefixes: ["pulseora://", "https://pulseora.app", "https://www.pulseora.app"],
+  config: {
+    screens: {
+      Admin: "admin",
+    },
   },
 };
-
-const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 export default function App() {
   React.useEffect(() => {
@@ -27,7 +46,7 @@ export default function App() {
       try {
         return require("expo-notifications") as typeof import("expo-notifications");
       } catch (error) {
-        console.warn("Pulseora notification module is unavailable in this build.", error);
+        console.warn("Sohba notification module is unavailable in this build.", error);
         return null;
       }
     })();
@@ -70,7 +89,7 @@ export default function App() {
         openNotificationTarget(response.notification.request.content.data);
       });
     } catch (error) {
-      console.warn("Pulseora notification listeners could not start in this build.", error);
+      console.warn("Sohba notification listeners could not start in this build.", error);
     }
 
     return () => {
@@ -80,14 +99,45 @@ export default function App() {
   }, []);
 
   return (
-    <AppErrorBoundary>
-      <AppProvider>
-        <NavigationContainer ref={navigationRef} theme={navigationTheme}>
-          <StatusBar style="light" />
-          <AppNavigator />
-        </NavigationContainer>
-      </AppProvider>
-    </AppErrorBoundary>
+    <SafeAreaProvider>
+      <AppErrorBoundary>
+        <ThemeProvider>
+          <AppProvider>
+            <ThemedNavigation />
+          </AppProvider>
+        </ThemeProvider>
+      </AppErrorBoundary>
+    </SafeAreaProvider>
+  );
+}
+
+// Switching theme remounts the navigation tree (so every screen picks up the new colours) and
+// restores the exact screen stack the user was on.
+function ThemedNavigation() {
+  const { mode, ready } = useThemeMode();
+  const navigationStateRef = React.useRef<any>(undefined);
+  const navigationTheme = React.useMemo(() => buildNavigationTheme(mode), [mode]);
+
+  if (!ready) {
+    return <View style={styles.themeLoading} />;
+  }
+
+  return (
+    <NavigationContainer
+      initialState={navigationStateRef.current}
+      key={mode}
+      linking={navigationStateRef.current ? undefined : linking}
+      onStateChange={(state) => {
+        navigationStateRef.current = state;
+      }}
+      ref={navigationRef}
+      theme={navigationTheme}
+    >
+      <StatusBar style={mode === "dark" ? "light" : "dark"} />
+      <AppNavigator />
+      <CallCoordinator />
+      <ReportSheetHost />
+    </NavigationContainer>
   );
 }
 
@@ -99,14 +149,14 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, { hasErr
   }
 
   componentDidCatch(error: unknown) {
-    console.error("Pulseora caught a render startup error.", error);
+    console.error("Sohba caught a render startup error.", error);
   }
 
   render() {
     if (this.state.hasError) {
       return (
         <View style={styles.errorScreen}>
-          <Text style={styles.errorTitle}>Pulseora is recovering</Text>
+          <Text style={styles.errorTitle}>Sohba is recovering</Text>
           <Text style={styles.errorBody}>
             The app hit a startup problem and switched to safe mode. Please close and reopen it after installing the latest
             build.
@@ -119,7 +169,11 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, { hasErr
   }
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
+  themeLoading: {
+    backgroundColor: "#071018",
+    flex: 1,
+  },
   errorScreen: {
     alignItems: "center",
     backgroundColor: palette.background,

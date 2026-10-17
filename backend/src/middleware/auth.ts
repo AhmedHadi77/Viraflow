@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { verifyFirebaseUserToken } from "../services/firebaseService";
+import { verifySupabaseUserToken } from "../services/supabaseService";
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -7,6 +8,8 @@ export interface AuthenticatedRequest extends Request {
     email?: string;
     name?: string;
     picture?: string;
+    provider?: "firebase" | "supabase";
+    username?: string;
   };
 }
 
@@ -19,7 +22,9 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
   }
 
   const token = authorization.replace("Bearer ", "");
-  const user = await verifyFirebaseUserToken(token);
+  const firebaseUser = await verifyFirebaseUserToken(token);
+  const supabaseUser = firebaseUser ? undefined : await verifySupabaseUserToken(token);
+  const user = firebaseUser ?? supabaseUser;
   if (!user) {
     res.status(401).json({ message: "Invalid token." });
     return;
@@ -30,6 +35,8 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
     email: user.email,
     name: user.name,
     picture: user.picture,
+    provider: firebaseUser ? "firebase" : "supabase",
+    username: supabaseUser?.username,
   };
 
   next();

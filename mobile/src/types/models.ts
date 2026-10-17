@@ -1,9 +1,14 @@
-export type LanguageOption = "en" | "ar" | "fr" | "es";
+export const LANGUAGE_CODES = ["en", "ar", "fr", "es", "pt", "de", "tr", "ru", "hi", "ur", "ms", "id", "zh", "ja"] as const;
+export type LanguageOption = (typeof LANGUAGE_CODES)[number];
+
+export function isLanguageOption(value: unknown): value is LanguageOption {
+  return typeof value === "string" && (LANGUAGE_CODES as readonly string[]).includes(value);
+}
 
 export type PlanType = "free" | "weekly" | "monthly" | "yearly";
 export type AppSubscriptionStatus = "inactive" | "active" | "canceled" | "expired";
 export type ReelBoostPlanId = "starter" | "growth" | "viral";
-export type SavedEntityType = "reel" | "product";
+export type SavedEntityType = "reel" | "product" | "post";
 export type ProductCondition = "New" | "Like New" | "Good" | "Fair";
 export type ProductListingStatus = "available" | "pending" | "sold";
 export type CommunityKind = "page" | "group" | "channel";
@@ -12,9 +17,22 @@ export type MarketplaceDeliveryMethod = "pickup" | "shipping";
 export type MarketplacePaymentMethod = "card" | "cash";
 export type MarketplaceOrderStatus = "placed" | "paid";
 export type ConversationType = "marketplace" | "direct";
+export type StoryMediaType = "image" | "video";
+export type PostMediaType = "image" | "video";
+export type ChatMessageMediaType = "image" | "video";
+export type StudioPlaybackRate = 0.5 | 1 | 1.5 | 2;
+export type UserRole = "user" | "admin";
+export type ReportStatus = "open" | "reviewed" | "resolved";
+export type ReportedEntityType = "post" | "reel" | "story" | "user";
 export type PushNotificationsMode = "remote" | "local" | "unavailable";
 export type PushPermissionStatus = "granted" | "denied" | "undetermined";
 export type NotificationType =
+  | "post_like"
+  | "post_comment"
+  | "reel_like"
+  | "reel_comment"
+  | "story_view"
+  | "mention"
   | "like"
   | "comment"
   | "follow"
@@ -23,6 +41,7 @@ export type NotificationType =
   | "save"
   | "message"
   | "order"
+  | "call"
   | "system";
 
 export interface User {
@@ -33,12 +52,18 @@ export interface User {
   profileImage: string;
   bio: string;
   headline: string;
+  website?: string;
   language: LanguageOption;
+  /** ISO 3166 country code the user picked in Settings, e.g. "MY". */
+  region?: string;
   planType: PlanType;
   followers: string[];
   following: string[];
   reelIds: string[];
   productIds: string[];
+  role?: UserRole;
+  isBanned?: boolean;
+  bannedAt?: string;
 }
 
 export interface UserPresence {
@@ -59,6 +84,7 @@ export interface Reel {
   repostCount: number;
   viewCount: number;
   reachCount: number;
+  boostedUntil?: string;
 }
 
 export interface ReelComment {
@@ -71,13 +97,50 @@ export interface ReelComment {
   createdAt: string;
 }
 
+export interface PostMediaItem {
+  id: string;
+  type: PostMediaType;
+  url: string;
+  thumbnailUrl?: string;
+  mimeType?: string;
+  durationSeconds?: number;
+}
+
+export interface Post {
+  id: string;
+  userId: string;
+  caption: string;
+  hashtags: string[];
+  location?: string;
+  media: PostMediaItem[];
+  likedBy: string[];
+  commentCount: number;
+  createdAt: string;
+}
+
+export interface PostComment {
+  id: string;
+  postId: string;
+  userId: string;
+  userName: string;
+  userAvatar: string;
+  text: string;
+  createdAt: string;
+}
+
 export interface Story {
   id: string;
   userId: string;
   imageUrl: string;
+  mediaType?: StoryMediaType;
+  videoUrl?: string;
+  videoDurationSeconds?: number;
   caption?: string;
   createdAt: string;
   expiresAt: string;
+  viewerIds: string[];
+  highlightedAt?: string;
+  highlightLabel?: string;
 }
 
 export interface Product {
@@ -92,6 +155,10 @@ export interface Product {
   condition: ProductCondition;
   location: string;
   listingStatus: ProductListingStatus;
+  /** ISO 4217 currency the seller listed the price in. Older listings have none and are treated as USD. */
+  currency?: string;
+  /** ISO 3166 country code of the seller when the listing was created. */
+  region?: string;
   createdAt: string;
 }
 
@@ -147,6 +214,10 @@ export interface DirectChatMessage {
   senderName: string;
   senderAvatar: string;
   text: string;
+  mediaType?: ChatMessageMediaType;
+  mediaUrl?: string;
+  thumbnailUrl?: string;
+  durationSeconds?: number;
   createdAt: string;
   deliveredToUserIds: string[];
   seenByUserIds: string[];
@@ -218,6 +289,9 @@ export interface PushNotificationsStatus {
 export interface AuthSession {
   token: string;
   userId: string;
+  provider?: "firebase" | "supabase" | "api";
+  refreshToken?: string;
+  expiresAt?: number;
 }
 
 export interface RegisterPayload {
@@ -227,8 +301,35 @@ export interface RegisterPayload {
   password: string;
 }
 
+export interface MediaEditFilters {
+  brightness?: number;
+  contrast?: number;
+  saturation?: number;
+  grayscale?: number;
+}
+
+export interface MediaOverlayPosition {
+  x: number;
+  y: number;
+}
+
+export interface MediaStickerPlacement extends MediaOverlayPosition {
+  value: string;
+}
+
+export interface MediaEditConfig {
+  overlayText?: string;
+  overlayTextPosition?: MediaOverlayPosition;
+  stickers?: MediaStickerPlacement[];
+  filters?: MediaEditFilters;
+  trimStartRatio?: number;
+  trimEndRatio?: number;
+  playbackRate?: StudioPlaybackRate;
+}
+
 export interface CreateReelPayload {
   caption: string;
+  hashtags?: string[];
   videoUrl: string;
   thumbnailUrl: string;
   videoMimeType?: string;
@@ -236,6 +337,7 @@ export interface CreateReelPayload {
   videoDurationSeconds?: number;
   thumbnailMimeType?: string;
   thumbnailFileName?: string;
+  editConfig?: MediaEditConfig;
 }
 
 export interface CreateReelBoostPayload {
@@ -296,12 +398,34 @@ export interface AppNotification {
   readAt?: string;
 }
 
+export interface ContentReport {
+  id: string;
+  reporterId: string;
+  entityType: ReportedEntityType;
+  entityId: string;
+  ownerId?: string;
+  reason: string;
+  details?: string;
+  createdAt: string;
+  status: ReportStatus;
+}
+
 export interface CreateMarketplaceOrderPayload {
   productId: string;
   deliveryMethod: MarketplaceDeliveryMethod;
   paymentMethod: MarketplacePaymentMethod;
   shippingAddress?: string;
   buyerNote?: string;
+}
+
+export interface CreateDirectMessagePayload {
+  text?: string;
+  mediaUri?: string;
+  mediaType?: ChatMessageMediaType;
+  mediaMimeType?: string;
+  mediaFileName?: string;
+  mediaDurationSeconds?: number;
+  mediaThumbnailUri?: string;
 }
 
 export interface CreateProductPayload {
@@ -312,6 +436,9 @@ export interface CreateProductPayload {
   category: string;
   condition: ProductCondition;
   location: string;
+  /** Filled in from the seller's region when omitted. */
+  currency?: string;
+  region?: string;
 }
 
 export interface CreateCommunityPayload {
@@ -331,7 +458,31 @@ export interface CreateCommunityPostPayload {
 
 export interface CreateStoryPayload {
   imageUrl: string;
+  videoUrl?: string;
+  mediaType?: StoryMediaType;
+  videoMimeType?: string;
+  videoFileName?: string;
+  videoDurationSeconds?: number;
   caption?: string;
+  saveToHighlights?: boolean;
+  highlightLabel?: string;
+  editConfig?: MediaEditConfig;
+}
+
+export interface CreatePostMediaPayload {
+  uri: string;
+  type: PostMediaType;
+  mimeType?: string;
+  fileName?: string;
+  durationSeconds?: number;
+  editConfig?: MediaEditConfig;
+}
+
+export interface CreatePostPayload {
+  caption: string;
+  hashtags: string[];
+  location?: string;
+  mediaItems: CreatePostMediaPayload[];
 }
 
 export interface UpdateProfilePayload {
@@ -339,6 +490,7 @@ export interface UpdateProfilePayload {
   username: string;
   bio: string;
   headline: string;
+  website: string;
   profileImage: string;
 }
 
@@ -471,10 +623,19 @@ export interface AITrendFeedItem {
   captionSeed: string;
   thumbnailUrl: string;
   demoMode: boolean;
+  /** "local" when the trend comes from creators in the requested region. Older servers omit it. */
+  scope?: "local" | "global";
+  region?: string;
+  reelCount?: number;
+  postCount?: number;
+  creatorCount?: number;
+  windowDays?: number;
 }
 
 export interface AITrendHijackRequest {
   trendId: string;
+  /** Viewer's country so the remix can be adapted to the local audience. */
+  region?: string;
   userGoal?: string;
   audience?: string;
   offer?: string;
@@ -600,11 +761,15 @@ export interface AIFailureAuditResult {
   captions: AIFailureAuditSection;
   transcript: {
     text: string;
-    source: "auto" | "demo";
+    source: "auto" | "caption";
   };
   retentionGraph: AIFailureAuditRetentionPoint[];
   quickWins: string[];
   nextMove: string;
   createdAt: string;
   demoMode: boolean;
+}
+
+export function isReelBoostActive(reel: Pick<Reel, "boostedUntil">, now = Date.now()) {
+  return Boolean(reel.boostedUntil && new Date(reel.boostedUntil).getTime() > now);
 }

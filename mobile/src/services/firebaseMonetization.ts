@@ -7,23 +7,17 @@ import {
   onSnapshot,
   query,
   where,
-  writeBatch,
 } from "firebase/firestore";
 import { getFirebaseClientFirestore, isFirebaseClientConfigured } from "./firebaseClient";
 import {
   AppSubscription,
   AppSubscriptionStatus,
   PlanType,
-  Reel,
   ReelBoostCampaign,
-  ReelBoostPlan,
-  User,
 } from "../types/models";
 
 const SUBSCRIPTIONS_COLLECTION = "subscriptions";
 const REEL_BOOSTS_COLLECTION = "reelBoosts";
-const REELS_COLLECTION = "reels";
-const USERS_COLLECTION = "users";
 
 export function isFirebaseMonetizationConfigured() {
   return isFirebaseClientConfigured();
@@ -78,107 +72,6 @@ export function subscribeToFirebaseMonetization(
   };
 }
 
-export async function activateFirebaseSubscription(currentUser: User, planType: PlanType) {
-  if (planType === "free") {
-    throw new Error("Select a premium plan before activating a subscription.");
-  }
-
-  const db = getRequiredFirestore();
-  const now = new Date();
-  const startedAt = now.toISOString();
-  const endsAt = new Date(now.getTime() + resolvePlanDurationDays(planType) * 24 * 60 * 60 * 1000).toISOString();
-  const subscriptionRef = doc(db, SUBSCRIPTIONS_COLLECTION, currentUser.id);
-  const userRef = doc(db, USERS_COLLECTION, currentUser.id);
-  const subscription: AppSubscription = {
-    id: subscriptionRef.id,
-    userId: currentUser.id,
-    planType,
-    status: "active",
-    startedAt,
-    endsAt,
-    autoRenew: true,
-  };
-
-  const batch = writeBatch(db);
-  batch.set(subscriptionRef, subscription, { merge: true });
-  batch.set(
-    userRef,
-    {
-      planType,
-      updatedAt: startedAt,
-    },
-    { merge: true }
-  );
-  await batch.commit();
-
-  return {
-    subscription,
-    user: {
-      ...currentUser,
-      planType,
-    },
-  };
-}
-
-export async function createFirebaseReelBoost(currentUser: User, reel: Reel, plan: ReelBoostPlan) {
-  if (reel.userId !== currentUser.id) {
-    throw new Error("You can only boost reels from your own profile.");
-  }
-
-  const db = getRequiredFirestore();
-  const existingBoostSnapshot = await getDocs(
-    query(collection(db, REEL_BOOSTS_COLLECTION), where("reelId", "==", reel.id), limit(40))
-  );
-  const hasActiveBoost = existingBoostSnapshot.docs
-    .map((item) => normalizeBoostDoc(item.id, item.data()))
-    .some((item) => item.status === "active");
-
-  if (hasActiveBoost) {
-    throw new Error("This reel already has an active boost running.");
-  }
-
-  const boostRef = doc(collection(db, REEL_BOOSTS_COLLECTION));
-  const now = new Date();
-  const endsAt = new Date(now.getTime() + plan.durationDays * 24 * 60 * 60 * 1000);
-  const boost: ReelBoostCampaign = {
-    id: boostRef.id,
-    reelId: reel.id,
-    userId: currentUser.id,
-    planId: plan.id,
-    planTitle: plan.title,
-    amountUsd: plan.budgetUsd,
-    estimatedViews: plan.estimatedViews,
-    estimatedReach: plan.estimatedReach,
-    status: "active",
-    startedAt: now.toISOString(),
-    endsAt: endsAt.toISOString(),
-    targetAudience: currentUser.headline || "Short-form viewers who engage with creator-led content.",
-    note: "Your ad campaign is live and pushing this reel to more high-fit viewers now.",
-  };
-  const nextReel: Reel = {
-    ...reel,
-    viewCount: reel.viewCount + plan.estimatedViews,
-    reachCount: reel.reachCount + plan.estimatedReach,
-  };
-  const batch = writeBatch(db);
-
-  batch.set(boostRef, boost);
-  batch.set(
-    doc(db, REELS_COLLECTION, reel.id),
-    {
-      viewCount: nextReel.viewCount,
-      reachCount: nextReel.reachCount,
-    },
-    { merge: true }
-  );
-  await batch.commit();
-
-  return {
-    boost,
-    reel: nextReel,
-  };
-}
-
 export function getFirebaseMonetizationErrorMessage(error: unknown) {
   if (error instanceof Error) {
     return error.message;
@@ -228,22 +121,6 @@ function normalizeBoostDoc(id: string, data: Record<string, unknown>): ReelBoost
 
 function sortBoosts(boosts: ReelBoostCampaign[]) {
   return [...boosts].sort((left, right) => right.startedAt.localeCompare(left.startedAt));
-}
-
-function resolvePlanDurationDays(planType: PlanType) {
-  if (planType === "weekly") {
-    return 7;
-  }
-
-  if (planType === "monthly") {
-    return 30;
-  }
-
-  if (planType === "yearly") {
-    return 365;
-  }
-
-  return 0;
 }
 
 function readString(value: unknown, fallback: string) {

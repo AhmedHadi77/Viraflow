@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { env } from "../config/env";
+import { getExchangeRates } from "../services/exchangeRateService";
 import { isFirebaseAdminConfigured } from "../services/firebaseService";
 
 export function health(_req: Request, res: Response) {
@@ -20,6 +21,16 @@ export function health(_req: Request, res: Response) {
   });
 }
 
+export async function exchangeRates(_req: Request, res: Response) {
+  try {
+    const table = await getExchangeRates();
+    res.set("Cache-Control", "public, max-age=3600");
+    res.json(table);
+  } catch {
+    res.status(503).json({ message: "Exchange rates are unavailable right now." });
+  }
+}
+
 export function getLanguages(_req: Request, res: Response) {
   res.json({
     languages: [
@@ -27,6 +38,16 @@ export function getLanguages(_req: Request, res: Response) {
       { code: "ar", label: "Arabic" },
       { code: "fr", label: "French" },
       { code: "es", label: "Spanish" },
+      { code: "pt", label: "Portuguese" },
+      { code: "de", label: "German" },
+      { code: "tr", label: "Turkish" },
+      { code: "ru", label: "Russian" },
+      { code: "hi", label: "Hindi" },
+      { code: "ur", label: "Urdu" },
+      { code: "ms", label: "Malay" },
+      { code: "id", label: "Indonesian" },
+      { code: "zh", label: "Chinese (Simplified)" },
+      { code: "ja", label: "Japanese" },
     ],
   });
 }

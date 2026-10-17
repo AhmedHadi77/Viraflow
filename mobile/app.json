@@ -1,14 +1,14 @@
 {
   "expo": {
-    "name": "Pulseora",
+    "name": "Sohba",
     "slug": "viraflow",
-    "version": "1.0.3",
+    "scheme": "pulseora",
+    "version": "1.0.6",
     "orientation": "portrait",
-    "newArchEnabled": true,
     "userInterfaceStyle": "light",
-    "icon": "./mobile/assets/pulseora-icon.png",
+    "icon": "./assets/pulseora-icon.png",
     "splash": {
-      "image": "./mobile/assets/pulseora-splash-icon.png",
+      "image": "./assets/pulseora-splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#08141f"
     },
@@ -19,16 +19,65 @@
       "supportsTablet": true
     },
     "android": {
-      "versionCode": 4,
+      "versionCode": 7,
       "package": "com.viraflow.app",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "foregroundImage": "./mobile/assets/pulseora-adaptive-foreground.png",
+        "foregroundImage": "./assets/pulseora-adaptive-foreground.png",
         "backgroundColor": "#08141f"
-      }
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.CHANGE_NETWORK_STATE",
+        "android.permission.WAKE_LOCK",
+        "android.permission.BLUETOOTH_CONNECT"
+      ]
     },
     "web": {
       "bundler": "metro"
     },
-    "plugins": []
+    "plugins": [
+      "@react-native-google-signin/google-signin",
+      "expo-asset",
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Sohba to choose photos and videos for posts, reels, stories, and profile pictures.",
+          "cameraPermission": "Allow Sohba to open the camera when you choose to capture content."
+        }
+      ],
+      "expo-video",
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "pulseora-social",
+          "color": "#36E0A1"
+        }
+      ]
+    ],
+    "extra": {
+      "publicEnv": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://viraflow-srrs.onrender.com/api",
+        "EXPO_PUBLIC_EXPO_PROJECT_ID": "5b092319-feb6-4192-ad07-212af0d60885",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyAljVqvu5c2cq9m9uTBuvQZ1oYFFjkI5B8",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "viraflow-ad4b2.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "viraflow-ad4b2.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "560785384791",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:560785384791:web:19dedd53ee0b575cae4a12",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "viraflow-ad4b2",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://zpjminxawdmktzibskrx.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_VDC5HZbLsOTKmHQYewv_pw_r6U10KVX",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "560785384791-o7a534ss8l5q3kq619ikv3sn95havitm.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "560785384791-sta25adstm28sa3ikg1dsbepvde0fu74.apps.googleusercontent.com"
+      },
+      "buildFlags": {
+        "androidGoogleServicesConfigured": true
+      }
+    }
   }
 }

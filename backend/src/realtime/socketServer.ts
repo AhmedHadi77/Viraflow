@@ -13,15 +13,25 @@ import {
   markDirectThreadRead,
   markMarketplaceThreadDelivered,
   markMarketplaceThreadRead,
+  setNotificationCreatedListener,
 } from "../data/mockDb";
 import { getFirestore, verifyFirebaseUserToken } from "../services/firebaseService";
-import { CommunityChatMessage, DirectChatMessage, DirectChatThread, MarketplaceChatMessage, MarketplaceChatThread } from "../types/models";
+import { verifySupabaseUserToken } from "../services/supabaseService";
+import {
+  CommunityChatMessage,
+  DirectChatMessage,
+  DirectChatThread,
+  MarketplaceChatMessage,
+  MarketplaceChatThread,
+  Notification,
+} from "../types/models";
 import {
   buildCommunityChatMessagePayload,
   buildDirectMessagePayload,
   buildDirectThreadPayload,
   buildMarketplaceMessagePayload,
   buildMarketplaceThreadPayload,
+  buildNotificationPayload,
 } from "../controllers/helpers";
 
 let io: SocketIOServer | null = null;
@@ -106,6 +116,7 @@ export function attachSocketServer(server: HttpServer) {
       methods: ["GET", "POST"],
     },
   });
+  setNotificationCreatedListener(emitNotificationRealtime);
 
   io.use((socket, next) => {
     const rawToken =
@@ -117,6 +128,10 @@ export function attachSocketServer(server: HttpServer) {
 
     const normalizedToken = rawToken?.startsWith("Bearer ") ? rawToken.replace("Bearer ", "") : rawToken;
     void verifyFirebaseUserToken(normalizedToken)
+      .then(async (firebaseUser) => {
+        const supabaseUser = firebaseUser ? undefined : await verifySupabaseUserToken(normalizedToken);
+        return firebaseUser ?? supabaseUser;
+      })
       .then((user) => {
         if (!user) {
           next(new Error("Unauthorized"));
@@ -274,6 +289,30 @@ export function emitCommunityMessageRealtime(communityId: string, message: Commu
   emitToUsers([community.ownerId, ...community.memberIds], "chat:community-message", {
     communityId,
     message: buildCommunityChatMessagePayload(message),
+  });
+}
+
+export function emitNotificationRealtime(notification: Notification) {
+  emitToUsers([notification.userId], "notification:new", {
+    notification: buildNotificationPayload(notification),
+  });
+}
+
+export function emitNotificationPayloadRealtime(userId: string, notification: unknown) {
+  emitToUsers([userId], "notification:new", {
+    notification,
+  });
+}
+
+export function emitNotificationReadRealtime(notification: Notification) {
+  emitToUsers([notification.userId], "notification:read", {
+    notification: buildNotificationPayload(notification),
+  });
+}
+
+export function emitNotificationsReadAllRealtime(userId: string, notifications: Notification[]) {
+  emitToUsers([userId], "notifications:read-all", {
+    notifications: notifications.map(buildNotificationPayload),
   });
 }
 

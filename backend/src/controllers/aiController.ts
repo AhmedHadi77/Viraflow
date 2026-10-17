@@ -16,6 +16,31 @@ import {
   retrieveVideoTool,
 } from "../services/aiService";
 import { blockedAiContentMessage, rejectIfSexualContent, rejectIfSexualMedia } from "./contentSafety";
+import { AuthenticatedRequest } from "../middleware/auth";
+import { getSubscriptionSnapshotForUser } from "../services/billingService";
+import { env } from "../config/env";
+
+async function rejectIfNotPremium(req: Request, res: Response) {
+  // Without Stripe there is no way to buy a plan, so premium tools are open to every signed-in user.
+  if (!env.stripeSecretKey) {
+    return false;
+  }
+
+  const userId = (req as AuthenticatedRequest).user?.id;
+  const subscription = userId ? await getSubscriptionSnapshotForUser(userId).catch(() => null) : null;
+  const isActive =
+    subscription?.status === "active" &&
+    Boolean(subscription.stripeCustomerId) &&
+    (subscription.planType === "monthly" || subscription.planType === "yearly") &&
+    (!subscription.endsAt || new Date(subscription.endsAt).getTime() > Date.now());
+
+  if (!isActive) {
+    res.status(403).json({ message: "This AI tool is included with the monthly and yearly premium plans." });
+    return true;
+  }
+
+  return false;
+}
 
 const optionalStringField = z.preprocess((value) => {
   if (typeof value !== "string") {
@@ -82,6 +107,7 @@ const viralEngineSchema = z.object({
 
 const trendHijackSchema = z.object({
   trendId: z.string().min(3),
+  region: z.string().regex(/^[A-Za-z]{2}$/).optional(),
   userGoal: z.string().optional(),
   audience: z.string().optional(),
   offer: z.string().optional(),
@@ -196,7 +222,7 @@ export async function aiVideoContent(req: Request, res: Response) {
   const content = await getVideoVariantContent(req.params.id, variant);
 
   if (!content) {
-    res.status(404).json({ message: "Video content is not available in demo mode." });
+    res.status(404).json({ message: "Video content is not available." });
     return;
   }
 
@@ -223,13 +249,18 @@ export async function aiViralEngine(req: Request, res: Response) {
   res.status(201).json({ result });
 }
 
-export function aiTrendFeed(_req: Request, res: Response) {
+export async function aiTrendFeed(req: Request, res: Response) {
+  const region = typeof req.query.region === "string" ? req.query.region : undefined;
   res.json({
-    trends: listTrendFeed(),
+    trends: await listTrendFeed(region),
   });
 }
 
 export async function aiTrendHijack(req: Request, res: Response) {
+  if (await rejectIfNotPremium(req, res)) {
+    return;
+  }
+
   const parsed = trendHijackSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json(parsed.error.flatten());
@@ -280,6 +311,10 @@ export async function aiAvatarCreator(req: Request, res: Response) {
 }
 
 export async function aiGrowthCoach(req: Request, res: Response) {
+  if (await rejectIfNotPremium(req, res)) {
+    return;
+  }
+
   const parsed = growthCoachSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json(parsed.error.flatten());

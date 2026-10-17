@@ -127,10 +127,18 @@ export interface AITrendFeedItem {
   captionSeed: string;
   thumbnailUrl: string;
   demoMode: boolean;
+  /** "local" when the trend comes from creators in the requested region, otherwise "global". */
+  scope: "local" | "global";
+  region?: string;
+  reelCount: number;
+  postCount: number;
+  creatorCount: number;
+  windowDays: number;
 }
 
 export interface AITrendHijackRequest {
   trendId: string;
+  region?: string;
   userGoal?: string;
   audience?: string;
   offer?: string;
@@ -256,7 +264,7 @@ export interface AIFailureAuditResult {
   captions: AIFailureAuditSection;
   transcript: {
     text: string;
-    source: "auto" | "demo";
+    source: "auto" | "caption";
   };
   retentionGraph: AIFailureAuditRetentionPoint[];
   quickWins: string[];

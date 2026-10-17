@@ -5,6 +5,7 @@ import {
   addCommunityPost,
   canAccessCommunity,
   createCommunity,
+  deleteCommunityPost,
   getCommunityById,
   listCommunities,
   listCommunityChatMessages,
@@ -135,6 +136,22 @@ export async function postCommunityPost(req: AuthenticatedRequest, res: Response
   res.status(201).json({
     post: buildCommunityPostPayload(post),
   });
+}
+
+export function removeCommunityPost(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) {
+    res.status(401).json({ message: "Unauthorized." });
+    return;
+  }
+
+  const deleted = deleteCommunityPost(req.params.id, req.params.postId, userId);
+  if (!deleted) {
+    res.status(404).json({ message: "Community post not found or you cannot delete it." });
+    return;
+  }
+
+  res.json({ ok: true });
 }
 
 export function postCommunityChatMessage(req: AuthenticatedRequest, res: Response) {

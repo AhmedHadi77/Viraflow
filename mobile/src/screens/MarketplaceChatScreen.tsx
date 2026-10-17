@@ -1,14 +1,19 @@
-import { useEffect, useState } from "react";
-import { Alert, Image, StyleSheet, Text, View } from "react-native";
-import { InputField } from "../components/InputField";
-import { PrimaryButton } from "../components/PrimaryButton";
+import { Ionicons } from "@expo/vector-icons";
+import { listingStatusLabel } from "../utils/labels";
+import { rtlFlipStyle } from "../utils/layoutDirection";
+import { useProductPriceFormatter } from "../utils/priceFormatting";
+import { useEffect, useRef, useState } from "react";
+import { Alert, Image, Pressable, ScrollView, Text, View } from "react-native";
+import { ChatComposer } from "../components/ChatComposer";
 import { Screen } from "../components/Screen";
-import { SectionTitle } from "../components/SectionTitle";
+import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
-import { palette, radii, spacing } from "../theme";
+import { palette, radii, spacing, createThemedStyles } from "../theme";
+import { formatLocaleDateTime, formatRelativeTime } from "../utils/timeFormatting";
 
 export function MarketplaceChatScreen({ navigation, route }: { navigation: any; route: { params: { threadId: string } } }) {
   const {
+    language,
     currentUser,
     marketplaceThreads,
     products,
@@ -21,7 +26,10 @@ export function MarketplaceChatScreen({ navigation, route }: { navigation: any; 
     sendMarketplaceMessage,
     setMarketplaceTyping,
   } = useAppState();
+  const copy = getCopy(language);
+  const formatProductPrice = useProductPriceFormatter();
   const [draft, setDraft] = useState("");
+  const messagesScrollRef = useRef<ScrollView>(null);
   const thread = marketplaceThreads.find((item) => item.id === route.params.threadId);
 
   useEffect(() => {
@@ -31,7 +39,7 @@ export function MarketplaceChatScreen({ navigation, route }: { navigation: any; 
   if (!thread || !currentUser) {
     return (
       <Screen contentContainerStyle={styles.emptyWrap}>
-        <Text style={styles.emptyText}>Conversation not found.</Text>
+        <Text style={styles.emptyText}>{copy.conversationNotFound}</Text>
       </Screen>
     );
   }
@@ -79,7 +87,7 @@ export function MarketplaceChatScreen({ navigation, route }: { navigation: any; 
   async function handleSend() {
     const result = await sendMarketplaceMessage(activeThread.id, draft);
     if (!result.ok) {
-      Alert.alert("Message unavailable", result.message ?? "This message could not be sent.");
+      Alert.alert(copy.messageUnavailableTitle, result.message ?? copy.messageUnavailableBody);
       return;
     }
 
@@ -88,66 +96,109 @@ export function MarketplaceChatScreen({ navigation, route }: { navigation: any; 
   }
 
   return (
-    <Screen scrollable>
-      <View style={styles.headerCard}>
-        <SectionTitle
-          title={counterpart ? counterpart.name : "Marketplace chat"}
-          subtitle={product ? product.title : "Listing conversation"}
-        />
-        <View style={styles.productSnippet}>
-          <Image source={{ uri: product?.imageUrl || counterpart?.profileImage }} style={styles.productImage} />
-          <View style={styles.productCopy}>
-            <Text style={styles.productTitle}>{product?.title || "Marketplace listing"}</Text>
-            <Text style={styles.productMeta}>
-              ${product?.price ?? 0} | {product?.location ?? "Seller location"}
-            </Text>
-            <Text style={styles.productStatus}>{product?.listingStatus || "available"}</Text>
-          </View>
+    <Screen contentContainerStyle={styles.chatScreen}>
+      <Pressable
+        disabled={!product}
+        onPress={() => product && navigation.navigate("ProductDetails", { productId: product.id })}
+        style={styles.chatHeader}
+      >
+        <Image source={{ uri: product?.imageUrl || counterpart?.profileImage }} style={styles.chatHeaderImage} />
+        <View style={styles.chatHeaderCopy}>
+          <Text numberOfLines={1} style={styles.chatHeaderTitle}>
+            {product?.title || copy.listing}
+          </Text>
+          <Text numberOfLines={1} style={styles.chatHeaderMeta}>
+            {product ? `${formatProductPrice(product)} · ${listingStatusLabel(product.listingStatus, copy)}` : ""}
+            {counterpart ? `${product ? "  ·  " : ""}${counterpart.name}` : ""}
+          </Text>
+          <Text numberOfLines={1} style={styles.chatHeaderStatus}>
+            {typingUsers.length > 0
+              ? `${counterpart?.name ?? copy.buyerLabel}...`
+              : formatPresenceLabel(counterpartPresence, language, copy.onlineNow, copy.offline)}
+          </Text>
         </View>
-        {product ? (
-          <PrimaryButton label="Open listing" onPress={() => navigation.navigate("ProductDetails", { productId: product.id })} variant="ghost" />
-        ) : null}
-        <Text style={styles.statusText}>
-          {typingUsers.length > 0 ? `${counterpart?.name ?? "Buyer"} is typing...` : formatPresenceLabel(counterpartPresence)}
-        </Text>
-      </View>
+        {product ? <Ionicons color={palette.muted} name="chevron-forward" size={18} style={rtlFlipStyle} /> : null}
+      </Pressable>
 
-      <View style={styles.chatList}>
+      <ScrollView
+        contentContainerStyle={styles.chatList}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        onContentSizeChange={() => messagesScrollRef.current?.scrollToEnd({ animated: false })}
+        ref={messagesScrollRef}
+        style={styles.chatScroll}
+      >
         {messages.map((message) => {
           const ownMessage = message.senderId === currentUser.id;
-          const deliveryStatus = getOneToOneDeliveryStatus(message, counterpartId);
+          const deliveryStatus = getOneToOneDeliveryStatus(message, counterpartId, copy);
           return (
             <View key={message.id} style={[styles.messageRow, ownMessage ? styles.messageRowOwn : null]}>
               {!ownMessage ? <Image source={{ uri: message.senderAvatar }} style={styles.messageAvatar} /> : null}
               <View style={[styles.messageBubble, ownMessage ? styles.messageBubbleOwn : null]}>
-                {!ownMessage ? <Text style={styles.messageName}>{message.senderName}</Text> : null}
                 <Text style={[styles.messageText, ownMessage ? styles.messageTextOwn : null]}>{message.text}</Text>
                 <Text style={[styles.messageTime, ownMessage ? styles.messageTimeOwn : null]}>
-                  {new Date(message.createdAt).toLocaleString()}
+                  {formatLocaleDateTime(message.createdAt, language)}
+                  {ownMessage && message.id === lastOwnMessage?.id && deliveryStatus ? `  ·  ${deliveryStatus}` : ""}
                 </Text>
-                {ownMessage && message.id === lastOwnMessage?.id ? (
-                  <Text style={styles.readReceipt}>{deliveryStatus}</Text>
-                ) : null}
               </View>
             </View>
           );
         })}
-      </View>
+      </ScrollView>
 
-      <View style={styles.composeCard}>
-        <InputField label="Message" onChangeText={setDraft} placeholder="Ask if it is still available, delivery details, price..." value={draft} multiline />
-        <PrimaryButton
-          label="Send message"
-          onPress={() => {
-            void handleSend();
-          }}
-        />
-      </View>
+      <ChatComposer
+        canSend={draft.trim().length > 0}
+        onChangeText={setDraft}
+        onSend={() => {
+          void handleSend();
+        }}
+        placeholder={copy.noteToSellerPlaceholder}
+        value={draft}
+      />
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
+  chatScreen: {
+    paddingBottom: 0,
+    paddingHorizontal: 0,
+  },
+  chatHeader: {
+    alignItems: "center",
+    borderBottomColor: palette.border,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+  },
+  chatHeaderImage: {
+    backgroundColor: palette.surfaceRaised,
+    borderRadius: 10,
+    height: 48,
+    width: 48,
+  },
+  chatHeaderCopy: {
+    flex: 1,
+    gap: 1,
+  },
+  chatHeaderTitle: {
+    color: palette.text,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  chatHeaderMeta: {
+    color: palette.textSoft,
+    fontSize: 12,
+  },
+  chatHeaderStatus: {
+    color: palette.muted,
+    fontSize: 11,
+  },
+  chatScroll: {
+    flex: 1,
+  },
   emptyWrap: {
     alignItems: "center",
     justifyContent: "center",
@@ -200,7 +251,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   chatList: {
-    gap: spacing.md,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
   messageRow: {
     alignItems: "flex-end",
@@ -216,13 +269,12 @@ const styles = StyleSheet.create({
     borderRadius: 18,
   },
   messageBubble: {
-    backgroundColor: palette.surface,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    gap: 6,
-    maxWidth: "82%",
-    padding: spacing.md,
+    backgroundColor: palette.surfaceRaised,
+    borderRadius: 18,
+    gap: 4,
+    maxWidth: "78%",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   messageBubbleOwn: {
     backgroundColor: palette.primary,
@@ -265,48 +317,33 @@ const styles = StyleSheet.create({
 
 function getOneToOneDeliveryStatus(
   message: { deliveredToUserIds: string[]; seenByUserIds: string[] },
-  counterpartId: string
+  counterpartId: string,
+  copy: ReturnType<typeof getCopy>
 ) {
   if (message.seenByUserIds.includes(counterpartId)) {
-    return "Seen";
+    return copy.seen;
   }
 
   if (message.deliveredToUserIds.includes(counterpartId)) {
-    return "Delivered";
+    return copy.delivered;
   }
 
-  return "Sent";
+  return copy.sent;
 }
 
-function formatPresenceLabel(presence?: { isOnline: boolean; lastSeenAt?: string }) {
+function formatPresenceLabel(
+  presence: { isOnline: boolean; lastSeenAt?: string } | undefined,
+  language: Parameters<typeof getCopy>[0],
+  onlineLabel: string,
+  offlineLabel: string
+) {
   if (presence?.isOnline) {
-    return "Online now";
+    return onlineLabel;
   }
 
   if (!presence?.lastSeenAt) {
-    return "Offline";
+    return offlineLabel;
   }
 
-  return `Last seen ${formatRelativeTime(presence.lastSeenAt)}`;
-}
-
-function formatRelativeTime(timestamp: string) {
-  const diffMs = Date.now() - new Date(timestamp).getTime();
-  const diffMinutes = Math.max(Math.floor(diffMs / 60000), 0);
-
-  if (diffMinutes < 1) {
-    return "just now";
-  }
-
-  if (diffMinutes < 60) {
-    return `${diffMinutes}m ago`;
-  }
-
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) {
-    return `${diffHours}h ago`;
-  }
-
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays}d ago`;
+  return formatRelativeTime(presence.lastSeenAt, language, { style: "short", fallbackToDateAfterDays: 14 });
 }

@@ -1,8 +1,13 @@
-export type LanguageOption = "en" | "ar" | "fr" | "es";
+export const LANGUAGE_CODES = ["en", "ar", "fr", "es", "pt", "de", "tr", "ru", "hi", "ur", "ms", "id", "zh", "ja"] as const;
+export type LanguageOption = (typeof LANGUAGE_CODES)[number];
+
+export function isLanguageOption(value: unknown): value is LanguageOption {
+  return typeof value === "string" && (LANGUAGE_CODES as readonly string[]).includes(value);
+}
 
 export type PlanType = "free" | "weekly" | "monthly" | "yearly";
 export type ReelBoostPlanId = "starter" | "growth" | "viral";
-export type SavedEntityType = "reel" | "product";
+export type SavedEntityType = "reel" | "product" | "post";
 export type ProductCondition = "New" | "Like New" | "Good" | "Fair";
 export type ProductListingStatus = "available" | "pending" | "sold";
 export type CommunityKind = "page" | "group" | "channel";
@@ -11,7 +16,15 @@ export type MarketplaceDeliveryMethod = "pickup" | "shipping";
 export type MarketplacePaymentMethod = "card" | "cash";
 export type MarketplaceOrderStatus = "placed" | "paid";
 export type ConversationType = "marketplace" | "direct";
+export type ChatMessageMediaType = "image" | "video";
+export type UserRole = "user" | "admin";
 export type NotificationType =
+  | "post_like"
+  | "post_comment"
+  | "reel_like"
+  | "reel_comment"
+  | "story_view"
+  | "mention"
   | "like"
   | "comment"
   | "follow"
@@ -20,6 +33,7 @@ export type NotificationType =
   | "save"
   | "message"
   | "order"
+  | "call"
   | "system";
 
 export interface User {
@@ -31,8 +45,12 @@ export interface User {
   profileImage: string;
   bio: string;
   headline: string;
+  website: string;
   language: LanguageOption;
   createdAt: string;
+  role?: UserRole;
+  isBanned?: boolean;
+  bannedAt?: string;
 }
 
 export interface Reel {
@@ -41,6 +59,7 @@ export interface Reel {
   videoUrl: string;
   caption: string;
   thumbnailUrl: string;
+  tags: string[];
   likedBy: string[];
   repostCount: number;
   viewCount: number;
@@ -60,9 +79,15 @@ export interface Story {
   id: string;
   userId: string;
   imageUrl: string;
+  mediaType?: "image" | "video";
+  videoUrl?: string;
+  videoDurationSeconds?: number;
   caption?: string;
   createdAt: string;
   expiresAt: string;
+  viewerIds: string[];
+  highlightedAt?: string;
+  highlightLabel?: string;
 }
 
 export interface FollowRelation {
@@ -132,6 +157,10 @@ export interface DirectChatMessage {
   threadId: string;
   senderId: string;
   text: string;
+  mediaType?: ChatMessageMediaType;
+  mediaUrl?: string;
+  thumbnailUrl?: string;
+  durationSeconds?: number;
   createdAt: string;
   deliveredToUserIds: string[];
   seenByUserIds: string[];

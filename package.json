@@ -11,39 +11,48 @@
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/bottom-tabs": "^7.0.0",
-    "@react-navigation/material-top-tabs": "^7.4.24",
     "@react-navigation/native": "^7.0.0",
     "@react-navigation/native-stack": "^7.0.0",
     "babel-preset-expo": "~55.0.0",
-    "expo": "^55.0.0",
-    "expo-asset": "~55.0.16",
+    "expo": "~55.0.23",
+    "expo-asset": "~55.0.17",
     "expo-audio": "~55.0.14",
-    "expo-constants": "~55.0.15",
-    "expo-dev-client": "~55.0.28",
-    "expo-device": "~55.0.15",
-    "expo-font": "~55.0.6",
-    "expo-image-picker": "~55.0.19",
+    "expo-constants": "~55.0.16",
+    "expo-device": "~55.0.16",
+    "expo-font": "~55.0.7",
+    "expo-image-picker": "~55.0.20",
     "expo-linear-gradient": "~55.0.13",
-    "expo-notifications": "~55.0.20",
-    "expo-status-bar": "~55.0.5",
-    "expo-video": "~55.0.15",
+    "expo-notifications": "~55.0.22",
+    "expo-status-bar": "~55.0.6",
+    "expo-video": "~55.0.16",
     "expo-video-thumbnails": "~55.0.14",
     "firebase": "^12.12.0",
     "react": "19.2.0",
     "react-native": "0.83.6",
-    "react-native-pager-view": "8.0.0",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.23.0",
-    "react-native-tab-view": "^4.3.0",
+    "react-native-webrtc": "124.0.8",
     "socket.io-client": "^4.8.3"
   },
   "scripts": {
     "start": "expo start",
     "mobile:start": "npm --workspace mobile run start",
     "backend:dev": "npm --workspace backend run dev",
-    "backend:build": "npm --workspace backend run build"
+    "backend:build": "npm --workspace backend run build",
+    "firebase:deploy:rules": "node scripts/deploy-firestore-rules.cjs"
+  },
+  "expo": {
+    "doctor": {
+      "appConfigFieldsNotSyncedCheck": {
+        "enabled": false
+      }
+    }
+  },
+  "overrides": {
+    "postcss": "^8.5.10"
   },
   "devDependencies": {
-    "@expo/ngrok": "^4.1.0"
+    "@expo/ngrok": "^4.1.0",
+    "dotenv": "^16.4.5"
   }
 }

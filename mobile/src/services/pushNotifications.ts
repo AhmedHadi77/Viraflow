@@ -49,7 +49,7 @@ export async function registerForPushNotificationsAsync(userId: string): Promise
     return {
       mode: "local",
       permissionStatus: "undetermined",
-      message: "Notifications are unavailable in this build, but the rest of Pulseora will keep working.",
+      message: "Notifications are unavailable in this build, but the rest of Sohba will keep working.",
     };
   }
 
@@ -83,7 +83,7 @@ export async function registerForPushNotificationsAsync(userId: string): Promise
     return {
       mode: "unavailable",
       permissionStatus,
-      message: "Notification permission is turned off for Pulseora.",
+      message: "Notification permission is turned off for Sohba.",
     };
   }
 
@@ -201,12 +201,16 @@ function configureNotificationHandler() {
   }
 
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: false,
-      shouldSetBadge: false,
-    }),
+    handleNotification: async (notification: any) => {
+      // While the app is open an incoming call already shows the full-screen call screen.
+      const isCall = notification?.request?.content?.data?.type === "call";
+      return {
+        shouldShowBanner: !isCall,
+        shouldShowList: !isCall,
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+      };
+    },
   });
   notificationHandlerConfigured = true;
 }
@@ -248,7 +252,7 @@ async function ensureAndroidNotificationChannel() {
   }
 
   await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
-    name: "Pulseora social activity",
+    name: "Activity",
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 120, 250],
     lightColor: "#36E0A1",

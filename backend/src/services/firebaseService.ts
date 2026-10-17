@@ -67,6 +67,7 @@ export interface FirebaseUserProfile {
   profileImage: string;
   bio: string;
   headline: string;
+  website: string;
   language: string;
   planType: string;
   followers: string[];
@@ -147,12 +148,13 @@ export async function getFirebaseUserProfileById(userId: string): Promise<Fireba
 
   return {
     id: userId.trim(),
-    name: readString(data.name, "Pulseora Creator"),
+    name: readString(data.name, "Sohba Creator"),
     username: readString(data.username, userId.trim().slice(0, 12).toLowerCase()),
     email: readString(data.email, ""),
     profileImage: readString(data.profileImage, ""),
     bio: readString(data.bio, ""),
     headline: readString(data.headline, ""),
+    website: readString(data.website, ""),
     language: readString(data.language, "en"),
     planType: readString(data.planType, "free"),
     followers: readStringArray(data.followers),

@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
 import { z } from "zod";
-import { createProduct, getProductById, listProducts, updateProductListingStatus } from "../data/mockDb";
+import { createProduct, deleteProduct, getProductById, listProducts, updateProductListingStatus } from "../data/mockDb";
 import { AuthenticatedRequest } from "../middleware/auth";
+import { getOrCreateAuthenticatedUser } from "../services/authenticatedUserService";
 import { isSupportedImageSource, rejectIfSexualContent, rejectIfSexualMedia } from "./contentSafety";
 import { buildProductPayload } from "./helpers";
 
@@ -101,4 +102,32 @@ export function patchProductListingStatus(req: AuthenticatedRequest, res: Respon
   res.json({
     product: buildProductPayload(product),
   });
+}
+
+export function removeProduct(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) {
+    res.status(401).json({ message: "Unauthorized." });
+    return;
+  }
+
+  const existingProduct = getProductById(req.params.id);
+  if (!existingProduct) {
+    res.status(404).json({ message: "Product not found." });
+    return;
+  }
+
+  const actingUser = getOrCreateAuthenticatedUser(req.user!);
+  if (existingProduct.userId !== userId && actingUser.role !== "admin") {
+    res.status(403).json({ message: "You can only delete your own listing." });
+    return;
+  }
+
+  const deleted = deleteProduct(existingProduct.id, userId, { allowAdmin: actingUser.role === "admin" });
+  if (!deleted) {
+    res.status(404).json({ message: "Product not found." });
+    return;
+  }
+
+  res.json({ ok: true });
 }

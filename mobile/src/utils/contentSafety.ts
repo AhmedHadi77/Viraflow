@@ -16,10 +16,10 @@ const sexualContentPatterns = [
 ];
 
 export const blockedUserContentMessage =
-  "Sexual content is not allowed on Pulseora. Please remove sexual text, images, or video references before posting.";
+  "Sexual content is not allowed on Sohba. Please remove sexual text, images, or video references before posting.";
 
 export const blockedAiContentMessage =
-  "AI tools cannot create sexual videos, images, or sexual content on Pulseora.";
+  "AI tools cannot create sexual videos, images, or sexual content on Sohba.";
 
 export function containsSexualContent(values: Array<string | undefined | null>) {
   return values.some((value) => {

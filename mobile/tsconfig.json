@@ -2,14 +2,21 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
+    "moduleResolution": "bundler",
     "types": [
-      "react",
-      "react-native"
+      "react"
     ]
   },
   "include": [
     "**/*.ts",
     "**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "android",
+    "dist",
+    "dist-check",
+    ".expo"
   ]
 }
 

@@ -19,7 +19,13 @@ const createThreadSchema = z.object({
 });
 
 const createMessageSchema = z.object({
-  text: z.string().min(1).max(500),
+  text: z.string().max(500).optional(),
+  mediaType: z.enum(["image", "video"]).optional(),
+  mediaUrl: z.string().url().optional(),
+  thumbnailUrl: z.string().url().optional(),
+  durationSeconds: z.number().min(1).max(600).optional(),
+}).refine((payload) => Boolean(payload.text?.trim()) || Boolean(payload.mediaUrl?.trim()), {
+  message: "Add text or media before sending a message.",
 });
 
 export function getDirectInbox(req: AuthenticatedRequest, res: Response) {
@@ -111,7 +117,7 @@ export function postDirectMessage(req: AuthenticatedRequest, res: Response) {
     return;
   }
 
-  if (rejectIfSexualContent(res, [parsed.data.text])) {
+  if (parsed.data.text && rejectIfSexualContent(res, [parsed.data.text])) {
     return;
   }
 
@@ -127,7 +133,13 @@ export function postDirectMessage(req: AuthenticatedRequest, res: Response) {
     return;
   }
 
-  const result = addDirectMessage(userId, req.params.id, parsed.data.text);
+  const result = addDirectMessage(userId, req.params.id, {
+    text: parsed.data.text?.trim() ?? "",
+    mediaType: parsed.data.mediaType,
+    mediaUrl: parsed.data.mediaUrl?.trim() || undefined,
+    thumbnailUrl: parsed.data.thumbnailUrl?.trim() || undefined,
+    durationSeconds: parsed.data.durationSeconds,
+  });
   if (!result) {
     res.status(400).json({ message: "This message could not be sent." });
     return;

@@ -2,7 +2,8 @@ import OpenAI from "openai";
 import { toFile } from "openai/uploads";
 import { env } from "../config/env";
 import { getVoiceAsset, saveVoiceAsset } from "../data/aiAssetStore";
-import { createDemoVideoJob, getDemoVideoJob } from "../data/aiDemoStore";
+import { getFirestore } from "./firebaseService";
+import { isLanguageOption } from "../types/models";
 import {
   AIAvatarCreatorRequest,
   AIAvatarCreatorResult,
@@ -87,51 +88,12 @@ interface FailureAuditTranscriptSegment {
 
 interface FailureAuditTranscriptPayload {
   text: string;
-  source: "auto" | "demo";
+  source: "auto" | "caption";
   durationSeconds: number;
   segments: FailureAuditTranscriptSegment[];
 }
 
 const client = env.openAiApiKey ? new OpenAI({ apiKey: env.openAiApiKey }) : null;
-const trendFeed: AITrendFeedItem[] = [
-  {
-    id: "trend-gym-proof-stack",
-    title: "Proof Stack Cut",
-    trendHook: "Quick 3-shot proof reveal with impact text in the first second.",
-    niche: "Fitness",
-    musicStyle: "hard-hitting drill beat with gym stomp energy",
-    motionStyle: "fast zoom cuts, rep close-ups, sweat texture overlays",
-    momentumScore: 91,
-    captionSeed: "Show proof first, explanation second, CTA last.",
-    thumbnailUrl: "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=900&q=80",
-    demoMode: true,
-  },
-  {
-    id: "trend-fashion-flash-switch",
-    title: "Flash Switch Transition",
-    trendHook: "One-frame flash cuts between before and after looks.",
-    niche: "Fashion",
-    musicStyle: "sleek electro-pop with runway pulse",
-    motionStyle: "flash cuts, mirror reveals, silhouette swaps",
-    momentumScore: 88,
-    captionSeed: "Build around the transformation and keep the text minimal.",
-    thumbnailUrl: "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=900&q=80",
-    demoMode: true,
-  },
-  {
-    id: "trend-productivity-overlay-loop",
-    title: "Overlay Loop Breakdown",
-    trendHook: "Loop a tiny workflow while text overlays reveal the hack step-by-step.",
-    niche: "Productivity",
-    musicStyle: "clean lo-fi bounce with subtle tech percussion",
-    motionStyle: "screen recording loops, cursor snaps, clean text overlays",
-    momentumScore: 84,
-    captionSeed: "Keep the edit loop seamless so viewers rewatch automatically.",
-    thumbnailUrl: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80",
-    demoMode: true,
-  },
-];
-
 export function getAiStatus(): AIStatusPayload {
   return {
     demoMode: !client,
@@ -144,7 +106,7 @@ export function getAiStatus(): AIStatusPayload {
 
 export async function generateTextTool(input: AITextRequest): Promise<AITextResult> {
   if (!client) {
-    return buildDemoTextResult(input);
+    throw new AIUnavailableError();
   }
 
   const response = await client.responses.create({
@@ -173,7 +135,10 @@ export async function generateTextTool(input: AITextRequest): Promise<AITextResu
     ],
   });
 
-  const rawText = response.output_text?.trim() || "No output returned.";
+  const rawText = response.output_text?.trim();
+  if (!rawText) {
+    throw new AIResponseError();
+  }
   const outputs = splitOutputs(rawText);
 
   return {
@@ -189,15 +154,7 @@ export async function generateTextTool(input: AITextRequest): Promise<AITextResu
 
 export async function generateImageTool(input: AIImageRequest): Promise<AIImageResult> {
   if (!client) {
-    return {
-      id: `ai-image-${Date.now()}`,
-      prompt: buildImagePrompt(input),
-      imageDataUrl: buildDemoImagePreview(input.prompt),
-      revisedPrompt: "Demo mode image preview",
-      model: env.openAiImageModel,
-      createdAt: new Date().toISOString(),
-      demoMode: true,
-    };
+    throw new AIUnavailableError();
   }
 
   const response = await client.images.generate({
@@ -208,6 +165,9 @@ export async function generateImageTool(input: AIImageRequest): Promise<AIImageR
 
   const imageResult = response.data?.[0];
   const imageBase64 = imageResult?.b64_json ?? "";
+  if (!imageBase64) {
+    throw new AIResponseError("The image service did not return an image. Please try again.");
+  }
   return {
     id: `ai-image-${Date.now()}`,
     prompt: buildImagePrompt(input),
@@ -221,7 +181,7 @@ export async function generateImageTool(input: AIImageRequest): Promise<AIImageR
 
 export async function createVideoTool(input: AIVideoRequest): Promise<AIVideoJob> {
   if (!client) {
-    return createDemoVideoJob(input);
+    throw new AIUnavailableError();
   }
 
   const model = input.quality === "quality" ? "sora-2-pro" : env.openAiVideoModel;
@@ -250,7 +210,7 @@ export async function createVideoTool(input: AIVideoRequest): Promise<AIVideoJob
 
 export async function retrieveVideoTool(videoId: string): Promise<AIVideoJob | undefined> {
   if (!client) {
-    return getDemoVideoJob(videoId);
+    throw new AIUnavailableError();
   }
 
   const video = await client.videos.retrieve(videoId);
@@ -274,22 +234,21 @@ export async function retrieveVideoTool(videoId: string): Promise<AIVideoJob | u
   };
 }
 
-export function listTrendFeed(): AITrendFeedItem[] {
-  return trendFeed.map((trend) => ({
-    ...trend,
-    demoMode: !client,
-  }));
+export async function listTrendFeed(region?: string): Promise<AITrendFeedItem[]> {
+  return buildTrendFeedFromPlatform(region);
 }
 
 export async function generateTrendHijackTool(input: AITrendHijackRequest): Promise<AITrendHijackResult> {
-  const trend = getTrendById(input.trendId);
+  if (!client) {
+    throw new AIUnavailableError();
+  }
+
+  const trend =
+    (await buildTrendFeedFromPlatform(input.region)).find((item) => item.id === input.trendId) ??
+    (await buildTrendFeedFromPlatform()).find((item) => item.id === input.trendId);
 
   if (!trend) {
     throw new Error("Trend not found.");
-  }
-
-  if (!client) {
-    return buildDemoTrendHijackResult(trend, input);
   }
 
   const response = await client.responses.create({
@@ -318,7 +277,7 @@ export async function generateTrendHijackTool(input: AITrendHijackRequest): Prom
     ],
   });
 
-  const blueprint = parseTrendHijackBlueprint(response.output_text ?? "", trend, input);
+  const blueprint = parseTrendHijackBlueprint(response.output_text ?? "");
   let video: AIVideoJob;
 
   try {
@@ -330,15 +289,16 @@ export async function generateTrendHijackTool(input: AITrendHijackRequest): Prom
       seconds: input.seconds,
       quality: input.quality,
     });
-  } catch {
-    video = createDemoVideoJob({
-      prompt: blueprint.similarVideoPrompt,
-      style: `${trend.musicStyle}; ${trend.motionStyle}`,
-      shotType: "trend-led vertical pacing with creator-safe differentiation",
-      size: input.size,
-      seconds: input.seconds,
-      quality: input.quality,
-    });
+  } catch (error) {
+    video = buildFailedVideoJob(
+      {
+        prompt: blueprint.similarVideoPrompt,
+        size: input.size,
+        seconds: input.seconds,
+        quality: input.quality,
+      },
+      error
+    );
   }
 
   return {
@@ -353,17 +313,17 @@ export async function generateTrendHijackTool(input: AITrendHijackRequest): Prom
     optimizedCaptions: blueprint.captions,
     video,
     createdAt: new Date().toISOString(),
-    demoMode: video.demoMode,
+    demoMode: false,
   };
 }
 
 export async function generateAvatarCreatorTool(input: AIAvatarCreatorRequest): Promise<AIAvatarCreatorResult> {
   if (!client) {
-    return buildDemoAvatarCreatorResult(input);
+    throw new AIUnavailableError();
   }
 
   const styles: AIAvatarStyle[] = ["anime", "cartoon", "influencer"];
-  const variants = await Promise.all(
+  const variantResults = await Promise.all(
     styles.map(async (style) => {
       try {
         const prompt = buildAvatarStylePrompt(style, input);
@@ -379,9 +339,10 @@ export async function generateAvatarCreatorTool(input: AIAvatarCreatorRequest): 
         });
 
         const imageResult = response.data?.[0];
-        const imageDataUrl = imageResult?.b64_json
-          ? `data:image/png;base64,${imageResult.b64_json}`
-          : input.sourceImageDataUrl;
+        if (!imageResult?.b64_json) {
+          return null;
+        }
+        const imageDataUrl = `data:image/png;base64,${imageResult.b64_json}`;
 
         return {
           id: `avatar-${style}-${Date.now()}`,
@@ -392,10 +353,14 @@ export async function generateAvatarCreatorTool(input: AIAvatarCreatorRequest): 
           demoMode: false,
         } satisfies AIAvatarVariant;
       } catch {
-        return buildDemoAvatarVariant(style, input.sourceImageDataUrl);
+        return null;
       }
     })
   );
+  const variants: AIAvatarVariant[] = variantResults.filter((variant) => variant !== null) as AIAvatarVariant[];
+  if (variants.length === 0) {
+    throw new AIResponseError("The avatar styles could not be generated from this photo. Please try another photo.");
+  }
 
   let talkingAvatar: AIVideoJob;
 
@@ -425,15 +390,16 @@ export async function generateAvatarCreatorTool(input: AIAvatarCreatorRequest): 
       note: "Talking avatar job started. Poll until the avatar performance is ready.",
       downloadPath: `/api/ai/video/${video.id}/content`,
     };
-  } catch {
-    talkingAvatar = createDemoVideoJob({
-      prompt: buildTalkingAvatarPrompt(input),
-      style: "talking avatar, creator-friendly facial motion, polished lighting",
-      shotType: "tight portrait talking to camera with clean blinking and lip movement",
-      size: input.size,
-      seconds: input.seconds,
-      quality: input.quality,
-    });
+  } catch (error) {
+    talkingAvatar = buildFailedVideoJob(
+      {
+        prompt: buildTalkingAvatarPrompt(input),
+        size: input.size,
+        seconds: input.seconds,
+        quality: input.quality,
+      },
+      error
+    );
   }
 
   return {
@@ -442,17 +408,17 @@ export async function generateAvatarCreatorTool(input: AIAvatarCreatorRequest): 
     variants,
     talkingAvatar,
     monetization: {
-      payPerAvatarLabel: "$2 per avatar",
-      premiumLabel: "Included in Premium Creator and Yearly Growth",
+      payPerAvatarLabel: "",
+      premiumLabel: "Included with Sohba premium plans",
     },
     createdAt: new Date().toISOString(),
-    demoMode: talkingAvatar.demoMode || variants.some((variant) => variant.demoMode),
+    demoMode: false,
   };
 }
 
 export async function generateGrowthCoachTool(input: AIGrowthCoachRequest): Promise<AIGrowthCoachResult> {
   if (!client) {
-    return buildDemoGrowthCoachResult(input);
+    throw new AIUnavailableError();
   }
 
   const response = await client.responses.create({
@@ -481,7 +447,7 @@ export async function generateGrowthCoachTool(input: AIGrowthCoachRequest): Prom
     ],
   });
 
-  const blueprint = parseGrowthCoachBlueprint(response.output_text ?? "", input);
+  const blueprint = parseGrowthCoachBlueprint(response.output_text ?? "");
 
   return {
     id: `growth-coach-${Date.now()}`,
@@ -503,19 +469,21 @@ export async function generateFailureAuditTool(
   input: AIFailureAuditRequest,
   upload?: FailureAuditUpload
 ): Promise<AIFailureAuditResult> {
-  const fallbackTranscript = buildFailureAuditTranscript(input);
-
-  if (!client || !upload) {
-    return buildDemoFailureAuditResult(input, fallbackTranscript);
+  if (!client) {
+    throw new AIUnavailableError();
   }
 
-  const transcript = await transcribeFailureAuditVideo(upload, input).catch(() => fallbackTranscript);
+  if (!upload) {
+    throw new Error("Upload the video you want analyzed.");
+  }
+
+  const transcript = await transcribeFailureAuditVideo(upload, input).catch(() => buildFailureAuditTranscript(input));
   const analysisInput: AIFailureAuditRequest = {
     ...input,
     durationSeconds: input.durationSeconds ?? transcript.durationSeconds,
   };
 
-  try {
+  {
     const response = await client.responses.create({
       model: env.openAiTextModel,
       reasoning: { effort: "medium" },
@@ -542,7 +510,7 @@ export async function generateFailureAuditTool(
       ],
     });
 
-    const blueprint = parseFailureAuditBlueprint(response.output_text ?? "", analysisInput, transcript);
+    const blueprint = parseFailureAuditBlueprint(response.output_text ?? "");
 
     return {
       id: `failure-audit-${Date.now()}`,
@@ -558,16 +526,14 @@ export async function generateFailureAuditTool(
       quickWins: blueprint.quickWins,
       nextMove: blueprint.nextMove,
       createdAt: new Date().toISOString(),
-      demoMode: transcript.source !== "auto",
+      demoMode: false,
     };
-  } catch {
-    return buildDemoFailureAuditResult(analysisInput, transcript);
   }
 }
 
 export async function generateViralEngineTool(input: AIViralEngineRequest): Promise<AIViralEngineResult> {
   if (!client) {
-    return buildDemoViralEngineResult(input);
+    throw new AIUnavailableError();
   }
 
   const blueprintResponse = await client.responses.create({
@@ -596,7 +562,7 @@ export async function generateViralEngineTool(input: AIViralEngineRequest): Prom
     ],
   });
 
-  const blueprint = parseViralBlueprint(blueprintResponse.output_text ?? "", input);
+  const blueprint = parseViralBlueprint(blueprintResponse.output_text ?? "");
   const engineId = `viral-${Date.now()}`;
   const voice = normalizeVoiceOption(input.voice);
 
@@ -636,20 +602,16 @@ export async function generateViralEngineTool(input: AIViralEngineRequest): Prom
       seconds: input.seconds,
       quality: input.quality,
     });
-  } catch {
-    const fallbackVideo = createDemoVideoJob({
-      prompt: blueprint.videoPrompt,
-      style: input.tone,
-      shotType: "social-first gym creator pacing with fast visual proof",
-      size: input.size,
-      seconds: input.seconds,
-      quality: input.quality,
-    });
-
-    video = {
-      ...fallbackVideo,
-      note: "Video fell back to demo mode while the viral strategy package generated successfully.",
-    };
+  } catch (error) {
+    video = buildFailedVideoJob(
+      {
+        prompt: blueprint.videoPrompt,
+        size: input.size,
+        seconds: input.seconds,
+        quality: input.quality,
+      },
+      error
+    );
   }
 
   const fullScript = [blueprint.hook, blueprint.body, blueprint.cta].join("\n\n");
@@ -681,7 +643,7 @@ export async function generateViralEngineTool(input: AIViralEngineRequest): Prom
       reasons: blueprint.reasons,
     },
     createdAt: new Date().toISOString(),
-    demoMode: video.demoMode || !audioPath,
+    demoMode: false,
   };
 }
 
@@ -721,7 +683,7 @@ function buildTextPrompt(input: AITextRequest) {
     `Tone: ${input.tone || "confident and modern"}`,
     `Audience: ${input.audience || "creators and buyers"}`,
     `Goal: ${input.goal || "drive engagement and conversion"}`,
-    `Language: ${input.language || "English"}`,
+    `Language: ${describeLanguage(input.language)}`,
   ].join("\n");
 
   switch (input.mode) {
@@ -757,7 +719,7 @@ function buildViralEnginePrompt(input: AIViralEngineRequest) {
     `Audience hint: ${input.audience || "infer the best audience based on the prompt"}`,
     `Offer or angle: ${input.offer || "high-engagement short-form content"}`,
     `Tone: ${input.tone || "bold, fast, premium, social-first"}`,
-    `Language: ${input.language || "English"}`,
+    `Language: ${describeLanguage(input.language)}`,
     "",
     "Build a single viral reel package for a creator app.",
     "Requirements:",
@@ -794,7 +756,8 @@ function buildTrendHijackPrompt(trend: AITrendFeedItem, input: AITrendHijackRequ
     `User goal: ${input.userGoal || "use this trend to drive saves and follows"}`,
     `Audience: ${input.audience || "same audience as the original trend but adapted to the creator's offer"}`,
     `Offer: ${input.offer || "creator offer or digital product"}`,
-    `Language: ${input.language || "English"}`,
+    `Language: ${describeLanguage(input.language)}`,
+    ...(input.region ? [`Creator country (ISO code): ${input.region}. Adapt references, slang and timing for this local audience.`] : []),
     "",
     "Generate a trend-hijacked reel package that feels inspired by the trend but not copied directly.",
     "Requirements:",
@@ -858,7 +821,7 @@ function buildGrowthCoachPrompt(input: AIGrowthCoachRequest) {
     `Shares: ${input.shares ?? 0}`,
     `Retention note: ${input.retentionNote || "not provided"}`,
     `Creator pain point: ${input.painPoint || "why the post failed and what to do next"}`,
-    `Language: ${input.language || "English"}`,
+    `Language: ${describeLanguage(input.language)}`,
     "",
     "Act like a premium growth coach inside a creator app.",
     "Requirements:",
@@ -880,7 +843,7 @@ function buildFailureAuditPrompt(input: AIFailureAuditRequest, transcript: Failu
     `Views: ${input.views ?? 0}`,
     `Niche: ${input.niche || "creator growth"}`,
     `Target audience: ${input.targetAudience || "short-form viewers who save and share useful content"}`,
-    `Language: ${input.language || "English"}`,
+    `Language: ${describeLanguage(input.language)}`,
     `Transcript source: ${transcript.source}`,
     `Transcript text: ${truncateFailureAuditText(transcript.text, 1400)}`,
     "Transcript timeline:",
@@ -904,7 +867,7 @@ async function transcribeFailureAuditVideo(
   input: AIFailureAuditRequest
 ): Promise<FailureAuditTranscriptPayload> {
   if (!client) {
-    return buildFailureAuditTranscript(input);
+    throw new AIUnavailableError();
   }
 
   const file = await toFile(upload.buffer, upload.fileName, { type: upload.mimeType });
@@ -959,18 +922,15 @@ function buildFailureAuditTranscriptionPrompt(input: AIFailureAuditRequest) {
 }
 
 function buildFailureAuditTranscript(input: AIFailureAuditRequest): FailureAuditTranscriptPayload {
+  // No speech could be transcribed, so the analysis falls back to the creator's own caption text.
   const durationSeconds = Math.max(5, Math.round(input.durationSeconds ?? 12));
-  const text =
-    input.caption?.trim() ||
-    ((input.niche || "").toLowerCase().includes("fitness")
-      ? "Watch this before you post your next gym reel. Lead with the transformation, show the training proof, then ask viewers to save the routine."
-      : "This is the demo transcript for the underperforming reel. The creator sets up the idea slowly, explains the value late, and closes with a weak call to action.");
+  const text = input.caption?.trim() || "";
 
   return {
     text,
-    source: "demo",
+    source: "caption",
     durationSeconds,
-    segments: buildFailureAuditSegmentsFromText(text, durationSeconds),
+    segments: text ? buildFailureAuditSegmentsFromText(text, durationSeconds) : [],
   };
 }
 
@@ -1019,10 +979,36 @@ function normalizeFailureAuditDuration(
   return Math.max(5, Math.round(fallback ?? 12));
 }
 
+const LANGUAGE_NAMES: Record<string, string> = {
+  en: "English",
+  ar: "Arabic",
+  fr: "French",
+  es: "Spanish",
+  pt: "Portuguese",
+  de: "German",
+  tr: "Turkish",
+  ru: "Russian",
+  hi: "Hindi",
+  ur: "Urdu",
+  ms: "Malay",
+  id: "Indonesian",
+  zh: "Simplified Chinese",
+  ja: "Japanese",
+};
+
+/** Turns an app language code ("ms") into a name the model follows reliably ("Malay"). */
+function describeLanguage(language?: string) {
+  const value = language?.trim();
+  if (!value) {
+    return "English";
+  }
+  return LANGUAGE_NAMES[value.toLowerCase()] ?? value;
+}
+
 function normalizeTranscriptionLanguage(language?: string) {
   const value = language?.trim().toLowerCase();
 
-  if (value === "en" || value === "ar" || value === "fr" || value === "es") {
+  if (isLanguageOption(value)) {
     return value;
   }
 
@@ -1076,306 +1062,6 @@ function buildSummary(mode: AITextRequest["mode"]) {
   }
 
   return "Marketplace copy options";
-}
-
-function buildDemoTextResult(input: AITextRequest): AITextResult {
-  const base = input.prompt.trim();
-  const outputs =
-    input.mode === "captions"
-      ? [
-          `POV: ${base} but this time it actually converts. Save this for your next viral drop.`,
-          `${base}. Clean hook, strong payoff, and a CTA that makes people click.`,
-          `This is how creators turn ${base.toLowerCase()} into reach, trust, and sales in one post.`,
-        ]
-      : input.mode === "script"
-        ? [
-            `Hook: Stop scrolling if you want ${base.toLowerCase()}.\nBody: Show the before, reveal the shift, and explain the one move that changed the result.\nCTA: Follow for the next build.`,
-            `Hook: I tested ${base.toLowerCase()} so you don't have to.\nBody: Start with the pain point, drop the result, then walk through the exact workflow.\nCTA: Comment READY for the template.`,
-            `Hook: Here's the fastest way to improve ${base.toLowerCase()}.\nBody: Use three beats: problem, proof, payoff.\nCTA: Save this before your next post.`,
-          ]
-        : [
-            `${base}\nA premium creator-ready offer designed to feel high-value, fast to understand, and easy to buy.`,
-            `Turn attention into revenue with ${base.toLowerCase()}.\nBuilt for fast decision-making and clean buyer confidence.`,
-            `${base}\nClear outcome. Strong positioning. A polished marketplace listing that feels worth paying for.`,
-          ];
-
-  return {
-    id: `ai-text-${Date.now()}`,
-    mode: input.mode,
-    outputs,
-    summary: `${buildSummary(input.mode)} in demo mode`,
-    model: env.openAiTextModel,
-    createdAt: new Date().toISOString(),
-    demoMode: true,
-  };
-}
-
-function buildDemoTrendHijackResult(trend: AITrendFeedItem, input: AITrendHijackRequest): AITrendHijackResult {
-  const angle =
-    trend.niche === "Fitness"
-      ? "Use the proof-stack format to show a visible gym win in the first second, then sell the routine behind it."
-      : `Use ${trend.title.toLowerCase()} pacing but shift the payoff toward your offer and audience.`;
-  const similarVideoPrompt = [
-    `Create a vertical short-form reel inspired by the "${trend.title}" trend.`,
-    `Hook with ${trend.trendHook}`,
-    `Match the energy of ${trend.motionStyle}.`,
-    `Keep the soundtrack vibe similar to ${trend.musicStyle}.`,
-    `Creator goal: ${input.userGoal || "drive saves, shares, and profile visits"}.`,
-  ].join(" ");
-  const video = createDemoVideoJob({
-    prompt: similarVideoPrompt,
-    style: `${trend.musicStyle}; ${trend.motionStyle}`,
-    shotType: "trend-led vertical pacing with creator-safe differentiation",
-    size: input.size,
-    seconds: input.seconds,
-    quality: input.quality,
-  });
-
-  return {
-    id: `trend-demo-${Date.now()}`,
-    trend,
-    angle,
-    similarVideoPrompt,
-    musicStyle: trend.musicStyle,
-    optimizedCaptions: [
-      `${trend.captionSeed} This is the version built for ${input.offer || "your offer"} and today's audience.`,
-      `Same addictive energy, sharper positioning, and a caption built to push saves.`,
-      `Trend-hijacked the smart way: familiar rhythm, new payoff, stronger conversion.`,
-    ],
-    video,
-    createdAt: new Date().toISOString(),
-    demoMode: true,
-  };
-}
-
-function buildDemoAvatarCreatorResult(input: AIAvatarCreatorRequest): AIAvatarCreatorResult {
-  const styles: AIAvatarStyle[] = ["anime", "cartoon", "influencer"];
-  const variants: AIAvatarVariant[] = styles.map((style) =>
-    buildDemoAvatarVariant(style, input.sourceImageDataUrl)
-  );
-
-  return {
-    id: `avatar-demo-${Date.now()}`,
-    sourceImagePreview: input.sourceImageDataUrl,
-    variants,
-    talkingAvatar: createDemoVideoJob({
-      prompt: buildTalkingAvatarPrompt(input),
-      style: "talking avatar, creator-friendly facial motion, polished lighting",
-      shotType: "tight portrait talking to camera with clean blinking and lip movement",
-      size: input.size,
-      seconds: input.seconds,
-      quality: input.quality,
-    }),
-    monetization: {
-      payPerAvatarLabel: "$2 per avatar",
-      premiumLabel: "Included in Premium Creator and Yearly Growth",
-    },
-    createdAt: new Date().toISOString(),
-    demoMode: true,
-  };
-}
-
-function buildDemoGrowthCoachResult(input: AIGrowthCoachRequest): AIGrowthCoachResult {
-  const topic = input.recentPostTopic.trim();
-  const loweredTopic = topic.toLowerCase();
-  const niche = input.niche || "creator growth";
-  const audience = input.targetAudience || "short-form viewers who save useful content";
-  const goal = input.postGoal || "more saves, comments, and profile visits";
-  const views = input.views ?? 1200;
-  const likes = input.likes ?? 24;
-  const comments = input.comments ?? 3;
-  const shares = input.shares ?? 2;
-
-  return {
-    id: `growth-coach-demo-${Date.now()}`,
-    headline: loweredTopic.includes("gym")
-      ? "Your post had gym energy, but the value was not obvious fast enough."
-      : `Your "${topic}" post likely asked for attention before it earned curiosity.`,
-    diagnosis: [
-      `The hook was probably too generic for a ${niche} audience, especially with ${views.toLocaleString()} views only turning into ${likes} likes.`,
-      `The post goal of ${goal.toLowerCase()} was not built into the first seconds, so the viewer had little reason to stay.`,
-      `Weak community signals (${comments} comments and ${shares} shares) suggest the post felt broad instead of specific and useful.`,
-    ],
-    improvements: [
-      "Lead with proof, tension, or a visible outcome before teaching anything.",
-      `Write the caption for ${audience.toLowerCase()} with one promise, one proof point, and one CTA to save or comment.`,
-      `Fix the weak spot directly: ${input.retentionNote || "tighten the first 3 seconds and make the payoff clearer sooner"}.`,
-    ],
-    nextPosts: [
-      {
-        title: loweredTopic.includes("gym") ? "Proof-first gym reel" : `${niche} proof-first reel`,
-        hook: loweredTopic.includes("gym")
-          ? "If your gym content gets ignored, steal this opening."
-          : `If your ${niche.toLowerCase()} content keeps flopping, start with this angle.`,
-        format: "Vertical reel that opens with a result shot, then moves into 3 fast teaching beats.",
-        reason: "This format earns attention quickly because the viewer sees the payoff before the explanation.",
-      },
-      {
-        title: "Mistake breakdown post",
-        hook: "This one posting mistake is quietly killing your reach.",
-        format: "Talking-head reel or carousel that shows one mistake, one fix, and one example.",
-        reason: "It positions you as the coach and gives viewers a reason to comment or save the post.",
-      },
-      {
-        title: "Comment magnet comparison",
-        hook: `Would you choose fast views or real ${goal.toLowerCase()}?`,
-        format: "Question-led reel with two options on screen and a direct CTA to comment.",
-        reason: "It is designed to trigger engagement and teach the algorithm who should see your next post.",
-      },
-    ],
-    coachSummary:
-      input.painPoint ||
-      "You are likely close, but the content needs a sharper promise, faster proof, and a more specific ask to the audience.",
-    premium: {
-      lockedTo: "monthly",
-      label: "Premium-only Growth Coach for monthly and yearly plans",
-    },
-    createdAt: new Date().toISOString(),
-    demoMode: true,
-  };
-}
-
-function buildDemoFailureAuditResult(
-  input: AIFailureAuditRequest,
-  transcript = buildFailureAuditTranscript(input)
-): AIFailureAuditResult {
-  const caption = input.caption?.trim() || "No caption provided.";
-  const loweredCaption = caption.toLowerCase();
-  const isGymContent =
-    loweredCaption.includes("gym") || (input.niche || "").toLowerCase().includes("fitness");
-  const views = input.views ?? 980;
-  const durationSeconds = input.durationSeconds ?? transcript.durationSeconds ?? 12;
-
-  return {
-    id: `failure-audit-demo-${Date.now()}`,
-    headline: isGymContent
-      ? "Your fitness reel likely lost attention before the proof shot or payoff became obvious."
-      : `Your "${input.sourceVideoName}" reel likely did not prove its value early enough.`,
-    hook: {
-      score: isGymContent ? 44 : 48,
-      verdict: "Weak opening",
-      issue: `The first second likely was not strong enough to convert the initial ${views.toLocaleString()} views into watch time.`,
-      fix: "Start with a visible result, a strong pain point, or a surprising statement before any setup.",
-    },
-    retention: {
-      score: durationSeconds > 15 ? 41 : 53,
-      verdict: durationSeconds > 15 ? "Viewer drop-off too early" : "Pacing needs tightening",
-      issue: input.retentionNote || "The middle of the edit probably slows down before the payoff lands.",
-      fix: "Trim dead space, move the best proof shot earlier, and keep each beat visually different.",
-    },
-    captions: {
-      score: caption === "No caption provided." ? 38 : 57,
-      verdict: caption === "No caption provided." ? "Caption layer missing" : "Caption not adding enough pull",
-      issue:
-        caption === "No caption provided."
-          ? "The reel misses a second chance to explain value and ask for a save or comment."
-          : `"${caption}" likely describes the post, but it does not sharpen the hook or create enough urgency.`,
-      fix: "Write one line that makes the promise clearer, then add a CTA for saves, comments, or profile visits.",
-    },
-    transcript: {
-      text: transcript.text,
-      source: transcript.source,
-    },
-    retentionGraph: buildFailureAuditRetentionGraph(input, transcript),
-    quickWins: [
-      "Swap the first shot for your most visual proof or strongest emotional beat.",
-      "Cut anything that delays the payoff in the first half of the video.",
-      "Rewrite the caption so it strengthens the hook instead of repeating the same idea.",
-    ],
-    nextMove: isGymContent
-      ? "Recut the fitness reel so the transformation or proof shot appears first and the explanation comes second."
-      : "Post a tighter version with a stronger first second, faster proof, and a caption written for saves.",
-    createdAt: new Date().toISOString(),
-    demoMode: true,
-  };
-}
-
-function buildDemoAvatarVariant(style: AIAvatarStyle, sourceImageDataUrl: string): AIAvatarVariant {
-  return {
-    id: `avatar-variant-${style}-${Date.now()}`,
-    style,
-    title: getAvatarStyleTitle(style),
-    imageDataUrl: sourceImageDataUrl,
-    prompt: `${getAvatarStyleTitle(style)} demo preview`,
-    demoMode: true,
-  };
-}
-
-function buildDemoViralEngineResult(input: AIViralEngineRequest): AIViralEngineResult {
-  const prompt = input.prompt.trim();
-  const lowered = prompt.toLowerCase();
-  const conceptTitle = lowered.includes("gym") ? "Gym glow-up reel" : "Creator growth reel";
-  const hook = lowered.includes("gym")
-    ? "If your gym content feels flat, this is the reel that wakes your audience up."
-    : `If you want ${prompt.toLowerCase()}, start with this angle.`;
-  const body = lowered.includes("gym")
-    ? "Open with a hard before-and-after lift shot, cut into a fast training sequence, then flash the exact habit that changed the physique."
-    : "Open on the pain point, reveal a visible transformation, and stack quick proof moments so the payoff feels undeniable.";
-  const cta = "Follow for the next viral build and save this before your next post.";
-  const fullScript = [hook, body, cta].join("\n\n");
-  const voice = normalizeVoiceOption(input.voice);
-  const video = createDemoVideoJob({
-    prompt: `${prompt}. Vertical reel with rapid cuts, proof-driven pacing, and creator-style captions.`,
-    style: input.tone || "energetic premium creator ad",
-    shotType: "rapid hook, social proof, payoff finish",
-    size: input.size,
-    seconds: input.seconds,
-    quality: input.quality,
-  });
-
-  return {
-    id: `viral-demo-${Date.now()}`,
-    prompt,
-    conceptTitle,
-    script: {
-      hook,
-      body,
-      cta,
-      fullScript,
-    },
-    captions: [
-      "From average gym clips to content people actually save. This is the switch.",
-      "The fastest way to make your gym reel feel premium, sharp, and worth rewatching.",
-      "If your fitness content deserves more reach, start here and build from this format.",
-    ],
-    voice: {
-      script: fullScript,
-      voice,
-      model: env.openAiVoiceModel,
-      disclosure: "Demo mode only. Connect OPENAI_API_KEY to generate an actual AI voice preview.",
-    },
-    video,
-    insights: {
-      viralScore: 82,
-      bestPostingTime: "7:00 PM local time",
-      targetAudience: input.audience || "males 18-25 into gym motivation and physique content",
-      reasons: [
-        "The hook creates instant tension in the first second.",
-        "Transformation visuals fit high-retention fitness content.",
-        "The CTA naturally encourages saves and follows.",
-      ],
-    },
-    createdAt: new Date().toISOString(),
-    demoMode: true,
-  };
-}
-
-function buildDemoImagePreview(prompt: string) {
-  const normalized = prompt.toLowerCase();
-
-  if (normalized.includes("fashion")) {
-    return "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=900&q=80";
-  }
-
-  if (normalized.includes("product")) {
-    return "https://images.unsplash.com/photo-1556740749-887f6717d7e4?auto=format&fit=crop&w=900&q=80";
-  }
-
-  if (normalized.includes("gym") || normalized.includes("fitness")) {
-    return "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=900&q=80";
-  }
-
-  return "https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&w=900&q=80";
 }
 
 function mapAspectRatioToImageSize(aspectRatio: AIImageRequest["aspectRatio"]) {
@@ -1450,176 +1136,310 @@ async function imageDataUrlToFile(dataUrl: string, fileName: string) {
   return toFile(buffer, fileName, { type: mimeType });
 }
 
-function getTrendById(id: string) {
-  return trendFeed.find((trend) => trend.id === id);
+const TREND_WINDOW_DAYS = 14;
+const TREND_CACHE_MS = 5 * 60 * 1000;
+const MIN_LOCAL_TRENDS = 4;
+const MAX_TRENDS = 12;
+
+interface TrendSourceItem {
+  userId: string;
+  kind: "reel" | "post";
+  tags: string[];
+  engagement: number;
+  thumbnail: string;
+  caption: string;
 }
 
-function parseTrendHijackBlueprint(rawText: string, trend: AITrendFeedItem, input: AITrendHijackRequest): TrendHijackBlueprint {
-  const fallback = buildDemoTrendHijackResult(trend, input);
-  const match = rawText.match(/\{[\s\S]*\}/);
+let trendSourceCache: { expiresAt: number; items: TrendSourceItem[]; regionByUser: Map<string, string> } | null = null;
+const trendFeedCache = new Map<string, { expiresAt: number; items: AITrendFeedItem[] }>();
 
+export function normalizeRegionCode(value: unknown) {
+  return typeof value === "string" && /^[A-Za-z]{2}$/.test(value.trim()) ? value.trim().toUpperCase() : undefined;
+}
+
+// Loads the last two weeks of reels and posts plus each creator's region (from their profile).
+async function loadTrendSources() {
+  if (trendSourceCache && trendSourceCache.expiresAt > Date.now()) {
+    return trendSourceCache;
+  }
+
+  const firestore = getFirestore();
+  if (!firestore) {
+    return { items: [] as TrendSourceItem[], regionByUser: new Map<string, string>() };
+  }
+
+  const since = new Date(Date.now() - TREND_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const [reelSnapshot, postSnapshot] = await Promise.all([
+    firestore.collection("reels").where("createdAt", ">=", since).limit(400).get(),
+    firestore.collection("posts").where("createdAt", ">=", since).limit(400).get(),
+  ]);
+
+  const readTags = (value: unknown) =>
+    Array.isArray(value) ? value.filter((tag: unknown): tag is string => typeof tag === "string") : [];
+
+  const items: TrendSourceItem[] = [];
+  reelSnapshot.docs.forEach((item) => {
+    const data = item.data() as Record<string, any>;
+    items.push({
+      userId: String(data.userId ?? ""),
+      kind: "reel",
+      tags: readTags(data.tags),
+      engagement:
+        (Array.isArray(data.likedBy) ? data.likedBy.length : 0) * 3 +
+        (Number(data.repostCount) || 0) * 4 +
+        (Number(data.viewCount) || 0) * 0.1 +
+        1,
+      thumbnail: typeof data.thumbnailUrl === "string" ? data.thumbnailUrl : "",
+      caption: typeof data.caption === "string" ? data.caption : "",
+    });
+  });
+  postSnapshot.docs.forEach((item) => {
+    const data = item.data() as Record<string, any>;
+    const firstMedia = Array.isArray(data.media) ? data.media[0] : undefined;
+    items.push({
+      userId: String(data.userId ?? ""),
+      kind: "post",
+      tags: readTags(data.hashtags),
+      engagement: (Array.isArray(data.likedBy) ? data.likedBy.length : 0) * 3 + (Number(data.commentCount) || 0) * 4 + 1,
+      thumbnail: String(firstMedia?.thumbnailUrl || firstMedia?.url || ""),
+      caption: typeof data.caption === "string" ? data.caption : "",
+    });
+  });
+
+  const regionByUser = new Map<string, string>();
+  const userIds = [...new Set(items.map((item) => item.userId).filter(Boolean))];
+  for (let index = 0; index < userIds.length; index += 100) {
+    const refs = userIds.slice(index, index + 100).map((userId) => firestore.collection("users").doc(userId));
+    const snapshots = refs.length > 0 ? await firestore.getAll(...refs) : [];
+    snapshots.forEach((snapshot) => {
+      const region = normalizeRegionCode(snapshot.get("region"));
+      if (region) {
+        regionByUser.set(snapshot.id, region);
+      }
+    });
+  }
+
+  trendSourceCache = { expiresAt: Date.now() + TREND_CACHE_MS, items, regionByUser };
+  return trendSourceCache;
+}
+
+function rankTrends(items: TrendSourceItem[], scope: "local" | "global", region?: string): AITrendFeedItem[] {
+  interface TagStats {
+    tag: string;
+    reelCount: number;
+    postCount: number;
+    creators: Set<string>;
+    engagement: number;
+    topThumbnail: string;
+    topCaption: string;
+    topEngagement: number;
+  }
+
+  const stats = new Map<string, TagStats>();
+  items.forEach((input) => {
+    input.tags.forEach((rawTag) => {
+      const tag = rawTag.trim().replace(/^#+/, "").toLowerCase();
+      if (!tag) {
+        return;
+      }
+      const current =
+        stats.get(tag) ??
+        ({ tag, reelCount: 0, postCount: 0, creators: new Set<string>(), engagement: 0, topThumbnail: "", topCaption: "", topEngagement: -1 } as TagStats);
+      if (input.kind === "reel") {
+        current.reelCount += 1;
+      } else {
+        current.postCount += 1;
+      }
+      current.creators.add(input.userId);
+      current.engagement += input.engagement;
+      if (input.engagement > current.topEngagement && input.thumbnail) {
+        current.topEngagement = input.engagement;
+        current.topThumbnail = input.thumbnail;
+        current.topCaption = input.caption;
+      }
+      stats.set(tag, current);
+    });
+  });
+
+  const ranked = [...stats.values()]
+    .filter((item) => item.reelCount + item.postCount >= 2 && item.topThumbnail)
+    .sort((left, right) => right.engagement - left.engagement)
+    .slice(0, MAX_TRENDS);
+  const topEngagement = ranked[0]?.engagement ?? 1;
+
+  return ranked.map((item) => ({
+    id: `tag-${item.tag}`,
+    title: `#${item.tag}`,
+    trendHook: `${item.reelCount} reels and ${item.postCount} posts from ${item.creators.size} creators used #${item.tag} in the last ${TREND_WINDOW_DAYS} days.`,
+    niche: item.tag,
+    musicStyle: `Audio that matches the top-performing #${item.tag} content`,
+    motionStyle: `Vertical short-form pacing similar to the leading #${item.tag} reels`,
+    momentumScore: Math.max(1, Math.round((item.engagement / topEngagement) * 100)),
+    captionSeed: item.topCaption.slice(0, 220),
+    thumbnailUrl: item.topThumbnail,
+    demoMode: false,
+    scope,
+    region: scope === "local" ? region : undefined,
+    reelCount: item.reelCount,
+    postCount: item.postCount,
+    creatorCount: item.creators.size,
+    windowDays: TREND_WINDOW_DAYS,
+  }));
+}
+
+// Trends are computed from what creators actually publish on Sohba: hashtags used on reels and posts
+// in the last two weeks, weighted by real likes, comments, reposts and views. With a region, trends from
+// creators in that country come first; global trends fill the list when the region is still quiet.
+async function buildTrendFeedFromPlatform(regionInput?: string): Promise<AITrendFeedItem[]> {
+  const region = normalizeRegionCode(regionInput);
+  const cacheKey = region ?? "GLOBAL";
+  const cached = trendFeedCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.items;
+  }
+
+  const { items, regionByUser } = await loadTrendSources();
+  const global = rankTrends(items, "global");
+  let result = global;
+
+  if (region) {
+    const local = rankTrends(
+      items.filter((item) => regionByUser.get(item.userId) === region),
+      "local",
+      region
+    );
+    const localIds = new Set(local.map((item) => item.id));
+    const fill = local.length >= MIN_LOCAL_TRENDS ? [] : global.filter((item) => !localIds.has(item.id));
+    result = [...local, ...fill].slice(0, MAX_TRENDS);
+  }
+
+  trendFeedCache.set(cacheKey, { expiresAt: Date.now() + TREND_CACHE_MS, items: result });
+  return result;
+}
+
+export class AIUnavailableError extends Error {
+  statusCode = 503;
+
+  constructor(message = "AI generation is not available on the server right now. Please try again later.") {
+    super(message);
+    this.name = "AIUnavailableError";
+  }
+}
+
+export class AIResponseError extends Error {
+  statusCode = 502;
+
+  constructor(message = "The AI service returned an incomplete response. Please try again.") {
+    super(message);
+    this.name = "AIResponseError";
+  }
+}
+
+function extractJsonObject(rawText: string): Record<string, unknown> {
+  const match = rawText.match(/\{[\s\S]*\}/);
   if (!match) {
-    return {
-      angle: fallback.angle,
-      musicStyle: fallback.musicStyle,
-      captions: fallback.optimizedCaptions,
-      similarVideoPrompt: fallback.similarVideoPrompt,
-    };
+    throw new AIResponseError();
   }
 
   try {
-    const parsed = JSON.parse(match[0]) as Partial<TrendHijackBlueprint>;
-
-    return {
-      angle: parsed.angle?.trim() || fallback.angle,
-      musicStyle: parsed.musicStyle?.trim() || fallback.musicStyle,
-      captions:
-        Array.isArray(parsed.captions) && parsed.captions.length > 0
-          ? parsed.captions.map((item) => String(item).trim()).filter(Boolean).slice(0, 3)
-          : fallback.optimizedCaptions,
-      similarVideoPrompt: parsed.similarVideoPrompt?.trim() || fallback.similarVideoPrompt,
-    };
-  } catch {
-    return {
-      angle: fallback.angle,
-      musicStyle: fallback.musicStyle,
-      captions: fallback.optimizedCaptions,
-      similarVideoPrompt: fallback.similarVideoPrompt,
-    };
+    const parsed = JSON.parse(match[0]);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new AIResponseError();
+    }
+    return parsed as Record<string, unknown>;
+  } catch (error) {
+    if (error instanceof AIResponseError) {
+      throw error;
+    }
+    throw new AIResponseError();
   }
 }
 
-function parseGrowthCoachBlueprint(rawText: string, input: AIGrowthCoachRequest): GrowthCoachBlueprint {
-  const fallback = buildDemoGrowthCoachResult(input);
-  const match = rawText.match(/\{[\s\S]*\}/);
-
-  if (!match) {
-    return {
-      headline: fallback.headline,
-      diagnosis: fallback.diagnosis,
-      improvements: fallback.improvements,
-      nextPosts: fallback.nextPosts,
-      coachSummary: fallback.coachSummary,
-    };
+function requireText(value: unknown) {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text) {
+    throw new AIResponseError();
   }
-
-  try {
-    const parsed = JSON.parse(match[0]) as Partial<GrowthCoachBlueprint>;
-
-    const nextPosts =
-      Array.isArray(parsed.nextPosts) && parsed.nextPosts.length > 0
-        ? parsed.nextPosts
-            .map((idea) => ({
-              title: String(idea?.title ?? "").trim(),
-              hook: String(idea?.hook ?? "").trim(),
-              format: String(idea?.format ?? "").trim(),
-              reason: String(idea?.reason ?? "").trim(),
-            }))
-            .filter((idea) => idea.title && idea.hook && idea.format && idea.reason)
-            .slice(0, 3)
-        : fallback.nextPosts;
-
-    return {
-      headline: parsed.headline?.trim() || fallback.headline,
-      diagnosis:
-        Array.isArray(parsed.diagnosis) && parsed.diagnosis.length > 0
-          ? parsed.diagnosis.map((item) => String(item).trim()).filter(Boolean).slice(0, 3)
-          : fallback.diagnosis,
-      improvements:
-        Array.isArray(parsed.improvements) && parsed.improvements.length > 0
-          ? parsed.improvements.map((item) => String(item).trim()).filter(Boolean).slice(0, 3)
-          : fallback.improvements,
-      nextPosts: nextPosts.length === 3 ? nextPosts : fallback.nextPosts,
-      coachSummary: parsed.coachSummary?.trim() || fallback.coachSummary,
-    };
-  } catch {
-    return {
-      headline: fallback.headline,
-      diagnosis: fallback.diagnosis,
-      improvements: fallback.improvements,
-      nextPosts: fallback.nextPosts,
-      coachSummary: fallback.coachSummary,
-    };
-  }
+  return text;
 }
 
-function parseFailureAuditBlueprint(
-  rawText: string,
-  input: AIFailureAuditRequest,
-  transcript: FailureAuditTranscriptPayload
-): FailureAuditBlueprint {
-  const fallback = buildDemoFailureAuditResult(input, transcript);
-  const match = rawText.match(/\{[\s\S]*\}/);
-
-  if (!match) {
-    return {
-      headline: fallback.headline,
-      hook: fallback.hook,
-      retention: fallback.retention,
-      captions: fallback.captions,
-      retentionGraph: fallback.retentionGraph,
-      quickWins: fallback.quickWins,
-      nextMove: fallback.nextMove,
-    };
+function requireTextList(value: unknown, max = 3) {
+  const items = Array.isArray(value) ? value.map((item) => String(item ?? "").trim()).filter(Boolean).slice(0, max) : [];
+  if (items.length === 0) {
+    throw new AIResponseError();
   }
-
-  try {
-    const parsed = JSON.parse(match[0]) as Partial<FailureAuditBlueprint>;
-
-    return {
-      headline: parsed.headline?.trim() || fallback.headline,
-      hook: normalizeFailureAuditSection(parsed.hook, fallback.hook),
-      retention: normalizeFailureAuditSection(parsed.retention, fallback.retention),
-      captions: normalizeFailureAuditSection(parsed.captions, fallback.captions),
-      retentionGraph: normalizeFailureRetentionGraph(parsed.retentionGraph, fallback.retentionGraph),
-      quickWins:
-        Array.isArray(parsed.quickWins) && parsed.quickWins.length > 0
-          ? parsed.quickWins.map((item) => String(item).trim()).filter(Boolean).slice(0, 3)
-          : fallback.quickWins,
-      nextMove: parsed.nextMove?.trim() || fallback.nextMove,
-    };
-  } catch {
-    return {
-      headline: fallback.headline,
-      hook: fallback.hook,
-      retention: fallback.retention,
-      captions: fallback.captions,
-      retentionGraph: fallback.retentionGraph,
-      quickWins: fallback.quickWins,
-      nextMove: fallback.nextMove,
-    };
-  }
+  return items;
 }
 
-function normalizeFailureAuditSection(
-  section: Partial<AIFailureAuditSection> | undefined,
-  fallback: AIFailureAuditSection
-): AIFailureAuditSection {
+function parseTrendHijackBlueprint(rawText: string): TrendHijackBlueprint {
+  const parsed = extractJsonObject(rawText);
+
   return {
-    score:
-      typeof section?.score === "number" && Number.isFinite(section.score)
-        ? Math.max(0, Math.min(100, Math.round(section.score)))
-        : fallback.score,
-    verdict: section?.verdict?.trim() || fallback.verdict,
-    issue: section?.issue?.trim() || fallback.issue,
-    fix: section?.fix?.trim() || fallback.fix,
+    angle: requireText(parsed.angle),
+    musicStyle: requireText(parsed.musicStyle),
+    captions: requireTextList(parsed.captions),
+    similarVideoPrompt: requireText(parsed.similarVideoPrompt),
   };
 }
 
-function normalizeFailureRetentionGraph(
-  graph: AIFailureAuditRetentionPoint[] | undefined,
-  fallback: AIFailureAuditRetentionPoint[]
-) {
-  if (!Array.isArray(graph) || graph.length !== 5) {
-    return fallback;
+function parseGrowthCoachBlueprint(rawText: string): GrowthCoachBlueprint {
+  const parsed = extractJsonObject(rawText);
+  const nextPosts = (Array.isArray(parsed.nextPosts) ? parsed.nextPosts : [])
+    .map((idea: any) => ({
+      title: String(idea?.title ?? "").trim(),
+      hook: String(idea?.hook ?? "").trim(),
+      format: String(idea?.format ?? "").trim(),
+      reason: String(idea?.reason ?? "").trim(),
+    }))
+    .filter((idea) => idea.title && idea.hook && idea.format && idea.reason)
+    .slice(0, 3);
+
+  if (nextPosts.length === 0) {
+    throw new AIResponseError();
   }
 
+  return {
+    headline: requireText(parsed.headline),
+    diagnosis: requireTextList(parsed.diagnosis),
+    improvements: requireTextList(parsed.improvements),
+    nextPosts,
+    coachSummary: requireText(parsed.coachSummary),
+  };
+}
+
+function parseFailureAuditBlueprint(rawText: string): FailureAuditBlueprint {
+  const parsed = extractJsonObject(rawText);
+
+  return {
+    headline: requireText(parsed.headline),
+    hook: normalizeFailureAuditSection(parsed.hook),
+    retention: normalizeFailureAuditSection(parsed.retention),
+    captions: normalizeFailureAuditSection(parsed.captions),
+    retentionGraph: normalizeFailureRetentionGraph(parsed.retentionGraph),
+    quickWins: requireTextList(parsed.quickWins),
+    nextMove: requireText(parsed.nextMove),
+  };
+}
+
+function normalizeFailureAuditSection(value: unknown): AIFailureAuditSection {
+  const section = (value && typeof value === "object" ? value : {}) as Partial<AIFailureAuditSection>;
+  if (typeof section.score !== "number" || !Number.isFinite(section.score)) {
+    throw new AIResponseError();
+  }
+
+  return {
+    score: Math.max(0, Math.min(100, Math.round(section.score))),
+    verdict: requireText(section.verdict),
+    issue: requireText(section.issue),
+    fix: requireText(section.fix),
+  };
+}
+
+function normalizeFailureRetentionGraph(value: unknown): AIFailureAuditRetentionPoint[] {
+  const graph = Array.isArray(value) ? value : [];
   const normalized = graph
-    .map((point) => ({
-      second:
-        typeof point?.second === "number" && Number.isFinite(point.second)
-          ? Math.max(0, Math.round(point.second))
-          : NaN,
+    .map((point: any) => ({
+      second: typeof point?.second === "number" && Number.isFinite(point.second) ? Math.max(0, Math.round(point.second)) : NaN,
       retention:
         typeof point?.retention === "number" && Number.isFinite(point.retention)
           ? Math.max(0, Math.min(100, Math.round(point.retention)))
@@ -1630,134 +1450,52 @@ function normalizeFailureRetentionGraph(
     .filter((point) => Number.isFinite(point.second) && Number.isFinite(point.retention) && point.label && point.note)
     .sort((left, right) => left.second - right.second);
 
-  return normalized.length === 5 ? normalized : fallback;
+  if (normalized.length === 0) {
+    throw new AIResponseError();
+  }
+
+  return normalized;
 }
 
-function buildFailureAuditRetentionGraph(
-  input: AIFailureAuditRequest,
-  transcript: FailureAuditTranscriptPayload
-): AIFailureAuditRetentionPoint[] {
-  const durationSeconds = Math.max(5, Math.round(input.durationSeconds ?? transcript.durationSeconds ?? 12));
-  const hasEarlyDropNote = /first|opening|start|early/i.test(input.retentionNote || "");
-  const retentionCurve = hasEarlyDropNote ? [100, 64, 46, 31, 18] : [100, 76, 58, 41, 24];
-  const checkpoints = [0, Math.max(1, Math.round(durationSeconds * 0.14)), Math.max(2, Math.round(durationSeconds * 0.34)), Math.max(3, Math.round(durationSeconds * 0.62)), durationSeconds];
-  const labels = ["Start", "Hook", "Setup", "Value", "CTA"];
+function parseViralBlueprint(rawText: string): ViralBlueprint {
+  const parsed = extractJsonObject(rawText);
+  const viralScore = typeof parsed.viralScore === "number" ? parsed.viralScore : Number(parsed.viralScore);
 
-  return checkpoints.map((second, index) => ({
-    second,
-    retention: retentionCurve[index],
-    label: labels[index],
-    note: buildFailureRetentionNote(index, second, transcript, input),
-  }));
-}
-
-function buildFailureRetentionNote(
-  index: number,
-  second: number,
-  transcript: FailureAuditTranscriptPayload,
-  input: AIFailureAuditRequest
-) {
-  const snippet = getFailureTranscriptSnippet(transcript.segments, second);
-
-  if (index === 0) {
-    return "Initial impressions land here before the viewer decides whether the clip is worth staying for.";
+  if (!Number.isFinite(viralScore)) {
+    throw new AIResponseError();
   }
 
-  if (index === 1) {
-    return snippet
-      ? `Around ${second}s viewers hit "${snippet}", so the opening needs a clearer curiosity gap or faster proof.`
-      : "This is the hook decision point where weak proof or slow setup can trigger the first big drop.";
-  }
-
-  if (index === 2) {
-    return snippet
-      ? `At ${second}s the video is still covering "${snippet}", which likely stretches the setup longer than needed.`
-      : "If the value is still being explained instead of shown here, retention usually softens fast.";
-  }
-
-  if (index === 3) {
-    return snippet
-      ? `Around ${second}s the viewer reaches "${snippet}", so the value reveal should feel sharper and more visual.`
-      : "This is where the strongest proof or transformation should already be obvious.";
-  }
-
-  return input.retentionNote
-    ? `The closing suffers because ${input.retentionNote.toLowerCase()}`
-    : "Most viewers are gone by the CTA when the payoff arrives too late or the ask feels generic.";
-}
-
-function getFailureTranscriptSnippet(segments: FailureAuditTranscriptSegment[], second: number) {
-  const segment =
-    segments.find((candidate) => second >= candidate.start && second <= candidate.end) ||
-    segments.find((candidate) => candidate.start >= second) ||
-    segments[segments.length - 1];
-
-  return segment ? truncateFailureAuditText(segment.text.replace(/\s+/g, " ").trim(), 72) : "";
-}
-
-function parseViralBlueprint(rawText: string, input: AIViralEngineRequest): ViralBlueprint {
-  const match = rawText.match(/\{[\s\S]*\}/);
-  const fallback = buildDemoViralEngineResult(input);
-
-  if (!match) {
-    return {
-      conceptTitle: fallback.conceptTitle,
-      hook: fallback.script.hook,
-      body: fallback.script.body,
-      cta: fallback.script.cta,
-      voiceover: fallback.voice.script,
-      captions: fallback.captions,
-      videoPrompt: fallback.video.prompt,
-      viralScore: fallback.insights.viralScore,
-      bestPostingTime: fallback.insights.bestPostingTime,
-      targetAudience: fallback.insights.targetAudience,
-      reasons: fallback.insights.reasons,
-    };
-  }
-
-  try {
-    const parsed = JSON.parse(match[0]) as Partial<ViralBlueprint>;
-
-    return {
-      conceptTitle: parsed.conceptTitle?.trim() || fallback.conceptTitle,
-      hook: parsed.hook?.trim() || fallback.script.hook,
-      body: parsed.body?.trim() || fallback.script.body,
-      cta: parsed.cta?.trim() || fallback.script.cta,
-      voiceover: parsed.voiceover?.trim() || fallback.voice.script,
-      captions:
-        Array.isArray(parsed.captions) && parsed.captions.length > 0
-          ? parsed.captions.map((item) => String(item).trim()).filter(Boolean).slice(0, 3)
-          : fallback.captions,
-      videoPrompt: parsed.videoPrompt?.trim() || fallback.video.prompt,
-      viralScore: typeof parsed.viralScore === "number" ? parsed.viralScore : fallback.insights.viralScore,
-      bestPostingTime: parsed.bestPostingTime?.trim() || fallback.insights.bestPostingTime,
-      targetAudience: parsed.targetAudience?.trim() || fallback.insights.targetAudience,
-      reasons:
-        Array.isArray(parsed.reasons) && parsed.reasons.length > 0
-          ? parsed.reasons.map((item) => String(item).trim()).filter(Boolean).slice(0, 3)
-          : fallback.insights.reasons,
-    };
-  } catch {
-    return {
-      conceptTitle: fallback.conceptTitle,
-      hook: fallback.script.hook,
-      body: fallback.script.body,
-      cta: fallback.script.cta,
-      voiceover: fallback.voice.script,
-      captions: fallback.captions,
-      videoPrompt: fallback.video.prompt,
-      viralScore: fallback.insights.viralScore,
-      bestPostingTime: fallback.insights.bestPostingTime,
-      targetAudience: fallback.insights.targetAudience,
-      reasons: fallback.insights.reasons,
-    };
-  }
+  return {
+    conceptTitle: requireText(parsed.conceptTitle),
+    hook: requireText(parsed.hook),
+    body: requireText(parsed.body),
+    cta: requireText(parsed.cta),
+    voiceover: requireText(parsed.voiceover),
+    captions: requireTextList(parsed.captions),
+    videoPrompt: requireText(parsed.videoPrompt),
+    viralScore,
+    bestPostingTime: requireText(parsed.bestPostingTime),
+    targetAudience: requireText(parsed.targetAudience),
+    reasons: requireTextList(parsed.reasons),
+  };
 }
 
 function clampScore(score: number) {
-  if (Number.isNaN(score)) {
-    return 80;
-  }
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
 
-  return Math.max(55, Math.min(99, Math.round(score)));
+function buildFailedVideoJob(input: AIVideoRequest, error: unknown): AIVideoJob {
+  return {
+    id: `video-failed-${Date.now()}`,
+    status: "failed",
+    progress: 0,
+    model: input.quality === "quality" ? "sora-2-pro" : env.openAiVideoModel,
+    prompt: input.prompt,
+    size: input.size ?? "720x1280",
+    seconds: String(input.seconds ?? 8),
+    createdAt: new Date().toISOString(),
+    demoMode: false,
+    error: error instanceof Error ? error.message : "The video render could not be started.",
+    note: "The video render could not be started. The rest of the package was generated normally.",
+  };
 }

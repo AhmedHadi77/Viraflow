@@ -1,12 +1,15 @@
 import { useEffect } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, Text, View } from "react-native";
 import { Screen } from "../components/Screen";
 import { SectionTitle } from "../components/SectionTitle";
+import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
-import { palette, radii, spacing } from "../theme";
+import { palette, radii, spacing, createThemedStyles } from "../theme";
+import { formatLocaleDate, formatRelativeTime } from "../utils/timeFormatting";
 
 export function MarketplaceInboxScreen({ navigation }: { navigation: any }) {
   const {
+    language,
     currentUser,
     marketplaceThreads,
     marketplaceOrders,
@@ -17,6 +20,7 @@ export function MarketplaceInboxScreen({ navigation }: { navigation: any }) {
     getUserPresence,
     refreshMarketplaceInbox,
   } = useAppState();
+  const copy = getCopy(language);
 
   useEffect(() => {
     void refreshMarketplaceInbox();
@@ -39,26 +43,23 @@ export function MarketplaceInboxScreen({ navigation }: { navigation: any }) {
     <Screen scrollable>
       <View style={styles.heroCard}>
         <SectionTitle
-          title="Marketplace inbox"
+          title={copy.marketplaceInboxTitle}
           subtitle={
             userThreads.length > 0
-              ? `${userThreads.length} conversations, ${userOrders.length} orders, and ${totalUnreadCount} unread messages connected to your listings and purchases.`
-              : "Your marketplace messages and orders will show up here."
+              ? `${userThreads.length} ${copy.conversations.toLowerCase()}, ${userOrders.length} ${copy.orders.toLowerCase()}, ${totalUnreadCount} ${copy.unreadMessages.toLowerCase()}.`
+              : copy.marketplaceInboxSubtitleEmpty
           }
         />
         <View style={styles.heroStats}>
-          <InboxStat label="Chats" value={userThreads.length} />
-          <InboxStat label="Orders" value={userOrders.length} />
-          <InboxStat label="Unread" value={totalUnreadCount} />
+          <InboxStat label={copy.chats} value={userThreads.length} />
+          <InboxStat label={copy.orders} value={userOrders.length} />
+          <InboxStat label={copy.unreadMessages} value={totalUnreadCount} />
         </View>
       </View>
 
-      <SectionTitle title="Conversations" />
+      <SectionTitle title={copy.conversations} />
       {userThreads.length === 0 ? (
-        <EmptyCard
-          title="No conversations yet"
-          body="Open a listing and tap Chat seller to start your first marketplace conversation."
-        />
+        <EmptyCard title={copy.noConversationsTitle} body={copy.noConversationsBody} />
       ) : (
         <View style={styles.list}>
           {userThreads.map((thread) => {
@@ -78,7 +79,7 @@ export function MarketplaceInboxScreen({ navigation }: { navigation: any }) {
                 <View style={styles.threadBody}>
                   <View style={styles.threadTop}>
                     <Text numberOfLines={1} style={styles.threadTitle}>
-                      {product?.title || "Marketplace listing"}
+                      {product?.title || copy.miListingFallback}
                     </Text>
                     <View style={styles.threadTopRight}>
                       {unreadCount > 0 ? (
@@ -86,11 +87,11 @@ export function MarketplaceInboxScreen({ navigation }: { navigation: any }) {
                           <Text style={styles.unreadBadgeLabel}>{unreadCount}</Text>
                         </View>
                       ) : null}
-                      <Text style={styles.threadTime}>{new Date(thread.lastMessageAt).toLocaleDateString()}</Text>
+                      <Text style={styles.threadTime}>{formatLocaleDate(thread.lastMessageAt, language)}</Text>
                     </View>
                   </View>
-                  <Text style={styles.threadSeller}>{counterpart ? counterpart.name : "Marketplace user"}</Text>
-                  <Text style={styles.presenceText}>{formatPresenceLabel(presence)}</Text>
+                  <Text style={styles.threadSeller}>{counterpart ? counterpart.name : copy.marketplaceUser}</Text>
+                  <Text style={styles.presenceText}>{formatPresenceLabel(presence, language, copy.onlineNow, copy.offline)}</Text>
                   <Text numberOfLines={2} style={styles.threadPreview}>
                     {thread.lastMessagePreview}
                   </Text>
@@ -101,9 +102,9 @@ export function MarketplaceInboxScreen({ navigation }: { navigation: any }) {
         </View>
       )}
 
-      <SectionTitle title="Orders" subtitle="Recent checkout activity across items you bought or sold." />
+      <SectionTitle title={copy.orders} subtitle={copy.ordersSectionBody} />
       {userOrders.length === 0 ? (
-        <EmptyCard title="No orders yet" body="Buy a product from marketplace checkout and the order will appear here." />
+        <EmptyCard title={copy.noOrdersTitle} body={copy.noOrdersBody} />
       ) : (
         <View style={styles.list}>
           {userOrders.map((order) => {
@@ -116,12 +117,12 @@ export function MarketplaceInboxScreen({ navigation }: { navigation: any }) {
                 <Image source={{ uri: product?.imageUrl || counterparty?.profileImage }} style={styles.orderImage} />
                 <View style={styles.orderBody}>
                   <Text numberOfLines={1} style={styles.orderTitle}>
-                    {product?.title || "Marketplace order"}
+                    {product?.title || copy.miOrderFallback}
                   </Text>
                   <Text style={styles.orderMeta}>
                     ${order.amountUsd} | {order.deliveryMethod} | {order.paymentMethod}
                   </Text>
-                  <Text style={styles.orderMeta}>{currentUser?.id === order.buyerId ? `Seller: ${counterparty?.name}` : `Buyer: ${counterparty?.name}`}</Text>
+                  <Text style={styles.orderMeta}>{currentUser?.id === order.buyerId ? `${copy.sellerLabel}: ${counterparty?.name}` : `${copy.buyerLabel}: ${counterparty?.name}`}</Text>
                   <Text style={styles.orderStatus}>{order.status}</Text>
                 </View>
               </View>
@@ -151,7 +152,7 @@ function EmptyCard({ title, body }: { title: string; body: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
   heroCard: {
     backgroundColor: palette.card,
     borderColor: palette.borderStrong,
@@ -312,35 +313,19 @@ const styles = StyleSheet.create({
   },
 });
 
-function formatPresenceLabel(presence?: { isOnline: boolean; lastSeenAt?: string }) {
+function formatPresenceLabel(
+  presence: { isOnline: boolean; lastSeenAt?: string } | undefined,
+  language: Parameters<typeof getCopy>[0],
+  onlineLabel: string,
+  offlineLabel: string
+) {
   if (presence?.isOnline) {
-    return "Online now";
+    return onlineLabel;
   }
 
   if (!presence?.lastSeenAt) {
-    return "Offline";
+    return offlineLabel;
   }
 
-  return `Last seen ${formatRelativeTime(presence.lastSeenAt)}`;
-}
-
-function formatRelativeTime(timestamp: string) {
-  const diffMs = Date.now() - new Date(timestamp).getTime();
-  const diffMinutes = Math.max(Math.floor(diffMs / 60000), 0);
-
-  if (diffMinutes < 1) {
-    return "just now";
-  }
-
-  if (diffMinutes < 60) {
-    return `${diffMinutes}m ago`;
-  }
-
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) {
-    return `${diffHours}h ago`;
-  }
-
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays}d ago`;
+  return formatRelativeTime(presence.lastSeenAt, language, { style: "short", fallbackToDateAfterDays: 14 });
 }

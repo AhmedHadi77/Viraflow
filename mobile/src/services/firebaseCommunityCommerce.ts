@@ -28,15 +28,12 @@ import {
   ProductListingStatus,
   User,
 } from "../types/models";
+import { DEFAULT_PROFILE_IMAGE, MEDIA_UNAVAILABLE_IMAGE } from "../data/defaultMedia";
 
 const COMMUNITIES_COLLECTION = "communities";
 const COMMUNITY_POSTS_COLLECTION = "communityPosts";
 const MARKETPLACE_ORDERS_COLLECTION = "marketplaceOrders";
 const PRODUCTS_COLLECTION = "products";
-const FALLBACK_PROFILE_IMAGE =
-  "https://images.unsplash.com/photo-1502685104226-ee32379fefbe?auto=format&fit=crop&w=400&q=80";
-const FALLBACK_PRODUCT_IMAGE =
-  "https://images.unsplash.com/photo-1520607162513-77705c0f0d4a?auto=format&fit=crop&w=900&q=80";
 
 export function isFirebaseCommunityCommerceConfigured() {
   return isFirebaseClientConfigured();
@@ -154,7 +151,7 @@ export async function createFirebaseCommunityPost(currentUser: User, payload: Cr
     communityId: payload.communityId,
     authorId: currentUser.id,
     authorName: currentUser.name,
-    authorAvatar: currentUser.profileImage || FALLBACK_PROFILE_IMAGE,
+    authorAvatar: currentUser.profileImage || DEFAULT_PROFILE_IMAGE,
     text: payload.text.trim(),
     imageUrl: payload.imageUrl?.trim() || undefined,
     createdAt: new Date().toISOString(),
@@ -166,6 +163,23 @@ export async function createFirebaseCommunityPost(currentUser: User, payload: Cr
     community,
     post,
   };
+}
+
+export async function deleteFirebaseCommunityPost(userId: string, postId: string, existing?: CommunityPost) {
+  const db = getRequiredFirestore();
+  const postRef = doc(db, COMMUNITY_POSTS_COLLECTION, postId);
+  const snapshot = existing ? null : await getDoc(postRef);
+  const post = existing ?? (snapshot?.exists() ? normalizeCommunityPostDoc(postId, snapshot.data()) : null);
+
+  if (!post) {
+    throw new Error("Community post not found.");
+  }
+
+  if (post.authorId !== userId) {
+    throw new Error("You can only delete your own community post.");
+  }
+
+  await writeBatch(db).delete(postRef).commit();
 }
 
 export async function createFirebaseMarketplaceOrder(
@@ -256,10 +270,10 @@ function normalizeCommunityDoc(id: string, data: Record<string, unknown>): Commu
     id,
     ownerId: readString(data.ownerId, ""),
     kind: normalizeCommunityKind(readString(data.kind, "page")),
-    name: readString(data.name, "Pulseora Community"),
+    name: readString(data.name, "Sohba Community"),
     description: readString(data.description, ""),
     category: readString(data.category, "Community"),
-    coverImage: readString(data.coverImage, FALLBACK_PRODUCT_IMAGE),
+    coverImage: readString(data.coverImage, MEDIA_UNAVAILABLE_IMAGE),
     visibility: normalizeCommunityVisibility(readString(data.visibility, "public")),
     memberIds: readStringArray(data.memberIds),
     createdAt: readString(data.createdAt, new Date().toISOString()),
@@ -271,8 +285,8 @@ function normalizeCommunityPostDoc(id: string, data: Record<string, unknown>): C
     id,
     communityId: readString(data.communityId, ""),
     authorId: readString(data.authorId, ""),
-    authorName: readString(data.authorName, "Pulseora creator"),
-    authorAvatar: readString(data.authorAvatar, FALLBACK_PROFILE_IMAGE),
+    authorName: readString(data.authorName, "Sohba creator"),
+    authorAvatar: readString(data.authorAvatar, DEFAULT_PROFILE_IMAGE),
     text: readString(data.text, ""),
     imageUrl: readOptionalString(data.imageUrl),
     createdAt: readString(data.createdAt, new Date().toISOString()),
@@ -297,7 +311,7 @@ function normalizeMarketplaceOrderDoc(id: string, data: Record<string, unknown>)
 
 function normalizeProductDoc(id: string, data: Record<string, unknown>): Product {
   const imageUrls = readStringArray(data.imageUrls);
-  const imageUrl = readString(data.imageUrl, imageUrls[0] || FALLBACK_PRODUCT_IMAGE);
+  const imageUrl = readString(data.imageUrl, imageUrls[0] || MEDIA_UNAVAILABLE_IMAGE);
 
   return {
     id,
@@ -309,8 +323,10 @@ function normalizeProductDoc(id: string, data: Record<string, unknown>): Product
     imageUrls: imageUrls.length > 0 ? imageUrls : [imageUrl],
     category: readString(data.category, "Home Goods"),
     condition: normalizeCondition(readString(data.condition, "Good")),
-    location: readString(data.location, "Kuala Lumpur, Malaysia"),
+    location: readString(data.location, ""),
     listingStatus: normalizeListingStatus(readString(data.listingStatus, "available")),
+    currency: readString(data.currency, "").toUpperCase() || undefined,
+    region: readString(data.region, "").toUpperCase() || undefined,
     createdAt: readString(data.createdAt, new Date().toISOString()),
   };
 }

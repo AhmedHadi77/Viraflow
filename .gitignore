@@ -16,3 +16,12 @@ mobile/.expo
 mobile/.expo-shared
 backend/dist
 mobile/dist-check
+android/keystore.properties
+android/app/*.jks
+android/app/*.keystore
+mobile/android/keystore.properties
+mobile/android/app/*.jks
+mobile/android/app/*.keystore
+
+# Android SDK path written by build-apk.ps1
+local.properties

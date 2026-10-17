@@ -182,6 +182,39 @@ export async function markAllFirebaseNotificationsRead(userId: string) {
   return notifications;
 }
 
+export async function markFirebaseNotificationRead(userId: string, notificationId: string) {
+  const db = getRequiredFirestore();
+  const notificationRef = doc(db, NOTIFICATIONS_COLLECTION, notificationId);
+  const snapshot = await getDoc(notificationRef);
+
+  if (!snapshot.exists()) {
+    throw new Error("Notification not found.");
+  }
+
+  const notification = normalizeNotificationDoc(snapshot.id, snapshot.data());
+  if (notification.userId !== userId) {
+    throw new Error("You can only update your own notifications.");
+  }
+
+  if (notification.readAt) {
+    return notification;
+  }
+
+  const readAt = new Date().toISOString();
+  await setDoc(
+    notificationRef,
+    {
+      readAt,
+    },
+    { merge: true }
+  );
+
+  return {
+    ...notification,
+    readAt,
+  };
+}
+
 export function getFirebaseInboxErrorMessage(error: unknown) {
   if (error instanceof Error) {
     return error.message;
@@ -210,16 +243,17 @@ function normalizeSavedPostDoc(id: string, data: Record<string, unknown>): Saved
 }
 
 function normalizeNotificationDoc(id: string, data: Record<string, unknown>): AppNotification {
+  const entityType = normalizeOptionalSavedEntityType(data.entityType);
   return {
     id,
     userId: readString(data.userId, ""),
-    type: normalizeNotificationType(readString(data.type, "system")),
-    title: readString(data.title, "Pulseora update"),
+    type: normalizeNotificationType(readString(data.type, "system"), entityType),
+    title: readString(data.title, "Sohba update"),
     body: readString(data.body, ""),
     actorId: readOptionalString(data.actorId),
     actorName: readOptionalString(data.actorName),
     actorAvatar: readOptionalString(data.actorAvatar),
-    entityType: normalizeOptionalSavedEntityType(data.entityType),
+    entityType,
     entityId: readOptionalString(data.entityId),
     conversationId: readOptionalString(data.conversationId),
     conversationType: normalizeOptionalConversationType(data.conversationType),
@@ -245,11 +279,15 @@ function readOptionalString(value: unknown) {
 }
 
 function normalizeSavedEntityType(value: string): SavedEntityType {
-  return value === "product" ? "product" : "reel";
+  if (value === "product" || value === "post") {
+    return value;
+  }
+
+  return "reel";
 }
 
 function normalizeOptionalSavedEntityType(value: unknown) {
-  if (value === "reel" || value === "product") {
+  if (value === "reel" || value === "product" || value === "post") {
     return value;
   }
 
@@ -264,16 +302,29 @@ function normalizeOptionalConversationType(value: unknown) {
   return undefined;
 }
 
-function normalizeNotificationType(value: string): NotificationType {
+function normalizeNotificationType(value: string, entityType?: AppNotification["entityType"]): NotificationType {
+  if (value === "like") {
+    return entityType === "post" ? "post_like" : "reel_like";
+  }
+
+  if (value === "comment") {
+    return entityType === "post" ? "post_comment" : "reel_comment";
+  }
+
   if (
-    value === "like" ||
-    value === "comment" ||
+    value === "post_like" ||
+    value === "post_comment" ||
+    value === "reel_like" ||
+    value === "reel_comment" ||
+    value === "story_view" ||
+    value === "mention" ||
     value === "follow" ||
     value === "repost" ||
     value === "boost" ||
     value === "save" ||
     value === "message" ||
     value === "order" ||
+    value === "call" ||
     value === "system"
   ) {
     return value;

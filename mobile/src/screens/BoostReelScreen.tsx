@@ -1,12 +1,13 @@
 import { LinearGradient } from "expo-linear-gradient";
+import { formatDateTime } from "../utils/timeFormatting";
 import { useMemo, useState } from "react";
-import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, Text, View } from "react-native";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { SectionTitle } from "../components/SectionTitle";
 import { useAppState } from "../providers/AppProvider";
 import { ReelBoostPlanId } from "../types/models";
-import { palette, radii, spacing } from "../theme";
+import { palette, radii, spacing, createThemedStyles } from "../theme";
 
 export function BoostReelScreen({ navigation, route }: { navigation: any; route: { params: { reelId: string } } }) {
   const { currentUser, reels, boostPlans, getBoostForReel, boostReel } = useAppState();
@@ -47,7 +48,7 @@ export function BoostReelScreen({ navigation, route }: { navigation: any; route:
       result.boost ? "Boost is live" : "Checkout opened",
       result.message ??
         (result.boost
-          ? `${selectedPlan.title} is now running. Your reel is getting more reach and more views.`
+          ? `${selectedPlan.title} is now running. Your reel has priority placement in Reels and Explore.`
           : `${selectedPlan.title} checkout opened. This boost will go live after payment is confirmed.`)
     );
     navigation.replace("ReelViewer", { reelId: activeReel.id });
@@ -56,10 +57,10 @@ export function BoostReelScreen({ navigation, route }: { navigation: any; route:
   return (
     <Screen scrollable>
       <LinearGradient colors={["rgba(255,122,47,0.18)", "rgba(54,224,161,0.12)", "rgba(255,255,255,0.02)"]} style={styles.hero}>
-        <Text style={styles.kicker}>Pulseora Ads</Text>
+        <Text style={styles.kicker}>Sohba Ads</Text>
         <SectionTitle
           title="Boost System"
-          subtitle="Put paid reach behind your best reel, buy more views, and turn strong content into a growth engine."
+          subtitle="Give your best reel priority placement in the Reels and Explore feeds for a fixed number of days."
         />
       </LinearGradient>
 
@@ -79,15 +80,15 @@ export function BoostReelScreen({ navigation, route }: { navigation: any; route:
         <View style={styles.activeCard}>
           <Text style={styles.activeLabel}>Boost already live</Text>
           <Text style={styles.activeTitle}>{boost.planTitle}</Text>
-          <Text style={styles.body}>This reel already has an active ad push running, so the app is protecting you from duplicate spend.</Text>
-          <Text style={styles.note}>Campaign ends: {new Date(boost.endsAt).toLocaleString()}</Text>
+          <Text style={styles.body}>This reel already has active priority placement, so a second boost is blocked to protect you from duplicate spend.</Text>
+          <Text style={styles.note}>Campaign ends: {formatDateTime(boost.endsAt)}</Text>
           <Text style={styles.note}>Audience: {boost.targetAudience}</Text>
           <PrimaryButton label="Back to reel" onPress={() => navigation.replace("ReelViewer", { reelId: activeReel.id })} variant="ghost" />
         </View>
       ) : null}
 
       <View style={styles.panel}>
-        <SectionTitle title="Choose a boost package" subtitle="These packages are ready for real Stripe checkout so paid reach can go live after verified payment." />
+        <SectionTitle title="Choose a boost package" subtitle="Paid through secure Stripe checkout. Priority placement starts automatically after payment is confirmed." />
         <View style={styles.planList}>
           {boostPlans.map((plan) => (
             <Pressable
@@ -104,8 +105,8 @@ export function BoostReelScreen({ navigation, route }: { navigation: any; route:
               </View>
               <Text style={styles.body}>{plan.description}</Text>
               <View style={styles.metricRow}>
-                <Metric label="Extra views" value={`+${formatCompact(plan.estimatedViews)}`} />
-                <Metric label="Extra reach" value={`+${formatCompact(plan.estimatedReach)}`} />
+                <Metric label="Priority days" value={String(plan.durationDays)} />
+                <Metric label="Placement" value="Reels + Explore" />
               </View>
               <Text style={styles.note}>Run time: {plan.durationDays} days</Text>
             </Pressable>
@@ -117,7 +118,7 @@ export function BoostReelScreen({ navigation, route }: { navigation: any; route:
         <Text style={styles.checkoutTitle}>Secure checkout</Text>
         <Text style={styles.body}>Selected package: {selectedPlan.title}</Text>
         <Text style={styles.body}>Spend: {selectedPlan.priceLabel}</Text>
-        <Text style={styles.body}>You get: more reach and more views on this reel</Text>
+        <Text style={styles.body}>You get: priority placement for {selectedPlan.durationDays} days. Real views and reach are counted from actual viewers.</Text>
         <Text style={styles.note}>Payment method: hosted Stripe checkout</Text>
         <PrimaryButton
           label={`Boost my reel for ${selectedPlan.priceLabel}`}
@@ -152,7 +153,7 @@ function formatCompact(value: number) {
   return String(value);
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles({
   emptyWrap: {
     alignItems: "center",
     justifyContent: "center",

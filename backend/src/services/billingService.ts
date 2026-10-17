@@ -6,8 +6,9 @@ import {
   getUserById,
   setSubscription,
 } from "../data/mockDb";
+import { DEFAULT_PROFILE_IMAGE, MEDIA_UNAVAILABLE_IMAGE } from "../data/defaultMedia";
 import { getFirestore } from "./firebaseService";
-import { PlanType, Reel, ReelBoostCampaign, ReelBoostPlanId, Subscription, User } from "../types/models";
+import { isLanguageOption, PlanType, Reel, ReelBoostCampaign, ReelBoostPlanId, Subscription, User } from "../types/models";
 
 const USERS_COLLECTION = "users";
 const REELS_COLLECTION = "reels";
@@ -303,14 +304,15 @@ export async function activateReelBoostFromStripe(input: {
     startedAt,
     endsAt,
     targetAudience: user?.headline || "Short-form viewers who engage with creator-led content.",
-    note: "Your ad campaign is live and pushing this reel to more high-fit viewers now.",
+    note: "Your reel has priority placement in Reels and Explore until the boost ends.",
     stripeCheckoutSessionId: input.checkoutSessionId,
     stripePaymentIntentId: input.paymentIntentId,
   };
+  // A paid boost buys priority placement while it is active. View and reach counters are never
+  // inflated: they only grow when real viewers watch the reel.
   const nextReel: Reel & Record<string, unknown> = {
     ...reel,
-    viewCount: reel.viewCount + plan.estimatedViews,
-    reachCount: reel.reachCount + plan.estimatedReach,
+    boostedUntil: endsAt,
   };
   const batch = firestore.batch();
 
@@ -318,8 +320,8 @@ export async function activateReelBoostFromStripe(input: {
   batch.set(
     firestore.collection(REELS_COLLECTION).doc(reel.id),
     {
-      viewCount: nextReel.viewCount,
-      reachCount: nextReel.reachCount,
+      boostedUntil: endsAt,
+      boostPlanId: input.planId,
       updatedAt: startedAt,
     },
     { merge: true }
@@ -331,7 +333,7 @@ export async function activateReelBoostFromStripe(input: {
       userId: input.userId,
       type: "boost",
       title: `${plan.title} boost is live`,
-      body: `${plan.estimatedViews.toLocaleString()} extra views and ${plan.estimatedReach.toLocaleString()} extra reach are now running for this reel.`,
+      body: `Your reel now has priority placement in Reels and Explore for ${plan.durationDays} days.`,
       entityType: "reel",
       entityId: input.reelId,
       createdAt: startedAt,
@@ -357,25 +359,28 @@ function normalizeUserDoc(id: string, data: Record<string, unknown>): User {
     passwordHash: readString(data.passwordHash, ""),
     profileImage: readString(
       data.profileImage,
-      "https://images.unsplash.com/photo-1502685104226-ee32379fefbe?auto=format&fit=crop&w=400&q=80"
+      DEFAULT_PROFILE_IMAGE
     ),
     bio: readString(data.bio, "New creator on ViraFlow."),
     headline: readString(data.headline, "Creator in progress"),
+    website: readString(data.website, ""),
     language: normalizeLanguage(readString(data.language, "en")),
     createdAt: readString(data.createdAt, new Date().toISOString()),
   };
 }
 
 function normalizeReelDoc(id: string, data: Record<string, unknown>): Reel {
+  const caption = readString(data.caption, "New ViraFlow reel");
   return {
     id,
     userId: readString(data.userId, ""),
     videoUrl: readString(data.videoUrl, ""),
-    caption: readString(data.caption, "New ViraFlow reel"),
+    caption,
     thumbnailUrl: readString(
       data.thumbnailUrl,
-      "https://images.unsplash.com/photo-1524250502761-1ac6f2e30d43?auto=format&fit=crop&w=1000&q=80"
+      MEDIA_UNAVAILABLE_IMAGE
     ),
+    tags: readStringArray(data.tags).length > 0 ? readStringArray(data.tags) : buildReelTags(caption),
     likedBy: readStringArray(data.likedBy),
     repostCount: readNumber(data.repostCount, 0),
     viewCount: readNumber(data.viewCount, 0),
@@ -442,12 +447,26 @@ function readStringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
 }
 
+function buildReelTags(caption: string) {
+  const hashtags = caption.match(/#[a-zA-Z0-9_]+/g)?.map((tag) => tag.replace("#", "").toLowerCase()) ?? [];
+  if (hashtags.length > 0) {
+    return [...new Set(hashtags)].slice(0, 6);
+  }
+
+  const words = caption
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length >= 4);
+  return [...new Set(words)].slice(0, 4).length > 0 ? [...new Set(words)].slice(0, 4) : ["creator", "reel"];
+}
+
 function readNumber(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
 function normalizeLanguage(value: string): User["language"] {
-  if (value === "ar" || value === "fr" || value === "es") {
+  if (isLanguageOption(value)) {
     return value;
   }
 
