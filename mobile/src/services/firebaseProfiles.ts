@@ -1,5 +1,6 @@
 import {
   createUserWithEmailAndPassword,
+  deleteUser as deleteFirebaseAuthUser,
   GoogleAuthProvider,
   signInWithEmailAndPassword,
   signInWithCredential,
@@ -18,6 +19,8 @@ import {
   normalizeWebsiteInput,
 } from "../utils/profileValidation";
 import { DEFAULT_PROFILE_IMAGE } from "../data/defaultMedia";
+import { getCopy } from "../data/copy";
+import type { CopyStrings } from "../data/locales/en";
 
 const USERS_COLLECTION = "users";
 const GOOGLE_WEB_CLIENT_ID = getPublicEnv("EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID");
@@ -99,10 +102,17 @@ export async function registerWithFirebaseProfile(
   if (usernameValidationMessage) {
     throw new Error(usernameValidationMessage);
   }
-  await assertUsernameAvailable(db, username);
   const now = new Date().toISOString();
 
   const credential = await createUserWithEmailAndPassword(auth, email, payload.password);
+  // Profiles can only be read by signed-in people, so the username check runs right after the
+  // account is created. If the name is taken, the new account is removed again so the email stays free.
+  try {
+    await assertUsernameAvailable(db, username, credential.user.uid);
+  } catch (error) {
+    await deleteFirebaseAuthUser(credential.user).catch(() => signOut(auth).catch(() => undefined));
+    throw error;
+  }
   await updateFirebaseAuthProfile(credential.user, {
     displayName: payload.name.trim(),
     photoURL: DEFAULT_PROFILE_IMAGE,
@@ -333,42 +343,59 @@ export async function logoutFromFirebaseProfile() {
   }
 }
 
-export function getFirebaseProfileErrorMessage(error: unknown) {
+export function getFirebaseProfileErrorMessage(error: unknown, copy: CopyStrings = getCopy(null)) {
   const code = typeof error === "object" && error && "code" in error ? String((error as { code?: string }).code) : "";
+  const rawMessage = error instanceof Error ? error.message : "";
 
-  if (code === "auth/email-already-in-use") {
-    return "That email is already registered. Try logging in instead.";
+  switch (code) {
+    case "auth/email-already-in-use":
+      return copy.authErrEmailInUse;
+    case "auth/invalid-credential":
+    case "auth/wrong-password":
+    case "auth/user-not-found":
+    case "auth/invalid-login-credentials":
+      return copy.authErrWrongCredentials;
+    case "auth/weak-password":
+      return copy.authErrWeakPassword;
+    case "auth/invalid-email":
+    case "auth/missing-email":
+      return copy.authErrInvalidEmail;
+    case "auth/account-exists-with-different-credential":
+      return copy.authErrDifferentCredential;
+    case "auth/network-request-failed":
+    case "unavailable":
+      return copy.authErrNetwork;
+    case "auth/too-many-requests":
+      return copy.authErrTooManyRequests;
+    case "auth/user-disabled":
+      return copy.authErrDisabled;
+    case "sohba/username-taken":
+      return copy.authErrUsernameTaken;
+    case "permission-denied":
+      return copy.authErrPermission;
+    case "SIGN_IN_CANCELLED":
+    case "12501":
+      return copy.authErrGoogleCancelled;
+    case "PLAY_SERVICES_NOT_AVAILABLE":
+      return copy.authErrPlayServices;
+    case "DEVELOPER_ERROR":
+    case "10":
+      return copy.authErrGoogleSetup;
+    default:
+      break;
   }
 
-  if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/user-not-found") {
-    return "Email or password is incorrect.";
+  if (/DEVELOPER_ERROR/i.test(rawMessage)) {
+    return copy.authErrGoogleSetup;
+  }
+  if (/insufficient permissions/i.test(rawMessage)) {
+    return copy.authErrPermission;
+  }
+  if (/network/i.test(rawMessage)) {
+    return copy.authErrNetwork;
   }
 
-  if (code === "auth/weak-password") {
-    return "Choose a stronger password with at least 6 characters.";
-  }
-
-  if (code === "auth/invalid-email") {
-    return "Enter a valid email address.";
-  }
-
-  if (code === "auth/account-exists-with-different-credential") {
-    return "This email already uses another sign-in method. Sign in with your password first, then connect Google later.";
-  }
-
-  if (code === "SIGN_IN_CANCELLED" || code === "12501") {
-    return "Google sign-in was cancelled.";
-  }
-
-  if (code === "PLAY_SERVICES_NOT_AVAILABLE") {
-    return "Google Play Services is required for Google sign-in on this device.";
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Firebase account action failed. Please try again.";
+  return rawMessage || copy.authErrGeneric;
 }
 
 function getRequiredFirebaseAuth() {
@@ -575,7 +602,7 @@ async function assertUsernameAvailable(
   const existing = snapshot.docs[0];
 
   if (existing && existing.id !== currentUserId) {
-    throw new Error("That username is already taken.");
+    throw Object.assign(new Error("That username is already taken."), { code: "sohba/username-taken" });
   }
 }
 

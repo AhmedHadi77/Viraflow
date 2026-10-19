@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { I18nManager, Linking } from "react-native";
 import { applyLayoutDirection, isRtlLanguage } from "../utils/layoutDirection";
+import { getCopy } from "../data/copy";
 import { reelBoostPlans, subscriptionPlans } from "../data/catalog";
 import {
   AppApiError,
@@ -2052,7 +2053,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await completeFirebaseAuth(response);
         return { ok: true };
       } catch (error) {
-        return { ok: false, message: getFirebaseProfileErrorMessage(error) };
+        return { ok: false, message: getFirebaseProfileErrorMessage(error, getCopy(language)) };
       }
     }
 
@@ -2107,7 +2108,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       await completeFirebaseAuth(response);
       return { ok: true };
     } catch (error) {
-      return { ok: false, message: getFirebaseProfileErrorMessage(error) };
+      return { ok: false, message: getFirebaseProfileErrorMessage(error, getCopy(language)) };
     }
   }
 
@@ -2118,7 +2119,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await completeFirebaseAuth(response);
         return { ok: true };
       } catch (error) {
-        return { ok: false, message: getFirebaseProfileErrorMessage(error) };
+        return { ok: false, message: getFirebaseProfileErrorMessage(error, getCopy(language)) };
       }
     }
 
@@ -2801,7 +2802,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updateRelatedReportStatus("user", userId, banned ? "resolved" : "reviewed");
         return { ok: true };
       } catch (error) {
-        return { ok: false, message: getFirebaseProfileErrorMessage(error) };
+        return { ok: false, message: getFirebaseProfileErrorMessage(error, getCopy(language)) };
       }
     }
 
@@ -5153,7 +5154,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ]);
         return { ok: true };
       } catch (error) {
-        return { ok: false, message: getFirebaseProfileErrorMessage(error) };
+        return { ok: false, message: getFirebaseProfileErrorMessage(error, getCopy(language)) };
       }
     }
 

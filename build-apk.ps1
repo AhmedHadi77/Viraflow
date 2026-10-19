@@ -115,6 +115,9 @@ if (-not (Test-Path $keystoreProps)) {
     }
 }
 
+# npm and Gradle print normal warnings on stderr; judge them by their exit codes, not by stderr.
+$ErrorActionPreference = "Continue"
+
 # 3. JS dependencies (always run, so newly added native modules such as react-native-webrtc get installed)
 Write-Host "Installing npm packages..." -ForegroundColor Yellow
 Push-Location $root
@@ -128,6 +131,9 @@ Pop-Location
 
 # 4. Build
 Set-Location $androidDir
+# A stale native (C++) build cache makes "clean" fail after dependencies change, so drop it first.
+$cxx = Join-Path $androidDir "app\.cxx"
+if (Test-Path $cxx) { Remove-Item $cxx -Recurse -Force -ErrorAction SilentlyContinue }
 .\gradlew clean assembleRelease
 if ($LASTEXITCODE -ne 0) {
     Write-Host "BUILD FAILED - copy the error above and send it to Claude." -ForegroundColor Red

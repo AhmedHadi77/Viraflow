@@ -26,3 +26,4 @@ mobile/android/app/*.keystore
 # Android SDK path written by build-apk.ps1
 local.properties
 Run-Sohba-Build.bat
+Build-Sohba-APK.bat
