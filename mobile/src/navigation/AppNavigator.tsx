@@ -3,6 +3,7 @@ import { BottomTabBarProps, createBottomTabNavigator } from "@react-navigation/b
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { brandTints, GradientIconFill } from "../components/GradientIcon";
 import { PAYMENTS_ENABLED } from "../data/catalog";
 import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
@@ -289,8 +290,14 @@ function SohbaTabBar({ descriptors, navigation, state }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   // Reels is a full-screen video feed, so the bar stays dark there in both themes.
   const onReels = state.routes[state.index]?.name === "Reels";
-  const activeColor = onReels ? "#ffffff" : palette.text;
-  const idleColor = onReels ? "rgba(255,255,255,0.55)" : palette.mutedSoft;
+  // Each tab keeps its own colour from the Sohba gradient; the open tab becomes a filled gradient circle.
+  const tabTints: Record<keyof AppTabParamList, string> = {
+    Home: brandTints.green,
+    Reels: brandTints.pink,
+    Create: brandTints.purple,
+    Marketplace: brandTints.orange,
+    Profile: brandTints.cyan,
+  };
 
   return (
     <View
@@ -355,12 +362,11 @@ function SohbaTabBar({ descriptors, navigation, state }: BottomTabBarProps) {
               ]}
               testID={options?.tabBarButtonTestID}
             >
-              <Ionicons
-                color={focused ? (isCreate ? palette.primary : activeColor) : idleColor}
-                name={icon}
-                size={isCreate ? 30 : 25}
-              />
-              {focused && !isCreate ? <View style={styles.activePill} /> : null}
+              {focused || isCreate ? (
+                <GradientIconFill icon={isCreate ? "add" : icon} iconSize={isCreate ? 26 : 21} size={isCreate ? 42 : 38} />
+              ) : (
+                <Ionicons color={tabTints[route.name as keyof AppTabParamList]} name={icon} size={25} />
+              )}
               <View accessible={false} style={styles.screenReaderOnly} />
             </Pressable>
           );
@@ -386,8 +392,7 @@ const styles = createThemedStyles({
   tabButton: {
     alignItems: "center",
     flex: 1,
-    gap: 3,
-    height: 50,
+    height: 54,
     justifyContent: "center",
   },
   tabButtonActive: {},
@@ -395,12 +400,6 @@ const styles = createThemedStyles({
   createTabButtonActive: {},
   tabButtonPressed: {
     opacity: 0.6,
-  },
-  activePill: {
-    backgroundColor: palette.primary,
-    borderRadius: 999,
-    height: 3,
-    width: 14,
   },
   screenReaderOnly: {
     height: 0,

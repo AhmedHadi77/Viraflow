@@ -12,6 +12,7 @@ import { useAppState } from "../providers/AppProvider";
 import { Product, ProductListingStatus } from "../types/models";
 import { palette, radii, spacing, createThemedStyles } from "../theme";
 import { usePriceTools } from "../utils/priceFormatting";
+import { GradientIconButton } from "../components/GradientIcon";
 
 const listingStatusFilters: Array<"all" | ProductListingStatus> = ["all", "available", "pending", "sold"];
 const listingStatusRank: Record<ProductListingStatus, number> = {
@@ -119,14 +120,14 @@ export function MarketplaceScreen({ navigation }: { navigation: any }) {
             <Text style={styles.kicker}>{copy.marketplace}</Text>
             <Text style={styles.title}>{copy.marketplaceTitle}</Text>
           </View>
-          <Pressable onPress={() => rootNavigation.navigate("MarketplaceInbox")} style={styles.inboxBubble}>
-            <Ionicons color={palette.text} name="chatbubble-ellipses-outline" size={20} />
-            {totalMarketplaceUnreadCount > 0 ? (
-              <View style={styles.inboxBadge}>
-                <Text style={styles.inboxBadgeLabel}>{totalMarketplaceUnreadCount}</Text>
-              </View>
-            ) : null}
-          </Pressable>
+          <GradientIconButton
+            accessibilityLabel={copy.marketplace}
+            badge={totalMarketplaceUnreadCount > 0 ? String(totalMarketplaceUnreadCount) : undefined}
+            icon="chatbubble-ellipses-outline"
+            onPress={() => rootNavigation.navigate("MarketplaceInbox")}
+            size={44}
+            tint="cyan"
+          />
         </View>
 
         <Text style={styles.heroBody}>

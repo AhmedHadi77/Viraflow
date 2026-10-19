@@ -215,7 +215,7 @@ export function ReelViewerScreen({
           return (
             <View style={{ height: viewerHeight, width }}>
               <ReelCard
-                boostLabel={boost?.status === "active" ? copy.boostLive : isReelBoostActive(item) ? "Sponsored" : undefined}
+                boostLabel={boost?.status === "active" ? copy.boostLive : isReelBoostActive(item) ? copy.sponsored : undefined}
                 bottomInset={bottomInset}
                 commentCount={getCommentsForReel(item.id).length}
                 creator={creator}
@@ -228,6 +228,7 @@ export function ReelViewerScreen({
                   void handleLike(item.id);
                 }}
                 onOpen={() => undefined}
+                onOpenCreator={() => navigation.navigate("PublicProfile", { userId: creator.id })}
                 onRepost={() => {
                   void handleShare(item.id);
                 }}

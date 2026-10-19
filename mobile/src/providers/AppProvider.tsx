@@ -3,6 +3,7 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState 
 import { I18nManager, Linking } from "react-native";
 import { applyLayoutDirection, isRtlLanguage } from "../utils/layoutDirection";
 import { getCopy } from "../data/copy";
+import { isCallConnection } from "../utils/callConnection";
 import { reelBoostPlans, subscriptionPlans } from "../data/catalog";
 import {
   AppApiError,
@@ -461,6 +462,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setIsBootstrapping(false);
     }, 3500);
 
+    let openedFromCache = false;
+
     async function bootstrap() {
       addDiagnostic("Starting bootstrap...");
       try {
@@ -503,6 +506,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           parsedSession && isFirebaseProfilesConfigured() && !isLegacyLocalAccessToken(parsedSession.token)
         );
 
+        // Fast start: when this phone already has a signed-in profile saved, open the app straight away
+        // from that copy and check the sign-in and load fresh content in the background.
+        if (parsedSession && shouldUseFirebaseSession && parsedFirebaseUser?.id === parsedSession.userId) {
+          setSession(parsedSession);
+          setUsers((current) => withOwnedContent(upsertUser(current, parsedFirebaseUser), reels, products));
+          openedFromCache = true;
+          clearTimeout(startupSafetyTimer);
+          setIsBootstrapping(false);
+          addDiagnostic("Opened from the saved session; refreshing in the background.");
+        }
+
         if (parsedSession && shouldUseFirebaseSession) {
           addDiagnostic("Verifying Firebase session...");
           const refreshedToken = await resolveAccessToken(parsedSession).catch((err) => {
@@ -516,11 +530,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           } else {
             if (isAppApiConfigured()) {
               addDiagnostic("Checking API health...");
+              // Only a definite "not signed in" answer logs the user out. A slow or sleeping server
+              // (common right after the backend wakes up) must not throw people out of the app.
               const verified = await fetchApiMe(refreshedToken)
                 .then(() => true)
                 .catch((err) => {
                   addDiagnostic(`API check failed: ${err instanceof Error ? err.message : "Unknown error"}`);
-                  return false;
+                  const status = (err as { status?: number } | null)?.status;
+                  return !(status === 401 || status === 403);
                 });
 
               if (!verified) {
@@ -603,6 +620,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown fatal error";
         addDiagnostic(`Bootstrap failed: ${message}`);
+        if (openedFromCache) {
+          // The app is already open from the saved session; keep the user signed in and let the
+          // live listeners catch up instead of wiping everything.
+          return;
+        }
         console.error("Sohba bootstrap failed. Falling back to clean local state.", error);
         setSession(null);
         setUsers([]);
@@ -1467,15 +1489,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [currentUser?.role]);
 
   async function placeCall(calleeId: string, type: CallType) {
+    const callCopy = getCopy(language);
     if (!currentUser) {
-      return { ok: false, message: "Log in to make calls." };
+      return { ok: false, message: callCopy.callLoginRequired };
     }
     if (calleeId === currentUser.id) {
-      return { ok: false, message: "You can't call yourself." };
+      return { ok: false, message: callCopy.callStartFailed };
     }
     const callee = users.find((user) => user.id === calleeId);
     if (callee?.isBanned) {
-      return { ok: false, message: "This account is not available." };
+      return { ok: false, message: callCopy.callAccountUnavailable };
+    }
+    if (!isCallConnection(currentUser, calleeId, callee)) {
+      return { ok: false, message: callCopy.callOnlyConnections };
     }
     try {
       const callId = await startCall({ callerId: currentUser.id, calleeId, type });
@@ -1490,7 +1516,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }).catch(() => undefined);
       return { ok: true, callId };
     } catch (error) {
-      return { ok: false, message: error instanceof Error ? error.message : "The call could not be started." };
+      const code = (error as { code?: string } | null)?.code;
+      return { ok: false, message: code === "permission-denied" ? callCopy.callOnlyConnections : callCopy.callStartFailed };
     }
   }
 

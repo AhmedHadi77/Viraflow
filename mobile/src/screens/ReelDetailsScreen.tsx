@@ -132,6 +132,7 @@ export function ReelDetailsScreen({ navigation, route }: { navigation: any; rout
           void handleLike();
         }}
         onOpen={() => undefined}
+                onOpenCreator={() => navigation.navigate("PublicProfile", { userId: reelCreator.id })}
         onRepost={() => {
           void handleShare();
         }}

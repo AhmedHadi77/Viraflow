@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCopy } from "../utils/useCopy";
+import { fill } from "../utils/labels";
 import { useEventListener } from "expo";
 import { useEffect, useState } from "react";
 import {
@@ -45,6 +46,8 @@ interface ReelCardProps {
   onReport?: () => void;
   onToggleMuted?: () => void;
   onToggleFollow?: () => void;
+  /** Opens the creator's profile (tapping their photo or name). */
+  onOpenCreator?: () => void;
 }
 
 export function ReelCard({
@@ -71,6 +74,7 @@ export function ReelCard({
   onReport,
   onToggleMuted,
   onToggleFollow,
+  onOpenCreator,
 }: ReelCardProps) {
   const copy = useCopy();
   const isLiked = currentUserId ? reel.likedBy.includes(currentUserId) : false;
@@ -128,10 +132,19 @@ export function ReelCard({
           <View pointerEvents="box-none" style={[styles.immersiveFooter, fullScreen ? { paddingBottom: bottomInset + 20 } : null]}>
             <View pointerEvents="box-none" style={styles.immersiveInfo}>
               <View style={styles.immersiveCreatorRow}>
-                <Image source={{ uri: creator.profileImage }} style={styles.avatar} />
-                <Text numberOfLines={1} style={styles.immersiveHandle}>
-                  @{creator.username}
-                </Text>
+                <Pressable
+                  accessibilityLabel={`@${creator.username}`}
+                  accessibilityRole="button"
+                  disabled={!onOpenCreator}
+                  hitSlop={6}
+                  onPress={onOpenCreator}
+                  style={styles.creatorPressable}
+                >
+                  <Image source={{ uri: creator.profileImage }} style={styles.avatar} />
+                  <Text numberOfLines={1} style={styles.immersiveHandle}>
+                    @{creator.username}
+                  </Text>
+                </Pressable>
                 {onToggleFollow ? (
                   <Pressable hitSlop={8} onPress={onToggleFollow} style={[styles.followButton, isFollowing ? styles.followingButton : null]}>
                     <Text style={[styles.followButtonLabel, isFollowing ? styles.followingButtonLabel : null]}>
@@ -150,7 +163,7 @@ export function ReelCard({
               <Text numberOfLines={1} style={styles.immersiveMetaText}>
                 {[
                   reel.tags.length > 0 ? reel.tags.slice(0, 3).map((tag) => `#${tag}`).join(" ") : "",
-                  `${formatCompact(reel.viewCount)} views`,
+                  fill(copy.reelViewsCount, { count: formatCompact(reel.viewCount) }),
                 ]
                   .filter(Boolean)
                   .join("  ·  ")}
@@ -180,13 +193,19 @@ export function ReelCard({
   return (
     <Pressable onPress={onOpen} style={styles.feedCard}>
       <View style={styles.feedHeader}>
-        <View style={styles.feedCreatorRow}>
+        <Pressable
+          accessibilityRole="button"
+          disabled={!onOpenCreator}
+          hitSlop={6}
+          onPress={onOpenCreator}
+          style={styles.feedCreatorRow}
+        >
           <Image source={{ uri: creator.profileImage }} style={styles.feedAvatar} />
           <View style={styles.feedCreatorMeta}>
             <Text style={styles.feedHandle}>@{creator.username}</Text>
             <Text style={styles.feedDate}>{formatRelativeDate(reel.createdAt)}</Text>
           </View>
-        </View>
+        </Pressable>
         <View style={styles.feedHeaderActions}>
           {boostLabel ? (
             <View style={[styles.reelBadge, styles.boostBadge]}>
@@ -840,6 +859,12 @@ const styles = createThemedStyles(
     height: 32,
     width: 32,
   },
+  creatorPressable: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexShrink: 1,
+    gap: spacing.xs,
+  },
   creatorTextWrap: {
     flex: 1,
     gap: 2,
@@ -1019,5 +1044,5 @@ const styles = createThemedStyles(
     width: 14,
   },
   },
-  { keepDark: ["videoSurface", "videoView", "roundedVideoView", "imageFallback", "roundedMediaImage", "feedMediaShell", "feedAudioToggle", "immersiveCard", "fullScreenCard", "immersiveMediaShell", "mediaFillLayer", "immersiveBadges", "audioToggle", "reelBadge", "boostBadge", "reelBadgeLabel", "immersiveFooter", "immersiveInfo", "immersiveCreatorRow", "avatar", "creatorTextWrap", "immersiveHandle", "immersiveName", "followButton", "followingButton", "followButtonLabel", "followingButtonLabel", "immersiveCaption", "immersiveTags", "immersiveMetaRow", "immersiveMetaText", "actionRail", "railAction", "railActionRow", "railActionIconShell", "railActionLabelPill", "railActionLabelPillActive", "railIcon", "railActionLabel", "centerPlaybackHotspot", "centerPlaybackButton", "playbackTimelineWrap", "playbackTimelineHeader", "playbackTimeLabel", "playbackTrack", "playbackTrackBase", "playbackTrackFill", "playbackTrackThumb"] }
+  { keepDark: ["videoSurface", "videoView", "roundedVideoView", "imageFallback", "roundedMediaImage", "feedMediaShell", "feedAudioToggle", "immersiveCard", "fullScreenCard", "immersiveMediaShell", "mediaFillLayer", "immersiveBadges", "audioToggle", "reelBadge", "boostBadge", "reelBadgeLabel", "immersiveFooter", "immersiveInfo", "immersiveCreatorRow", "creatorPressable", "avatar", "creatorTextWrap", "immersiveHandle", "immersiveName", "followButton", "followingButton", "followButtonLabel", "followingButtonLabel", "immersiveCaption", "immersiveTags", "immersiveMetaRow", "immersiveMetaText", "actionRail", "railAction", "railActionRow", "railActionIconShell", "railActionLabelPill", "railActionLabelPillActive", "railIcon", "railActionLabel", "centerPlaybackHotspot", "centerPlaybackButton", "playbackTimelineWrap", "playbackTimelineHeader", "playbackTimeLabel", "playbackTrack", "playbackTrackBase", "playbackTrackFill", "playbackTrackThumb"] }
 );

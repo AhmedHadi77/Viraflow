@@ -1,4 +1,6 @@
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { BRAND_GRADIENT } from "../components/GradientIcon";
 import { Screen } from "../components/Screen";
 import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
@@ -11,9 +13,9 @@ export function SplashScreen() {
   return (
     <Screen contentContainerStyle={styles.content}>
       <View style={styles.top}>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>P</Text>
-        </View>
+        <LinearGradient colors={[...BRAND_GRADIENT]} end={{ x: 1, y: 1 }} start={{ x: 0, y: 0 }} style={styles.badge}>
+          <Text style={styles.badgeText}>S</Text>
+        </LinearGradient>
         <View style={styles.copyWrap}>
           <Text style={styles.title}>{copy.appName}</Text>
           <Text style={styles.subtitle}>{copy.tagline}</Text>
@@ -51,14 +53,13 @@ const styles = createThemedStyles({
   },
   badge: {
     alignItems: "center",
-    backgroundColor: palette.primary,
     borderRadius: 36,
     height: 72,
     justifyContent: "center",
     width: 72,
   },
   badgeText: {
-    color: "#071118",
+    color: "#ffffff",
     fontSize: 28,
     fontWeight: "800",
   },

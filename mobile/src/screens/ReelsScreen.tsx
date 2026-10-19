@@ -13,6 +13,7 @@ import { useAppState } from "../providers/AppProvider";
 import { shareReelToApps } from "../services/reelSharing";
 import { darkPalette as palette, radii, shadows, spacing, createDarkStyles } from "../theme";
 import { isReelBoostActive, Reel } from "../types/models";
+import { GradientIconFill } from "../components/GradientIcon";
 
 type ReelFeedMode = "forYou" | "trending";
 
@@ -231,7 +232,7 @@ export function ReelsScreen({ navigation }: { navigation: any }) {
             onPress={() => navigation.navigate("Create", { initialMode: "reel" })}
             style={styles.headerIcon}
           >
-            <Ionicons color="#ffffff" name="add" size={26} style={styles.headerIconGlyph} />
+            <GradientIconFill icon="add" iconSize={24} size={34} />
           </Pressable>
 
           <View style={styles.segmentShell}>
@@ -289,6 +290,7 @@ export function ReelsScreen({ navigation }: { navigation: any }) {
                   void handleLike(item.id);
                 }}
                 onOpen={() => undefined}
+                onOpenCreator={() => rootNavigation.navigate("PublicProfile", { userId: creator.id })}
                 onRepost={() => {
                   void handleShare(item.id);
                 }}

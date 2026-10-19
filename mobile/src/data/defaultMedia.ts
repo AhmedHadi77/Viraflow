@@ -13,7 +13,7 @@ export function buildInitialsAvatarUrl(name?: string | null) {
       .filter(Boolean)
       .slice(0, 2)
       .map((part) => part.charAt(0).toUpperCase())
-      .join("") || "P";
+      .join("") || "S";
 
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=${AVATAR_BACKGROUND}&color=${AVATAR_FOREGROUND}&size=256&bold=true&format=png`;
 }

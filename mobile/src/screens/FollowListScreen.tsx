@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useMemo, useState } from "react";
 import { FlatList, Image, Pressable, Text, TextInput, View } from "react-native";
+import { CallButtons } from "../components/CallButtons";
 import { Screen } from "../components/Screen";
 import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
@@ -128,6 +129,7 @@ export function FollowListScreen({
                   {followsMe && !isMe ? ` · ${copy.followsYou}` : ""}
                 </Text>
               </View>
+              {!isMe && currentUser ? <CallButtons compact navigation={navigation} size={18} userId={item.id} /> : null}
               {!isMe && currentUser ? (
                 <Pressable
                   disabled={pendingId === item.id}

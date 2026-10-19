@@ -5,14 +5,32 @@ import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
 import { CallType } from "../services/calls";
 import { palette, createThemedStyles } from "../theme";
+import { brandTints } from "./GradientIcon";
+import { isCallConnection } from "../utils/callConnection";
 
 /** Voice and video call icons for a profile or chat header. */
-export function CallButtons({ userId, navigation, size = 22 }: { userId: string; navigation: any; size?: number }) {
-  const { language, currentUser, placeCall } = useAppState();
+export function CallButtons({
+  userId,
+  navigation,
+  size = 22,
+  compact = false,
+}: {
+  userId: string;
+  navigation: any;
+  size?: number;
+  /** Smaller buttons for list rows. */
+  compact?: boolean;
+}) {
+  const { language, currentUser, getUserById, placeCall } = useAppState();
   const copy = getCopy(language);
   const [busy, setBusy] = useState(false);
 
   if (!currentUser || currentUser.id === userId) {
+    return null;
+  }
+
+  // Calls are for people you're connected with: someone you follow, or someone who follows you.
+  if (!isCallConnection(currentUser, userId, getUserById(userId))) {
     return null;
   }
 
@@ -42,9 +60,9 @@ export function CallButtons({ userId, navigation, size = 22 }: { userId: string;
         disabled={busy}
         hitSlop={8}
         onPress={() => void handleCall("audio")}
-        style={({ pressed }) => [styles.button, pressed || busy ? styles.pressed : null]}
+        style={({ pressed }) => [styles.button, compact ? styles.compact : null, pressed || busy ? styles.pressed : null]}
       >
-        <Ionicons color={palette.text} name="call-outline" size={size} />
+        <Ionicons color={brandTints.green} name="call" size={compact ? size - 2 : size} />
       </Pressable>
       <Pressable
         accessibilityLabel={copy.callVideo}
@@ -52,9 +70,9 @@ export function CallButtons({ userId, navigation, size = 22 }: { userId: string;
         disabled={busy}
         hitSlop={8}
         onPress={() => void handleCall("video")}
-        style={({ pressed }) => [styles.button, pressed || busy ? styles.pressed : null]}
+        style={({ pressed }) => [styles.button, compact ? styles.compact : null, pressed || busy ? styles.pressed : null]}
       >
-        <Ionicons color={palette.text} name="videocam-outline" size={size + 2} />
+        <Ionicons color={brandTints.cyan} name="videocam" size={compact ? size : size + 2} />
       </Pressable>
     </View>
   );
@@ -73,7 +91,13 @@ const styles = createThemedStyles({
     justifyContent: "center",
     width: 40,
   },
+  compact: {
+    backgroundColor: palette.surfaceMuted,
+    height: 34,
+    width: 34,
+  },
   pressed: {
     opacity: 0.5,
   },
 });
+

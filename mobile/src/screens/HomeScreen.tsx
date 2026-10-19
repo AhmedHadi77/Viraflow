@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { CopyStrings } from "../data/locales/en";
+import { BrandTint, brandTints, GradientIconButton } from "../components/GradientIcon";
 import { openReportSheet } from "../components/ReportSheet";
 import { rtlFlipStyle } from "../utils/layoutDirection";
 import { useIsFocused } from "@react-navigation/native";
@@ -266,23 +267,25 @@ export function HomeScreen({ navigation }: { navigation: any }) {
               <View style={styles.topBar}>
                 <Text style={styles.brand}>{copy.appName}</Text>
                 <View style={styles.topActions}>
-                  <IconBubble icon="search-outline" onPress={() => rootNavigation.navigate("Explore")} />
+                  <IconBubble icon="search-outline" tint="cyan" onPress={() => rootNavigation.navigate("Explore")} />
                   <IconBubble
                     badge={totalDirectUnreadCount > 0 ? String(totalDirectUnreadCount) : undefined}
                     icon="paper-plane-outline"
+                    tint="green"
                     onPress={() => rootNavigation.navigate("DirectInbox")}
                   />
                   <IconBubble
                     badge={unreadNotifications > 0 ? String(unreadNotifications) : undefined}
                     icon="heart-outline"
                     onPress={() => setShowNotificationsTray(true)}
+                    tint="orange"
                   />
                 </View>
               </View>
 
               <Pressable onPress={() => rootNavigation.navigate("Explore")} style={styles.discoverSearchBar}>
                 <View style={styles.discoverSearchIcon}>
-                  <Ionicons color={palette.text} name="search" size={16} />
+                  <Ionicons color={brandTints.cyan} name="search" size={16} />
                 </View>
                 <View style={styles.discoverSearchCopy}>
                   <Text style={styles.discoverSearchTitle}>{copy.homeSearchTitle}</Text>
@@ -346,12 +349,8 @@ export function HomeScreen({ navigation }: { navigation: any }) {
                 <Pressable onPress={() => navigation.navigate("Create", { initialMode: "post" })} style={styles.quickComposerInput}>
                   <Text style={styles.quickComposerText}>{copy.quickComposerPrompt}</Text>
                 </Pressable>
-                <Pressable onPress={() => navigation.navigate("Create", { initialMode: "post" })} style={styles.quickComposerAction}>
-                  <Ionicons color={palette.text} name="images-outline" size={20} />
-                </Pressable>
-                <Pressable onPress={() => navigation.navigate("Create", { initialMode: "reel" })} style={styles.quickComposerAction}>
-                  <Ionicons color={palette.text} name="play-circle-outline" size={20} />
-                </Pressable>
+                <GradientIconButton icon="images-outline" onPress={() => navigation.navigate("Create", { initialMode: "post" })} size={38} tint="cyan" />
+                <GradientIconButton icon="play-circle-outline" onPress={() => navigation.navigate("Create", { initialMode: "reel" })} size={38} tint="orange" />
               </View>
 
               <View style={styles.sectionRow}>
@@ -653,22 +652,15 @@ function getStoryPickerErrorMessage(error: unknown, copy: CopyStrings) {
 function IconBubble({
   icon,
   badge,
+  tint,
   onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   badge?: string;
+  tint: BrandTint;
   onPress: () => void;
 }) {
-  return (
-    <Pressable onPress={onPress} style={styles.iconBubble}>
-      <Ionicons color={palette.text} name={icon} size={22} />
-      {badge ? (
-        <View style={styles.iconBadge}>
-          <Text style={styles.iconBadgeLabel}>{badge}</Text>
-        </View>
-      ) : null}
-    </Pressable>
-  );
+  return <GradientIconButton badge={badge} icon={icon} onPress={onPress} tint={tint} />;
 }
 
 function StoryRing({

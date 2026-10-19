@@ -15,6 +15,7 @@ import { useAppState } from "../providers/AppProvider";
 import { Post, Product, Reel, Story } from "../types/models";
 import { palette, radii, spacing, createThemedStyles } from "../theme";
 import { PAYMENTS_ENABLED } from "../data/catalog";
+import { brandTints, GradientIconButton } from "../components/GradientIcon";
 
 type ProfileSection = "posts" | "reels" | "shop" | "spaces" | "saved";
 
@@ -287,9 +288,13 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
           </View>
 
           {isOwnProfile ? (
-            <Pressable onPress={() => rootNavigation.navigate("Notifications")} style={styles.heroIcon}>
-              <Ionicons color={palette.text} name="notifications-outline" size={22} />
-            </Pressable>
+            <GradientIconButton
+              accessibilityLabel={copy.notifications}
+              icon="notifications-outline"
+              onPress={() => rootNavigation.navigate("Notifications")}
+              size={44}
+              tint="orange"
+            />
           ) : null}
         </View>
 
@@ -472,7 +477,7 @@ function ShortcutChip({
 }) {
   return (
     <Pressable onPress={onPress} style={styles.shortcutChip}>
-      <Ionicons color={palette.text} name={icon} size={16} />
+      <Ionicons color={brandTints.green} name={icon} size={16} />
       <Text style={styles.shortcutLabel}>{label}</Text>
     </Pressable>
   );
