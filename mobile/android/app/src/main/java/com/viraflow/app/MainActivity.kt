@@ -1,7 +1,14 @@
 package com.viraflow.app
 
+import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
+import java.io.File
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -17,6 +24,46 @@ class MainActivity : ReactActivity() {
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
     super.onCreate(null)
+    showLastCrashReport()
+  }
+
+  /** If the previous launch crashed, show what happened so it can be copied or shared for a fix. */
+  private fun showLastCrashReport() {
+    val file = File(filesDir, MainApplication.CRASH_FILE_NAME)
+    if (!file.exists()) {
+      return
+    }
+    val report = try {
+      file.readText()
+    } catch (_: Throwable) {
+      null
+    }
+    file.delete()
+    if (report.isNullOrBlank()) {
+      return
+    }
+    try {
+      AlertDialog.Builder(this)
+        .setTitle("Sohba closed unexpectedly last time")
+        .setMessage("Please share this report with the developer so it can be fixed.\n\n" + report.take(4000))
+        .setPositiveButton("Share") { _, _ ->
+          val share = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "Sohba crash report")
+            putExtra(Intent.EXTRA_TEXT, report)
+          }
+          startActivity(Intent.createChooser(share, "Share crash report"))
+        }
+        .setNeutralButton("Copy") { _, _ ->
+          val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+          clipboard.setPrimaryClip(ClipData.newPlainText("Sohba crash report", report))
+          Toast.makeText(this, "Crash report copied", Toast.LENGTH_SHORT).show()
+        }
+        .setNegativeButton("Close", null)
+        .show()
+    } catch (_: Throwable) {
+      // The report is only a diagnostic; never block the app from opening.
+    }
   }
 
   /**

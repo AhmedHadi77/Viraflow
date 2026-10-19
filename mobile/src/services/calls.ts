@@ -12,15 +12,23 @@ import {
 } from "firebase/firestore";
 import { useSyncExternalStore } from "react";
 import { PermissionsAndroid, Platform, Vibration } from "react-native";
-import {
-  mediaDevices,
-  MediaStream,
-  RTCIceCandidate,
-  RTCPeerConnection,
-  RTCSessionDescription,
-} from "react-native-webrtc";
+import type { MediaStream, RTCPeerConnection } from "react-native-webrtc";
 import { getFirebaseClientFirestore } from "./firebaseClient";
 import { getPublicEnv } from "./publicEnv";
+
+type WebRtcModule = typeof import("react-native-webrtc");
+let webRtcModule: WebRtcModule | null = null;
+
+/**
+ * The WebRTC engine is loaded only when a call actually starts. Loading it at app launch starts the
+ * native media engine straight away, which slows the launch and can close the app on some phones.
+ */
+export function loadWebRtc(): WebRtcModule {
+  if (!webRtcModule) {
+    webRtcModule = require("react-native-webrtc") as WebRtcModule;
+  }
+  return webRtcModule;
+}
 
 // Free 1-to-1 voice and video calls. Audio/video flows peer to peer with WebRTC; Firestore only carries the
 // small "signalling" messages (offer, answer, network candidates) so the two phones can find each other.
@@ -176,7 +184,7 @@ export async function getCall(callId: string) {
 }
 
 async function openLocalMedia(type: CallType) {
-  const stream = (await mediaDevices.getUserMedia({
+  const stream = (await loadWebRtc().mediaDevices.getUserMedia({
     audio: true,
     video: type === "video" ? { facingMode: "user", frameRate: 30, width: 1280, height: 720 } : false,
   })) as MediaStream;
@@ -187,7 +195,7 @@ async function openLocalMedia(type: CallType) {
 
 function createPeer(callId: string, candidateCollection: "callerCandidates" | "calleeCandidates") {
   const db = requireDb();
-  const connection = new RTCPeerConnection({ iceServers: buildIceServers() });
+  const connection = new (loadWebRtc().RTCPeerConnection)({ iceServers: buildIceServers() });
   peer = connection;
   const events = connection as unknown as {
     addEventListener: (name: string, handler: (event: any) => void) => void;
@@ -243,7 +251,7 @@ function listenForRemoteCandidates(callId: string, remoteCollection: "callerCand
       if (peer.remoteDescription == null) {
         pendingCandidates.push(candidate);
       } else {
-        void peer.addIceCandidate(new RTCIceCandidate(candidate as any)).catch(() => undefined);
+        void peer.addIceCandidate(new (loadWebRtc().RTCIceCandidate)(candidate as any)).catch(() => undefined);
       }
     });
   });
@@ -254,7 +262,7 @@ function flushPendingCandidates() {
   const queued = pendingCandidates;
   pendingCandidates = [];
   queued.forEach((candidate) => {
-    void peer?.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => undefined);
+    void peer?.addIceCandidate(new (loadWebRtc().RTCIceCandidate)(candidate)).catch(() => undefined);
   });
 }
 
@@ -313,7 +321,7 @@ export async function startCall(input: { callerId: string; calleeId: string; typ
       if (call.answer && connection.remoteDescription == null) {
         setState({ phase: "connecting" });
         void connection
-          .setRemoteDescription(new RTCSessionDescription(call.answer))
+          .setRemoteDescription(new (loadWebRtc().RTCSessionDescription)(call.answer))
           .then(flushPendingCandidates)
           .catch(() => void hangUp("failed"));
       }
@@ -379,7 +387,7 @@ export async function acceptCall(options?: { asAudio?: boolean }) {
     const stream = await openLocalMedia(type);
     const connection = createPeer(callId, "calleeCandidates");
     stream.getTracks().forEach((track) => connection.addTrack(track, stream));
-    await connection.setRemoteDescription(new RTCSessionDescription(call.offer));
+    await connection.setRemoteDescription(new (loadWebRtc().RTCSessionDescription)(call.offer));
     flushPendingCandidates();
     const answer = await connection.createAnswer();
     await connection.setLocalDescription(answer);

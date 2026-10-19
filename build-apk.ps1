@@ -21,14 +21,14 @@ $studioRoots = @(
     "D:\Android\Android Studio",
     "D:\Program Files\Android\Android Studio"
 )
-foreach ($root in $studioRoots) { $candidates += (Join-Path $root "jbr"); $candidates += (Join-Path $root "jre") }
+foreach ($studioRoot in $studioRoots) { $candidates += (Join-Path $studioRoot "jbr"); $candidates += (Join-Path $studioRoot "jre") }
 $vendorRoots = @(
     "C:\Program Files\Eclipse Adoptium", "C:\Program Files\Java", "C:\Program Files\Microsoft",
     "C:\Program Files\Zulu", "C:\Program Files\Amazon Corretto", "C:\Program Files\BellSoft",
     "C:\Program Files\OpenJDK", "$env:USERPROFILE\.jdks", "$env:USERPROFILE\.gradle\jdks", "D:\Java", "D:\Program Files\Java"
 )
-foreach ($root in $vendorRoots) {
-    if (Test-Path $root) { $candidates += (Get-ChildItem $root -Directory -ErrorAction SilentlyContinue | ForEach-Object FullName) }
+foreach ($vendorRoot in $vendorRoots) {
+    if (Test-Path $vendorRoot) { $candidates += (Get-ChildItem $vendorRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object FullName) }
 }
 # Any other Android Studio install (for example "Android Studio1" or a JetBrains Toolbox copy)
 $candidates += (Get-ChildItem "C:\Program Files\Android", "$env:LOCALAPPDATA\JetBrains\Toolbox\apps" -Directory -Recurse -Depth 3 -Filter "jbr" -ErrorAction SilentlyContinue | ForEach-Object FullName)

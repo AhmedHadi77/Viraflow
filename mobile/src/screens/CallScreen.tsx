@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { ComponentProps, useEffect, useState } from "react";
 import { Image, Pressable, StatusBar, Text, View } from "react-native";
-import { RTCView } from "react-native-webrtc";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
@@ -11,6 +10,7 @@ import {
   declineCall,
   getCall,
   hangUp,
+  loadWebRtc,
   presentIncomingCall,
   switchCamera,
   toggleCamera,
@@ -26,6 +26,7 @@ function formatDuration(totalSeconds: number) {
 }
 
 export function CallScreen({ navigation, route }: { navigation: any; route: { params: { callId: string } } }) {
+  const RTCView = loadWebRtc().RTCView;
   const { language, currentUser, getUserById } = useAppState();
   const copy = getCopy(language);
   const call = useCallState();

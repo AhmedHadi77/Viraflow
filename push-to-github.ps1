@@ -9,7 +9,7 @@ if (-not (git config user.email)) { git config user.email "ahmed777hady@gmail.co
 if (-not (git config user.name)) { git config user.name "Ahmed Hadi" }
 
 git add -A -- . ':!*.apk' ':!android' ':!.vscode' ':!mobile/google-services (2).json' ':!.claude-sync'
-git commit -m "Production cleanup, compact reels UI, pro comments sheet, light/dark theme, 14 languages, region settings, RTL layout, local trends, currency conversion, follower lists, voice/video calls, full admin dashboard, professional polish across all languages, renamed to Sohba"
+git commit -m "Fix Sohba closing on launch: load calls engine only when a call starts, show crash reports instead of closing"
 $commitCode = $LASTEXITCODE
 git push origin main
 $pushCode = $LASTEXITCODE
