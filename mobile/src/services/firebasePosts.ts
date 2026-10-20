@@ -13,7 +13,12 @@ import {
   where,
   writeBatch,
 } from "firebase/firestore";
-import { getFirebaseClientFirestore, isFirebaseClientConfigured } from "./firebaseClient";
+import {
+  combineUnsubscribers,
+  getFirebaseClientFirestore,
+  handleFirestoreListenError,
+  isFirebaseClientConfigured,
+} from "./firebaseClient";
 import { Post, PostComment, PostMediaItem, User } from "../types/models";
 import { DEFAULT_PROFILE_IMAGE, MEDIA_UNAVAILABLE_IMAGE } from "../data/defaultMedia";
 
@@ -53,20 +58,18 @@ export function subscribeToFirebasePosts(input: {
       (snapshot) => {
         input.onPosts(snapshot.docs.map((item) => normalizePostDoc(item.id, item.data())));
       },
-      () => undefined
+      handleFirestoreListenError
     ),
     onSnapshot(
       query(collection(db, POST_COMMENTS_COLLECTION), orderBy("createdAt", "desc"), limit(500)),
       (snapshot) => {
         input.onComments(snapshot.docs.map((item) => normalizePostCommentDoc(item.id, item.data())));
       },
-      () => undefined
+      handleFirestoreListenError
     ),
   ];
 
-  return () => {
-    unsubscribers.forEach((unsubscribe) => unsubscribe());
-  };
+  return combineUnsubscribers(unsubscribers);
 }
 
 export async function createFirebasePost(

@@ -6,7 +6,7 @@ import {
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import React from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { AppNavigator, RootStackParamList } from "./src/navigation/AppNavigator";
 import { AppProvider } from "./src/providers/AppProvider";
 import { CallCoordinator } from "./src/components/CallCoordinator";
@@ -15,6 +15,21 @@ import { navigationRef } from "./src/navigation/navigationRef";
 import { getNotificationNavigationTarget } from "./src/services/notificationRouting";
 import { palette, createThemedStyles, ThemeMode } from "./src/theme";
 import { ThemeProvider, useThemeMode } from "./src/theme/ThemeProvider";
+import { isFirestoreInternalError, resetFirebaseClientFirestore } from "./src/services/firebaseClient";
+
+// A Firestore SDK internal failure must never close the app: rebuild the connection and carry on.
+const globalErrorUtils = (globalThis as { ErrorUtils?: { getGlobalHandler: () => (error: unknown, isFatal?: boolean) => void; setGlobalHandler: (handler: (error: unknown, isFatal?: boolean) => void) => void } }).ErrorUtils;
+if (globalErrorUtils) {
+  const previousHandler = globalErrorUtils.getGlobalHandler();
+  globalErrorUtils.setGlobalHandler((error, isFatal) => {
+    if (isFirestoreInternalError(error)) {
+      console.warn("Sohba rebuilt its Firestore connection after an internal SDK error.");
+      resetFirebaseClientFirestore();
+      return;
+    }
+    previousHandler(error, isFatal);
+  });
+}
 
 function buildNavigationTheme(mode: ThemeMode) {
   return {
@@ -149,6 +164,12 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, { hasErr
   }
 
   componentDidCatch(error: unknown) {
+    if (isFirestoreInternalError(error)) {
+      // Not a real app problem: rebuild Firestore and show the app again straight away.
+      resetFirebaseClientFirestore();
+      setTimeout(() => this.setState({ hasError: false }), 700);
+      return;
+    }
     console.error("Sohba caught a render startup error.", error);
   }
 
@@ -161,6 +182,9 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, { hasErr
             The app hit a startup problem and switched to safe mode. Please close and reopen it after installing the latest
             build.
           </Text>
+          <Pressable accessibilityRole="button" onPress={() => this.setState({ hasError: false })} style={styles.retryButton}>
+            <Text style={styles.retryLabel}>Try again</Text>
+          </Pressable>
         </View>
       );
     }
@@ -187,6 +211,18 @@ const styles = createThemedStyles({
     fontWeight: "800",
     marginBottom: 12,
     textAlign: "center",
+  },
+  retryButton: {
+    backgroundColor: palette.primary,
+    borderRadius: 14,
+    marginTop: 20,
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+  },
+  retryLabel: {
+    color: "#04110b",
+    fontSize: 16,
+    fontWeight: "800",
   },
   errorBody: {
     color: palette.muted,

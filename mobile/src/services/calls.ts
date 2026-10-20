@@ -13,7 +13,7 @@ import {
 import { useSyncExternalStore } from "react";
 import { PermissionsAndroid, Platform, Vibration } from "react-native";
 import type { MediaStream, RTCPeerConnection } from "react-native-webrtc";
-import { getFirebaseClientFirestore } from "./firebaseClient";
+import { combineUnsubscribers, getFirebaseClientFirestore, handleFirestoreListenError } from "./firebaseClient";
 import { getPublicEnv } from "./publicEnv";
 
 type WebRtcModule = typeof import("react-native-webrtc");
@@ -254,7 +254,7 @@ function listenForRemoteCandidates(callId: string, remoteCollection: "callerCand
         void peer.addIceCandidate(new (loadWebRtc().RTCIceCandidate)(candidate as any)).catch(() => undefined);
       }
     });
-  });
+  }, handleFirestoreListenError);
   cleanupFns.push(unsubscribe);
 }
 
@@ -271,7 +271,7 @@ function watchCallDoc(callId: string, onUpdate: (call: CallRecord) => void) {
     if (snapshot.exists()) {
       onUpdate(normalizeCall(snapshot.id, snapshot.data()));
     }
-  });
+  }, handleFirestoreListenError);
   cleanupFns.push(unsubscribe);
 }
 
@@ -438,7 +438,7 @@ function teardown(reason: CallStatus) {
     clearTimeout(disconnectTimer);
     disconnectTimer = null;
   }
-  cleanupFns.forEach((fn) => fn());
+  combineUnsubscribers(cleanupFns)();
   cleanupFns = [];
   try {
     localStream?.getTracks().forEach((track) => track.stop());
@@ -506,7 +506,7 @@ export function subscribeToIncomingCalls(userId: string, onIncoming: (call: Call
   if (!db) {
     return () => undefined;
   }
-  return onSnapshot(
+  const unsubscribe = onSnapshot(
     query(collection(db, CALLS_COLLECTION), where("calleeId", "==", userId), where("status", "==", "ringing")),
     (snapshot) => {
       snapshot.docChanges().forEach((change) => {
@@ -519,6 +519,7 @@ export function subscribeToIncomingCalls(userId: string, onIncoming: (call: Call
         }
       });
     },
-    () => undefined
+    handleFirestoreListenError
   );
+  return combineUnsubscribers([unsubscribe]);
 }

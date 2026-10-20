@@ -1,4 +1,5 @@
 import { normalizeStudioData } from "../utils/studioData";
+import { repairMediaUrl } from "./mediaUpload";
 import {
   collection,
   doc,
@@ -12,7 +13,12 @@ import {
   setDoc,
   updateDoc,
 } from "firebase/firestore";
-import { getFirebaseClientFirestore, isFirebaseClientConfigured } from "./firebaseClient";
+import {
+  combineUnsubscribers,
+  getFirebaseClientFirestore,
+  handleFirestoreListenError,
+  isFirebaseClientConfigured,
+} from "./firebaseClient";
 import { isLanguageOption, LanguageOption, PlanType, Reel, ReelComment, User } from "../types/models";
 import { DEFAULT_PROFILE_IMAGE, MEDIA_UNAVAILABLE_IMAGE } from "../data/defaultMedia";
 
@@ -50,27 +56,25 @@ export function subscribeToFirebaseEngagement(input: {
       (snapshot) => {
         input.onUsers(snapshot.docs.map((item) => normalizeUserDoc(item.id, item.data())));
       },
-      () => undefined
+      handleFirestoreListenError
     ),
     onSnapshot(
       query(collection(db, REELS_COLLECTION), orderBy("createdAt", "desc"), limit(120)),
       (snapshot) => {
         input.onReels(snapshot.docs.map((item) => normalizeReelDoc(item.id, item.data())));
       },
-      () => undefined
+      handleFirestoreListenError
     ),
     onSnapshot(
       query(collection(db, COMMENTS_COLLECTION), orderBy("createdAt", "desc"), limit(300)),
       (snapshot) => {
         input.onComments(snapshot.docs.map((item) => normalizeCommentDoc(item.id, item.data())));
       },
-      () => undefined
+      handleFirestoreListenError
     ),
   ];
 
-  return () => {
-    unsubscribers.forEach((unsubscribe) => unsubscribe());
-  };
+  return combineUnsubscribers(unsubscribers);
 }
 
 export async function toggleFirebaseReelLike(userId: string, reelId: string, fallbackReel?: Reel) {
@@ -262,7 +266,7 @@ function normalizeUserDoc(id: string, data: Record<string, unknown>): User {
     name: readString(data.name, "Sohba Creator"),
     username,
     email: readString(data.email, `${username}@pulseora.app`),
-    profileImage: readString(data.profileImage, DEFAULT_PROFILE_IMAGE),
+    profileImage: repairMediaUrl(readString(data.profileImage, DEFAULT_PROFILE_IMAGE)),
     bio: readString(data.bio, "New creator on Sohba."),
     headline: readString(data.headline, "Creator in progress"),
     language: normalizeLanguage(readString(data.language, "en")),
@@ -272,6 +276,11 @@ function normalizeUserDoc(id: string, data: Record<string, unknown>): User {
     following: readStringArray(data.following),
     reelIds: readStringArray(data.reelIds),
     productIds: readStringArray(data.productIds),
+    website: typeof data.website === "string" && data.website.trim() ? data.website.trim() : undefined,
+    // Keep the account's role and ban state, otherwise admins lose their Admin button after a refresh.
+    role: data.role === "admin" ? "admin" : "user",
+    isBanned: data.isBanned === true,
+    bannedAt: typeof data.bannedAt === "string" && data.bannedAt ? data.bannedAt : undefined,
   };
 }
 

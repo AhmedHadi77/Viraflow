@@ -11,7 +11,12 @@ import {
   where,
   writeBatch,
 } from "firebase/firestore";
-import { getFirebaseClientFirestore, isFirebaseClientConfigured } from "./firebaseClient";
+import {
+  combineUnsubscribers,
+  getFirebaseClientFirestore,
+  handleFirestoreListenError,
+  isFirebaseClientConfigured,
+} from "./firebaseClient";
 import {
   CommunityChatMessage,
   CommunitySpace,
@@ -82,41 +87,39 @@ export function subscribeToFirebaseChat(
       (snapshot) => {
         input.onDirectThreads(sortDirectThreads(snapshot.docs.map((item) => normalizeDirectThreadDoc(item.id, item.data()))));
       },
-      () => undefined
+      handleFirestoreListenError
     ),
     onSnapshot(
       query(collection(db, DIRECT_MESSAGES_COLLECTION), where("participantIds", "array-contains", userId), limit(500)),
       (snapshot) => {
         input.onDirectMessages(sortChatMessages(snapshot.docs.map((item) => normalizeDirectMessageDoc(item.id, item.data()))));
       },
-      () => undefined
+      handleFirestoreListenError
     ),
     onSnapshot(
       query(collection(db, MARKETPLACE_THREADS_COLLECTION), where("participantIds", "array-contains", userId), limit(120)),
       (snapshot) => {
         input.onMarketplaceThreads(sortMarketplaceThreads(snapshot.docs.map((item) => normalizeMarketplaceThreadDoc(item.id, item.data()))));
       },
-      () => undefined
+      handleFirestoreListenError
     ),
     onSnapshot(
       query(collection(db, MARKETPLACE_MESSAGES_COLLECTION), where("participantIds", "array-contains", userId), limit(500)),
       (snapshot) => {
         input.onMarketplaceMessages(sortChatMessages(snapshot.docs.map((item) => normalizeMarketplaceMessageDoc(item.id, item.data()))));
       },
-      () => undefined
+      handleFirestoreListenError
     ),
     onSnapshot(
       query(collection(db, COMMUNITY_MESSAGES_COLLECTION), where("participantIds", "array-contains", userId), limit(500)),
       (snapshot) => {
         input.onCommunityMessages(sortChatMessages(snapshot.docs.map((item) => normalizeCommunityChatMessageDoc(item.id, item.data()))));
       },
-      () => undefined
+      handleFirestoreListenError
     ),
   ];
 
-  return () => {
-    unsubscribers.forEach((unsubscribe) => unsubscribe());
-  };
+  return combineUnsubscribers(unsubscribers);
 }
 
 export async function startFirebaseDirectChat(currentUser: User, targetUser: User) {

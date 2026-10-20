@@ -11,7 +11,12 @@ import {
   where,
   writeBatch,
 } from "firebase/firestore";
-import { getFirebaseClientFirestore, isFirebaseClientConfigured } from "./firebaseClient";
+import {
+  combineUnsubscribers,
+  getFirebaseClientFirestore,
+  handleFirestoreListenError,
+  isFirebaseClientConfigured,
+} from "./firebaseClient";
 import {
   CommunityPost,
   CommunitySpace,
@@ -73,14 +78,14 @@ export function subscribeToFirebaseCommunityCommerce(
       (snapshot) => {
         input.onCommunities(snapshot.docs.map((item) => normalizeCommunityDoc(item.id, item.data())));
       },
-      () => undefined
+      handleFirestoreListenError
     ),
     onSnapshot(
       query(collection(db, COMMUNITY_POSTS_COLLECTION), orderBy("createdAt", "desc"), limit(320)),
       (snapshot) => {
         input.onCommunityPosts(sortCommunityPosts(snapshot.docs.map((item) => normalizeCommunityPostDoc(item.id, item.data()))));
       },
-      () => undefined
+      handleFirestoreListenError
     ),
     onSnapshot(
       query(collection(db, MARKETPLACE_ORDERS_COLLECTION), where("participantIds", "array-contains", userId), limit(160)),
@@ -89,13 +94,11 @@ export function subscribeToFirebaseCommunityCommerce(
           sortMarketplaceOrders(snapshot.docs.map((item) => normalizeMarketplaceOrderDoc(item.id, item.data())))
         );
       },
-      () => undefined
+      handleFirestoreListenError
     ),
   ];
 
-  return () => {
-    unsubscribers.forEach((unsubscribe) => unsubscribe());
-  };
+  return combineUnsubscribers(unsubscribers);
 }
 
 export async function fetchFirebaseCommunityActivity(communityId: string) {

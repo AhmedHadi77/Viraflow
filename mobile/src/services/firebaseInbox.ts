@@ -12,7 +12,12 @@ import {
   where,
   writeBatch,
 } from "firebase/firestore";
-import { getFirebaseClientFirestore, isFirebaseClientConfigured } from "./firebaseClient";
+import {
+  combineUnsubscribers,
+  getFirebaseClientFirestore,
+  handleFirestoreListenError,
+  isFirebaseClientConfigured,
+} from "./firebaseClient";
 import {
   AppNotification,
   ConversationType,
@@ -62,20 +67,18 @@ export function subscribeToFirebaseInbox(
       (snapshot) => {
         input.onSavedPosts(snapshot.docs.map((item) => normalizeSavedPostDoc(item.id, item.data())));
       },
-      () => undefined
+      handleFirestoreListenError
     ),
     onSnapshot(
       query(collection(db, NOTIFICATIONS_COLLECTION), where("userId", "==", userId), orderBy("createdAt", "desc"), limit(200)),
       (snapshot) => {
         input.onNotifications(snapshot.docs.map((item) => normalizeNotificationDoc(item.id, item.data())));
       },
-      () => undefined
+      handleFirestoreListenError
     ),
   ];
 
-  return () => {
-    unsubscribers.forEach((unsubscribe) => unsubscribe());
-  };
+  return combineUnsubscribers(unsubscribers);
 }
 
 export async function toggleFirebaseSavedPost(userId: string, entityType: SavedEntityType, entityId: string) {

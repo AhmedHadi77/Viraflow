@@ -3,7 +3,7 @@
     "name": "Sohba",
     "slug": "viraflow",
     "scheme": "pulseora",
-    "version": "1.0.10",
+    "version": "1.0.11",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/pulseora-icon.png",
@@ -19,7 +19,7 @@
       "supportsTablet": true
     },
     "android": {
-      "versionCode": 11,
+      "versionCode": 12,
       "package": "com.viraflow.app",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {

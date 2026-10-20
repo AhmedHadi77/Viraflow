@@ -8,7 +8,12 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import { getFirebaseClientFirestore, isFirebaseClientConfigured } from "./firebaseClient";
+import {
+  combineUnsubscribers,
+  getFirebaseClientFirestore,
+  handleFirestoreListenError,
+  isFirebaseClientConfigured,
+} from "./firebaseClient";
 import {
   AppSubscription,
   AppSubscriptionStatus,
@@ -56,20 +61,18 @@ export function subscribeToFirebaseMonetization(
       (snapshot) => {
         input.onSubscription(snapshot.exists() ? normalizeSubscriptionDoc(snapshot.id, snapshot.data()) : null);
       },
-      () => undefined
+      handleFirestoreListenError
     ),
     onSnapshot(
       query(collection(db, REEL_BOOSTS_COLLECTION), where("userId", "==", userId), limit(160)),
       (snapshot) => {
         input.onBoosts(sortBoosts(snapshot.docs.map((item) => normalizeBoostDoc(item.id, item.data()))));
       },
-      () => undefined
+      handleFirestoreListenError
     ),
   ];
 
-  return () => {
-    unsubscribers.forEach((unsubscribe) => unsubscribe());
-  };
+  return combineUnsubscribers(unsubscribers);
 }
 
 export function getFirebaseMonetizationErrorMessage(error: unknown) {

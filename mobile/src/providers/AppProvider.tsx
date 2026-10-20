@@ -1,9 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { I18nManager, Linking } from "react-native";
+import { AppState, I18nManager, Linking } from "react-native";
 import { applyLayoutDirection, isRtlLanguage } from "../utils/layoutDirection";
 import { getCopy } from "../data/copy";
 import { isCallConnection } from "../utils/callConnection";
+import { onFirestoreReset } from "../services/firebaseClient";
 import { reelBoostPlans, subscriptionPlans } from "../data/catalog";
 import {
   AppApiError,
@@ -674,6 +675,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const currentUser = users.find((item) => item.id === session?.userId) ?? null;
+  // Live Firestore listeners restart only when the account changes or Firestore had to be rebuilt,
+  // not on every sign-in token refresh (restarting them all at once can break the Firestore SDK).
+  const [firestoreEpoch, setFirestoreEpoch] = useState(0);
+  useEffect(() => onFirestoreReset(() => setFirestoreEpoch((value) => value + 1)), []);
+  const firebaseListenKey = isFirebaseBackedSession(session) && session?.userId ? `${session.userId}:${firestoreEpoch}` : "";
   const isAdmin = currentUser?.role === "admin";
   const googleSignInEnabled = isGoogleSignInConfigured();
   const googleSignInMessage = getGoogleSignInUnavailableMessage();
@@ -1098,7 +1104,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       console.warn("Sohba engagement sync was skipped for safety.", error);
       return;
     }
-  }, [session?.token]);
+  }, [firebaseListenKey]);
 
   useEffect(() => {
     if (!isFirebaseBackedSession(session)) {
@@ -1118,7 +1124,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       console.warn("Sohba post sync was skipped for safety.", error);
       return;
     }
-  }, [session?.token]);
+  }, [firebaseListenKey]);
 
   useEffect(() => {
     const firebaseUserId = session?.userId;
@@ -1135,7 +1141,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       console.warn("Sohba inbox sync was skipped for safety.", error);
       return;
     }
-  }, [session?.token, session?.userId]);
+  }, [firebaseListenKey]);
 
   useEffect(() => {
     const firebaseUserId = session?.userId;
@@ -1155,7 +1161,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       console.warn("Sohba chat sync was skipped for safety.", error);
       return;
     }
-  }, [session?.token, session?.userId]);
+  }, [firebaseListenKey]);
 
   useEffect(() => {
     const firebaseUserId = session?.userId;
@@ -1173,7 +1179,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       console.warn("Sohba community sync was skipped for safety.", error);
       return;
     }
-  }, [session?.token, session?.userId]);
+  }, [firebaseListenKey]);
 
   useEffect(() => {
     const firebaseUserId = session?.userId;
@@ -1194,7 +1200,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       console.warn("Sohba monetization sync was skipped for safety.", error);
       return;
     }
-  }, [session?.token, session?.userId]);
+  }, [firebaseListenKey]);
 
   useEffect(() => {
     const firebaseUserId = session?.userId;
@@ -1466,27 +1472,69 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   // Ask the server whether this account is the owner/admin. The owner is promoted automatically.
+  // The server can take up to a minute to wake up, so keep trying for a while, check again whenever
+  // the app returns to the foreground, and also re-read the role saved on the account itself.
   useEffect(() => {
     if (!currentUser?.id || !isFirebaseBackedSession(session)) {
       setIsOwner(false);
       return;
     }
     let active = true;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
     const userId = currentUser.id;
-    adminApi
-      .me()
-      .then((result) => {
-        if (!active) {
-          return;
-        }
-        setIsOwner(result.isOwner || Boolean(result.canManageRoles));
-        if (result.isAdmin) {
-          setUsers((current) => current.map((user) => (user.id === userId && user.role !== "admin" ? { ...user, role: "admin" } : user)));
-        }
-      })
-      .catch(() => undefined);
+    const markAdmin = () => {
+      setUsers((current) => current.map((user) => (user.id === userId && user.role !== "admin" ? { ...user, role: "admin" } : user)));
+      void AsyncStorage.getItem(STORAGE_KEYS.firebaseUser)
+        .then((raw) => {
+          const cached = raw ? (JSON.parse(raw) as User) : null;
+          if (cached?.id === userId && cached.role !== "admin") {
+            return AsyncStorage.setItem(STORAGE_KEYS.firebaseUser, JSON.stringify({ ...cached, role: "admin" }));
+          }
+          return undefined;
+        })
+        .catch(() => undefined);
+    };
+    const check = (attempt: number) => {
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+      adminApi
+        .me()
+        .then((result) => {
+          if (!active) {
+            return;
+          }
+          setIsOwner(result.isOwner || Boolean(result.canManageRoles));
+          if (result.isAdmin) {
+            markAdmin();
+          }
+        })
+        .catch(() => {
+          if (active && attempt < 4) {
+            retryTimer = setTimeout(() => check(attempt + 1), [5000, 15000, 30000, 60000][attempt]);
+          }
+        });
+      void getFirebaseProfileById(userId)
+        .then((profile) => {
+          if (active && profile?.role === "admin") {
+            markAdmin();
+          }
+        })
+        .catch(() => undefined);
+    };
+    check(0);
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        check(0);
+      }
+    });
     return () => {
       active = false;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
+      subscription.remove();
     };
   }, [currentUser?.id, session?.token]);
 

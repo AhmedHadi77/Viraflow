@@ -392,6 +392,9 @@ function ProfileContent({ navigation, profileUser }: { navigation: any; profileU
             </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shortcutRow}>
+              {currentUser?.role === "admin" ? (
+                <ShortcutChip icon="shield-checkmark-outline" label={copy.adminTitle} onPress={() => rootNavigation.navigate("Admin")} />
+              ) : null}
               <ShortcutChip
                 icon="paper-plane-outline"
                 label={totalDirectUnreadCount > 0 ? `${copy.direct} ${totalDirectUnreadCount}` : copy.direct}
@@ -402,9 +405,6 @@ function ProfileContent({ navigation, profileUser }: { navigation: any; profileU
                 label={totalMarketplaceUnreadCount > 0 ? `${copy.marketplace} ${totalMarketplaceUnreadCount}` : copy.marketplace}
                 onPress={() => rootNavigation.navigate("MarketplaceInbox")}
               />
-              {currentUser?.role === "admin" ? (
-                <ShortcutChip icon="shield-checkmark-outline" label={copy.adminTitle} onPress={() => rootNavigation.navigate("Admin")} />
-              ) : null}
               <ShortcutChip icon="sparkles-outline" label={copy.aiTools} onPress={() => rootNavigation.navigate("AITools")} />
               <ShortcutChip icon="settings-outline" label={copy.settingsTitle} onPress={() => rootNavigation.navigate("Settings")} />
               {PAYMENTS_ENABLED ? (

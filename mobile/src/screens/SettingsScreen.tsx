@@ -142,6 +142,14 @@ export function SettingsScreen({ navigation }: { navigation: any }) {
               title={copy.notificationsSetting}
               value={pushNotificationsStatus.mode === "remote" ? copy.notificationsOn : copy.notificationsOff}
             />
+            {currentUser.role === "admin" ? (
+              <SettingRow
+                icon="shield-checkmark-outline"
+                onPress={() => navigation.navigate("Admin")}
+                title={copy.adminDashboard}
+                value={copy.adminTitle}
+              />
+            ) : null}
             <SettingRow
               icon="albums-outline"
               onPress={() => navigation.navigate("MyContent")}

@@ -1,4 +1,5 @@
 import { normalizeStudioData } from "../utils/studioData";
+import { repairMediaUrl } from "./mediaUpload";
 import {
   arrayUnion,
   collection,
@@ -433,7 +434,7 @@ function normalizeUserDoc(id: string, data: Record<string, unknown>): User {
     name: readString(data.name, "Sohba Creator"),
     username,
     email: readString(data.email, `${username}@pulseora.app`),
-    profileImage: readString(data.profileImage, DEFAULT_PROFILE_IMAGE),
+    profileImage: repairMediaUrl(readString(data.profileImage, DEFAULT_PROFILE_IMAGE)),
     bio: readString(data.bio, "New creator on Sohba."),
     headline: readString(data.headline, "Creator in progress"),
     language: normalizeLanguage(readString(data.language, "en")),
@@ -443,6 +444,11 @@ function normalizeUserDoc(id: string, data: Record<string, unknown>): User {
     following: readStringArray(data.following),
     reelIds: readStringArray(data.reelIds),
     productIds: readStringArray(data.productIds),
+    website: readOptionalString(data.website),
+    // Keep the account's role and ban state, otherwise admins lose their Admin button after a refresh.
+    role: data.role === "admin" ? "admin" : "user",
+    isBanned: data.isBanned === true,
+    bannedAt: readOptionalString(data.bannedAt),
   };
 }
 
