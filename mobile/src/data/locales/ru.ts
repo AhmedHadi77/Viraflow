@@ -872,6 +872,7 @@ const ru: Partial<CopyStrings> = {
   sfMono: "Моно",
   sfNoir: "Нуар",
   csFileTooBig: "Некоторые файлы слишком большие. Видео — до 100 МБ, фото — до 10 МБ. Попробуйте клип покороче.",
+  adminDeletedBody: "Удалено. Контент убран у всех.",
 };
 
 export default ru;

@@ -1,14 +1,46 @@
 import admin from "firebase-admin";
 import { env } from "../config/env";
 
-let firebaseInitFailed = false;
+let firebaseInitFailedAt = 0;
+let firebaseInitError = "";
+const INIT_RETRY_MS = 60_000;
 
+/**
+ * Turns whatever was pasted into FIREBASE_PRIVATE_KEY into a valid PEM key. Hosting dashboards often
+ * keep the quotes, store the line breaks as "\\n", or turn them into spaces when the key is pasted into
+ * a one-line field; any of those used to stop Firebase Admin from starting.
+ */
 function getPrivateKey() {
-  return env.firebasePrivateKey.replace(/^["']|["']$/g, "").replace(/\\n/g, "\n");
+  let raw = env.firebasePrivateKey.trim().replace(/^["']|["']$/g, "").replace(/\\n/g, "\n").replace(/\r/g, "");
+  if (!raw.includes("BEGIN") && /^[A-Za-z0-9+/=\s]+$/.test(raw) && raw.length > 200) {
+    // A base64-encoded copy of the whole key.
+    try {
+      const decoded = Buffer.from(raw.replace(/\s+/g, ""), "base64").toString("utf8");
+      if (decoded.includes("BEGIN")) {
+        raw = decoded;
+      }
+    } catch {
+      // Not base64; use as is.
+    }
+  }
+  const match = raw.match(/-----BEGIN ([A-Z ]+)-----([\s\S]*?)-----END \1-----/);
+  if (!match) {
+    return raw;
+  }
+  const label = match[1];
+  const body = match[2].replace(/\s+/g, "");
+  const lines = body.match(/.{1,64}/g) ?? [];
+  return `-----BEGIN ${label}-----\n${lines.join("\n")}\n-----END ${label}-----\n`;
 }
 
 export function isFirebaseAdminConfigured() {
   return Boolean(env.firebaseProjectId && env.firebaseClientEmail && env.firebasePrivateKey);
+}
+
+/** Whether Firebase Admin actually started, and why not (for the health check). Never includes secrets. */
+export function getFirebaseAdminStatus() {
+  const ready = Boolean(getFirebaseAdminApp());
+  return { ready, error: ready ? undefined : firebaseInitError || (isFirebaseAdminConfigured() ? "unknown" : "missing settings") };
 }
 
 export function getFirebaseAdminApp() {
@@ -21,22 +53,26 @@ export function getFirebaseAdminApp() {
     return existingApp;
   }
 
-  if (firebaseInitFailed) {
+  if (firebaseInitFailedAt && Date.now() - firebaseInitFailedAt < INIT_RETRY_MS) {
     return undefined;
   }
 
   try {
-    return admin.initializeApp({
+    const app = admin.initializeApp({
       credential: admin.credential.cert({
-        projectId: env.firebaseProjectId,
-        clientEmail: env.firebaseClientEmail,
+        projectId: env.firebaseProjectId.trim(),
+        clientEmail: env.firebaseClientEmail.trim().replace(/^["']|["']$/g, ""),
         privateKey: getPrivateKey(),
       }),
       storageBucket: env.firebaseStorageBucket || undefined,
     });
+    firebaseInitFailedAt = 0;
+    firebaseInitError = "";
+    return app;
   } catch (error) {
-    firebaseInitFailed = true;
-    console.error("Firebase Admin initialization failed.", error);
+    firebaseInitFailedAt = Date.now();
+    firebaseInitError = (error instanceof Error ? error.message : String(error)).slice(0, 200);
+    console.error("Firebase Admin initialization failed.", firebaseInitError);
     return undefined;
   }
 }

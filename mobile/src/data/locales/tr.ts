@@ -872,6 +872,7 @@ const tr: Partial<CopyStrings> = {
   sfMono: "Mono",
   sfNoir: "Noir",
   csFileTooBig: "Bazı dosyalar çok büyük. Videolar en fazla 100 MB, fotoğraflar 10 MB olabilir — daha kısa bir klip dene.",
+  adminDeletedBody: "Silindi. İçerik herkes için kaldırıldı.",
 };
 
 export default tr;

@@ -872,6 +872,7 @@ const zh: Partial<CopyStrings> = {
   sfMono: "黑白",
   sfNoir: "黑色电影",
   csFileTooBig: "部分文件过大。视频最大 100 MB，照片最大 10 MB，请尝试更短的片段。",
+  adminDeletedBody: "已删除，所有人都看不到了。",
 };
 
 export default zh;

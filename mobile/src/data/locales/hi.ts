@@ -872,6 +872,7 @@ const hi: Partial<CopyStrings> = {
   sfMono: "मोनो",
   sfNoir: "न्वार",
   csFileTooBig: "कुछ फ़ाइलें बहुत बड़ी हैं। वीडियो 100 MB तक और फ़ोटो 10 MB तक हो सकती हैं — छोटा क्लिप आज़माएं।",
+  adminDeletedBody: "हटा दिया गया। यह सबके लिए हटा दिया गया है।",
 };
 
 export default hi;

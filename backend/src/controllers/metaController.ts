@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { env } from "../config/env";
 import { getExchangeRates } from "../services/exchangeRateService";
-import { isFirebaseAdminConfigured } from "../services/firebaseService";
+import { getFirebaseAdminStatus, isFirebaseAdminConfigured } from "../services/firebaseService";
 
 export function health(_req: Request, res: Response) {
   res.json({
@@ -11,6 +11,7 @@ export function health(_req: Request, res: Response) {
     host: env.host,
     port: env.port,
     firebaseConfigured: isFirebaseAdminConfigured(),
+    firebaseAdmin: getFirebaseAdminStatus(),
     cloudinaryConfigured: Boolean(env.cloudinaryCloudName && env.cloudinaryApiKey && env.cloudinaryApiSecret),
     stripeConfigured: Boolean(env.stripeSecretKey && env.stripeWebhookSecret && env.stripeSuccessUrl && env.stripeCancelUrl),
     stripeSubscriptionPricesConfigured: Boolean(env.stripePriceWeekly && env.stripePriceMonthly && env.stripePriceYearly),

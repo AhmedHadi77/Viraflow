@@ -872,6 +872,7 @@ const de: Partial<CopyStrings> = {
   sfMono: "Mono",
   sfNoir: "Noir",
   csFileTooBig: "Einige Dateien sind zu groß. Videos dürfen bis zu 100 MB, Fotos bis zu 10 MB groß sein – versuche einen kürzeren Clip.",
+  adminDeletedBody: "Gelöscht. Der Inhalt wurde für alle entfernt.",
 };
 
 export default de;

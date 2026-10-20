@@ -872,6 +872,7 @@ const ar: Partial<CopyStrings> = {
   sfMono: "أبيض وأسود",
   sfNoir: "نوار",
   csFileTooBig: "بعض الملفات كبيرة جداً. الحد الأقصى للفيديو 100 ميغابايت وللصورة 10 ميغابايت — جرّب مقطعاً أقصر.",
+  adminDeletedBody: "تم الحذف. أُزيل المحتوى لدى الجميع.",
 };
 
 export default ar;

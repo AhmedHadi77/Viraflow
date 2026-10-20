@@ -872,6 +872,7 @@ const ur: Partial<CopyStrings> = {
   sfMono: "مونو",
   sfNoir: "نوار",
   csFileTooBig: "کچھ فائلیں بہت بڑی ہیں۔ ویڈیو 100 MB اور تصویر 10 MB تک ہو سکتی ہے — چھوٹا کلپ آزمائیں۔",
+  adminDeletedBody: "حذف کر دیا گیا۔ یہ سب کے لیے ہٹا دیا گیا ہے۔",
 };
 
 export default ur;

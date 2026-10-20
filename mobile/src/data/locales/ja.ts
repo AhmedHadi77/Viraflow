@@ -872,6 +872,7 @@ const ja: Partial<CopyStrings> = {
   sfMono: "モノクロ",
   sfNoir: "ノワール",
   csFileTooBig: "大きすぎるファイルがあります。動画は100MB、写真は10MBまでです。短いクリップでお試しください。",
+  adminDeletedBody: "削除しました。全員の画面から削除されました。",
 };
 
 export default ja;

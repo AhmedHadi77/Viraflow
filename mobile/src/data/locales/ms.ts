@@ -872,6 +872,7 @@ const ms: Partial<CopyStrings> = {
   sfMono: "Mono",
   sfNoir: "Noir",
   csFileTooBig: "Sesetengah fail terlalu besar. Video maksimum 100 MB dan foto 10 MB — cuba klip yang lebih pendek.",
+  adminDeletedBody: "Dipadam. Kandungan telah dibuang untuk semua orang.",
 };
 
 export default ms;

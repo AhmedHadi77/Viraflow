@@ -871,6 +871,7 @@ const en = {
   sfMono: "Mono",
   sfNoir: "Noir",
   csFileTooBig: "Some files are too large. Videos can be up to 100 MB and photos up to 10 MB — try a shorter clip.",
+  adminDeletedBody: "Deleted. It has been removed for everyone.",
 };
 
 export type CopyStrings = typeof en;

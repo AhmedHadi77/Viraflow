@@ -443,7 +443,7 @@ export function AdminDashboardScreen({ navigation }: { navigation: any }) {
       return;
     }
 
-    Alert.alert(copy.post, copy.deletePostBody);
+    Alert.alert(copy.post, copy.adminDeletedBody);
   }
 
   async function handleDeleteReel(reel: Reel) {
@@ -453,7 +453,7 @@ export function AdminDashboardScreen({ navigation }: { navigation: any }) {
       return;
     }
 
-    Alert.alert(copy.reels, copy.deleteUnavailableBody);
+    Alert.alert(copy.reels, copy.adminDeletedBody);
   }
 
   async function handleDeleteStory(story: Story) {
@@ -463,7 +463,7 @@ export function AdminDashboardScreen({ navigation }: { navigation: any }) {
       return;
     }
 
-    Alert.alert(copy.storyFallbackLabel, copy.deleteStoryBody);
+    Alert.alert(copy.storyFallbackLabel, copy.adminDeletedBody);
   }
 
   async function handleReportStatus(report: ContentReport, status: ContentReport["status"]) {

@@ -872,6 +872,7 @@ const id: Partial<CopyStrings> = {
   sfMono: "Mono",
   sfNoir: "Noir",
   csFileTooBig: "Beberapa file terlalu besar. Video maksimal 100 MB dan foto maksimal 10 MB — coba klip yang lebih pendek.",
+  adminDeletedBody: "Dihapus. Konten telah dihapus untuk semua orang.",
 };
 
 export default id;
