@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Avatar } from "../components/Avatar";
 import { useMemo, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { PostPreviewSheet } from "../components/PostPreviewSheet";
@@ -80,7 +81,7 @@ export function HashtagFeedScreen({
                 onPress={() => rootNavigation.navigate("PublicProfile", { userId: creator.id })}
                 style={styles.creatorCard}
               >
-                <Image source={{ uri: creator.profileImage }} style={styles.creatorAvatar} />
+                <Avatar name={creator.name} style={styles.creatorAvatar} uri={creator.profileImage} />
                 <Text numberOfLines={1} style={styles.creatorName}>
                   {creator.name}
                 </Text>

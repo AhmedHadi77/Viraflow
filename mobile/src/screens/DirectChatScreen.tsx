@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Avatar } from "../components/Avatar";
 import { CallButtons } from "../components/CallButtons";
 import * as ImagePicker from "expo-image-picker";
 import * as Linking from "expo-linking";
@@ -12,7 +13,6 @@ import { useAppState } from "../providers/AppProvider";
 import { type CreateDirectMessagePayload, type DirectChatMessage } from "../types/models";
 import { palette, radii, spacing, createThemedStyles } from "../theme";
 import { formatLocaleDateTime, formatRelativeTime } from "../utils/timeFormatting";
-import { DEFAULT_PROFILE_IMAGE } from "../data/defaultMedia";
 
 interface PendingDirectAttachment {
   uri: string;
@@ -211,7 +211,7 @@ export function DirectChatScreen({ navigation, route }: { navigation: any; route
         onPress={() => counterpart && navigation.navigate("PublicProfile", { userId: counterpart.id })}
         style={styles.chatHeader}
       >
-        <Image source={{ uri: counterpart?.profileImage || DEFAULT_PROFILE_IMAGE }} style={styles.chatHeaderAvatar} />
+        <Avatar name={counterpart?.name} style={styles.chatHeaderAvatar} uri={counterpart?.profileImage} />
         <View style={styles.chatHeaderCopy}>
           <Text numberOfLines={1} style={styles.chatHeaderName}>
             {counterpart?.name ?? copy.directChatTitle}

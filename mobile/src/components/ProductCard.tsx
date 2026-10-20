@@ -1,4 +1,5 @@
 import { Image, Pressable, Text, View } from "react-native";
+import { Avatar } from "./Avatar";
 import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
 import { categoryLabel, listingStatusLabel } from "../utils/labels";
@@ -53,7 +54,7 @@ export function ProductCard({ product, seller, onPress, onSellerPress, nearbyLab
           </Text>
         </View>
         <Pressable onPress={onSellerPress} style={styles.sellerRow}>
-          <Image source={{ uri: seller.profileImage }} style={styles.avatar} />
+          <Avatar name={seller.name} style={styles.avatar} uri={seller.profileImage} />
           <View>
             <Text style={styles.sellerName}>{seller.name}</Text>
             <Text style={styles.sellerHandle}>@{seller.username}</Text>

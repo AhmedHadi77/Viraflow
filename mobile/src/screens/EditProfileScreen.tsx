@@ -1,6 +1,7 @@
 import * as ImagePicker from "expo-image-picker";
+import { Avatar } from "../components/Avatar";
 import { useState } from "react";
-import { Alert, Image, View } from "react-native";
+import { Alert, View } from "react-native";
 import { InputField } from "../components/InputField";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
@@ -95,7 +96,7 @@ export function EditProfileScreen({ navigation }: { navigation: any }) {
       <SectionTitle title={copy.editProfile} subtitle={copy.tagline} />
       <View style={styles.form}>
         <View style={styles.photoCard}>
-          <Image source={{ uri: profileImage || currentUser?.profileImage }} style={styles.photoPreview} />
+          <Avatar name={currentUser?.name} style={styles.photoPreview} uri={profileImage || currentUser?.profileImage} />
           <PrimaryButton label={copy.uploadProfilePhoto} onPress={() => void handlePickProfilePhoto()} variant="ghost" />
         </View>
         <InputField autoCapitalize="words" autoCorrect={false} label={copy.fullName} onChangeText={setName} value={name} />

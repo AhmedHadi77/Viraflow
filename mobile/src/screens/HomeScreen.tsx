@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Avatar } from "../components/Avatar";
 import type { CopyStrings } from "../data/locales/en";
-import { BrandTint, brandTints, GradientIconButton } from "../components/GradientIcon";
+import { BRAND_GRADIENT, BrandTint, brandColor, GradientIconButton, STORY_GRADIENT } from "../components/GradientIcon";
 import { openReportSheet } from "../components/ReportSheet";
 import { rtlFlipStyle } from "../utils/layoutDirection";
 import { useIsFocused } from "@react-navigation/native";
@@ -267,25 +268,24 @@ export function HomeScreen({ navigation }: { navigation: any }) {
               <View style={styles.topBar}>
                 <Text style={styles.brand}>{copy.appName}</Text>
                 <View style={styles.topActions}>
-                  <IconBubble icon="search-outline" tint="cyan" onPress={() => rootNavigation.navigate("Explore")} />
+                  <IconBubble icon="search-outline" onPress={() => rootNavigation.navigate("Explore")} />
                   <IconBubble
                     badge={totalDirectUnreadCount > 0 ? String(totalDirectUnreadCount) : undefined}
                     icon="paper-plane-outline"
-                    tint="green"
                     onPress={() => rootNavigation.navigate("DirectInbox")}
                   />
                   <IconBubble
                     badge={unreadNotifications > 0 ? String(unreadNotifications) : undefined}
                     icon="heart-outline"
                     onPress={() => setShowNotificationsTray(true)}
-                    tint="orange"
+                    tint="accent"
                   />
                 </View>
               </View>
 
               <Pressable onPress={() => rootNavigation.navigate("Explore")} style={styles.discoverSearchBar}>
                 <View style={styles.discoverSearchIcon}>
-                  <Ionicons color={brandTints.cyan} name="search" size={16} />
+                  <Ionicons color={brandColor()} name="search" size={16} />
                 </View>
                 <View style={styles.discoverSearchCopy}>
                   <Text style={styles.discoverSearchTitle}>{copy.homeSearchTitle}</Text>
@@ -345,12 +345,12 @@ export function HomeScreen({ navigation }: { navigation: any }) {
               </ScrollView>
 
               <View style={styles.quickComposer}>
-                <Image source={{ uri: currentUser?.profileImage }} style={styles.quickComposerAvatar} />
+                <Avatar name={currentUser?.name} style={styles.quickComposerAvatar} uri={currentUser?.profileImage} />
                 <Pressable onPress={() => navigation.navigate("Create", { initialMode: "post" })} style={styles.quickComposerInput}>
                   <Text style={styles.quickComposerText}>{copy.quickComposerPrompt}</Text>
                 </Pressable>
-                <GradientIconButton icon="images-outline" onPress={() => navigation.navigate("Create", { initialMode: "post" })} size={38} tint="cyan" />
-                <GradientIconButton icon="play-circle-outline" onPress={() => navigation.navigate("Create", { initialMode: "reel" })} size={38} tint="orange" />
+                <GradientIconButton icon="images-outline" onPress={() => navigation.navigate("Create", { initialMode: "post" })} size={38} />
+                <GradientIconButton icon="play-circle-outline" onPress={() => navigation.navigate("Create", { initialMode: "reel" })} size={38} />
               </View>
 
               <View style={styles.sectionRow}>
@@ -371,7 +371,7 @@ export function HomeScreen({ navigation }: { navigation: any }) {
                     onPress={() => rootNavigation.navigate("PublicProfile", { userId: creator.id })}
                     style={styles.creatorChip}
                   >
-                    <Image source={{ uri: creator.profileImage }} style={styles.creatorChipAvatar} />
+                    <Avatar name={creator.name} style={styles.creatorChipAvatar} uri={creator.profileImage} />
                     <View style={styles.creatorChipCopy}>
                       <Text numberOfLines={1} style={styles.creatorChipName}>
                         {creator.name}
@@ -657,7 +657,7 @@ function IconBubble({
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   badge?: string;
-  tint: BrandTint;
+  tint?: BrandTint;
   onPress: () => void;
 }) {
   return <GradientIconButton badge={badge} icon={icon} onPress={onPress} tint={tint} />;
@@ -675,8 +675,8 @@ function StoryRing({
   const colors: readonly [string, string, ...string[]] = viewed
     ? ["rgba(255,255,255,0.20)", "rgba(255,255,255,0.12)", "rgba(255,255,255,0.08)"]
     : ownStory
-      ? ["#7ce7ff", "#36e0a1", "#ff7a2f"]
-      : ["#ff8a3d", "#ff4d67", "#a855f7"];
+      ? [...BRAND_GRADIENT]
+      : [...STORY_GRADIENT];
   return (
     <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.storyRing}>
       <View style={styles.storyRingInner}>
@@ -798,7 +798,7 @@ const styles = createThemedStyles({
   },
   iconBadge: {
     alignItems: "center",
-    backgroundColor: "#ff4d67",
+    backgroundColor: palette.accent,
     borderColor: "#05080d",
     borderRadius: 10,
     borderWidth: 2,

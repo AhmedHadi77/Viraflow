@@ -1,3 +1,4 @@
+import { normalizeStudioData } from "../utils/studioData";
 import {
   collection,
   doc,
@@ -111,6 +112,7 @@ function normalizePostMediaItemForWrite(item: PostMediaItem, fallbackId: string)
     ...(thumbnailUrl ? { thumbnailUrl } : {}),
     ...(mimeType ? { mimeType } : {}),
     ...(durationSeconds !== undefined ? { durationSeconds } : {}),
+    ...(normalizeStudioData(item.studio) ? { studio: normalizeStudioData(item.studio) } : {}),
   };
 }
 
@@ -297,6 +299,7 @@ function normalizePostMedia(value: unknown): PostMediaItem[] {
         thumbnailUrl: readOptionalString(record.thumbnailUrl),
         mimeType: readOptionalString(record.mimeType),
         durationSeconds: readOptionalNumber(record.durationSeconds),
+        studio: normalizeStudioData(record.studio),
       } satisfies PostMediaItem;
     })
     .filter(Boolean) as PostMediaItem[];

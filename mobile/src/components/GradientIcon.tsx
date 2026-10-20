@@ -3,21 +3,17 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Pressable, StyleProp, Text, View, ViewStyle } from "react-native";
 import { createThemedStyles, palette } from "../theme";
 
-/** The Sohba brand gradient, the same colours as the "your story" ring. */
-export const BRAND_GRADIENT = ["#7ce7ff", "#36e0a1", "#ff7a2f"] as const;
-/** The ring used on other people's stories. */
-export const STORY_GRADIENT = ["#ff8a3d", "#ff4d67", "#a855f7"] as const;
+/** The Sohba brand gradient: the app's two colours, green and orange. Used everywhere a gradient appears. */
+export const BRAND_GRADIENT = ["#36e0a1", "#ff7a2f"] as const;
+/** Same two colours the other way round, for other people's unseen stories. */
+export const STORY_GRADIENT = ["#ff7a2f", "#36e0a1"] as const;
 
-/** Icon tints taken from the gradients, deep enough to read on light and dark backgrounds. */
-export const brandTints = {
-  cyan: "#14a9d6",
-  green: "#12b47a",
-  orange: "#f26a1b",
-  pink: "#ff4d67",
-  purple: "#a855f7",
-} as const;
+/** Icons use one of the two brand colours: green (primary) for most, orange (accent) to draw attention. */
+export type BrandTint = "primary" | "accent";
 
-export type BrandTint = keyof typeof brandTints;
+export function brandColor(tint: BrandTint = "primary") {
+  return tint === "accent" ? palette.accent : palette.primary;
+}
 
 /**
  * Round icon button with a gradient ring, matching the story ring. Used for the header actions
@@ -25,7 +21,7 @@ export type BrandTint = keyof typeof brandTints;
  */
 export function GradientIconButton({
   icon,
-  tint = "green",
+  tint = "primary",
   onPress,
   badge,
   size = 40,
@@ -55,7 +51,7 @@ export function GradientIconButton({
         style={[styles.ring, { borderRadius: size / 2, height: size, width: size }]}
       >
         <View style={[styles.inner, { borderRadius: (size - 4) / 2 }]}>
-          <Ionicons color={brandTints[tint]} name={icon} size={Math.round(size * 0.5)} />
+          <Ionicons color={brandColor(tint)} name={icon} size={Math.round(size * 0.5)} />
         </View>
       </LinearGradient>
       {badge ? (
@@ -114,7 +110,7 @@ const styles = createThemedStyles({
   },
   badge: {
     alignItems: "center",
-    backgroundColor: "#ff4d67",
+    backgroundColor: palette.accent,
     borderColor: palette.background,
     borderRadius: 10,
     borderWidth: 2,

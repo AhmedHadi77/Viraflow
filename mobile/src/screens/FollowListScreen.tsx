@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useMemo, useState } from "react";
-import { FlatList, Image, Pressable, Text, TextInput, View } from "react-native";
+import { Avatar } from "../components/Avatar";
+import { useEffect, useMemo, useState } from "react";
+import { Alert, FlatList, Pressable, Text, TextInput, View } from "react-native";
 import { CallButtons } from "../components/CallButtons";
 import { Screen } from "../components/Screen";
 import { getCopy } from "../data/copy";
@@ -18,12 +19,29 @@ export function FollowListScreen({
   navigation: any;
   route: { params: { userId: string; mode: FollowListMode } };
 }) {
-  const { language, currentUser, getUserById, toggleFollow } = useAppState();
+  const { language, currentUser, getUserById, loadUserProfile, toggleFollow, startDirectChat, canDirectMessageUser } = useAppState();
   const copy = getCopy(language);
   const [mode, setMode] = useState<FollowListMode>(route.params.mode);
   const [query, setQuery] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
   const profileUser = getUserById(route.params.userId);
+  const listIds = profileUser ? (mode === "followers" ? profileUser.followers : profileUser.following) : [];
+  const missingKey = listIds.filter((id) => !getUserById(id)).slice(0, 60).join(",");
+
+  // Load the people in this list whose profiles haven't been fetched yet.
+  useEffect(() => {
+    if (!profileUser) {
+      void loadUserProfile(route.params.userId);
+      return;
+    }
+    missingKey
+      .split(",")
+      .filter(Boolean)
+      .forEach((id) => {
+        void loadUserProfile(id);
+      });
+    // loadUserProfile changes identity every render; re-run only when the missing set changes.
+  }, [missingKey, Boolean(profileUser), route.params.userId]);
 
   const people = useMemo(() => {
     if (!profileUser) {
@@ -45,6 +63,15 @@ export function FollowListScreen({
         return rightScore - leftScore || left.name.localeCompare(right.name);
       });
   }, [currentUser?.following, getUserById, mode, profileUser, query]);
+
+  async function handleMessage(userId: string) {
+    const result = await startDirectChat(userId);
+    if (result.ok && result.threadId) {
+      navigation.navigate("DirectChat", { threadId: result.threadId });
+    } else {
+      Alert.alert(copy.directChatUnavailableTitle, result.message ?? copy.directChatUnavailableBody);
+    }
+  }
 
   async function handleFollow(userId: string) {
     setPendingId(userId);
@@ -119,7 +146,7 @@ export function FollowListScreen({
               onPress={() => navigation.navigate("PublicProfile", { userId: item.id })}
               style={({ pressed }) => [styles.row, pressed ? styles.rowPressed : null]}
             >
-              <Image source={{ uri: item.profileImage }} style={styles.avatar} />
+              <Avatar name={item.name} style={styles.avatar} uri={item.profileImage} />
               <View style={styles.rowText}>
                 <Text numberOfLines={1} style={styles.name}>
                   {item.name}
@@ -129,6 +156,17 @@ export function FollowListScreen({
                   {followsMe && !isMe ? ` · ${copy.followsYou}` : ""}
                 </Text>
               </View>
+              {!isMe && currentUser && canDirectMessageUser(item.id) ? (
+                <Pressable
+                  accessibilityLabel={copy.message}
+                  accessibilityRole="button"
+                  hitSlop={6}
+                  onPress={() => void handleMessage(item.id)}
+                  style={styles.iconAction}
+                >
+                  <Ionicons color={palette.primary} name="chatbubble-ellipses" size={18} />
+                </Pressable>
+              ) : null}
               {!isMe && currentUser ? <CallButtons compact navigation={navigation} size={18} userId={item.id} /> : null}
               {!isMe && currentUser ? (
                 <Pressable
@@ -148,6 +186,14 @@ export function FollowListScreen({
 }
 
 const styles = createThemedStyles({
+  iconAction: {
+    alignItems: "center",
+    backgroundColor: palette.surfaceMuted,
+    borderRadius: 17,
+    height: 34,
+    justifyContent: "center",
+    width: 34,
+  },
   handle: {
     color: palette.text,
     fontSize: 18,

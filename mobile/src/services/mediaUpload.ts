@@ -4,7 +4,7 @@ import type { MediaEditConfig, MediaEditFilters } from "../types/models";
 const API_BASE_URL = getPublicApiBaseUrl();
 
 export type MediaResourceType = "image" | "video" | "raw";
-export type MediaFolder = "profile" | "stories" | "reels" | "products" | "posts" | "ai" | "communities" | "messages";
+export type MediaFolder = "profile" | "stories" | "reels" | "products" | "posts" | "ai" | "communities" | "messages" | "sounds";
 
 export interface CloudinarySignaturePayload {
   folder: MediaFolder;
@@ -192,7 +192,7 @@ export function buildCloudinaryAdaptiveUrl(url: string, resourceType: MediaResou
     return url;
   }
 
-  const transform = resourceType === "video" ? `q_auto:${quality},f_mp4,vc_auto,ac_aac` : `q_auto:${quality},f_auto`;
+  const transform = resourceType === "video" ? `${cloudinaryQuality(quality)},f_mp4,vc_auto,ac_aac` : `${cloudinaryQuality(quality)},f_auto`;
   return url.replace("/upload/", `/upload/${transform}/`);
 }
 
@@ -214,7 +214,7 @@ export function buildCloudinaryEditedImageUrl(url: string, editConfig?: MediaEdi
   const transformationComponents = [
     ...buildFilterComponents(editConfig?.filters),
     ...buildOverlayComponents(editConfig),
-    `q_auto:${quality},f_auto`,
+    `${cloudinaryQuality(quality)},f_auto`,
   ];
   return injectCloudinaryTransformations(url, "image", transformationComponents);
 }
@@ -235,7 +235,7 @@ export function buildCloudinaryEditedVideoUrl(
   const transformationComponents = [
     trimComponent,
     playbackComponent,
-    ...buildFilterComponents(editConfig?.filters),
+    ...buildFilterComponents(editConfig?.filters, "video"),
     ...buildOverlayComponents(editConfig),
     qualityComponent,
   ];
@@ -256,7 +256,7 @@ export function buildCloudinaryVideoThumbnailUrl(
   const startOffset = typeof options?.startOffsetSeconds === "number" ? options.startOffsetSeconds : trimStart;
   return injectCloudinaryTransformations(thumbnailUrl, "video", [
     `so_${roundCloudinaryTime(startOffset)}`,
-    ...buildFilterComponents(options?.editConfig?.filters),
+    ...buildFilterComponents(options?.editConfig?.filters, "video"),
     ...buildOverlayComponents(options?.editConfig),
     "w_900,h_1600,c_fill,q_auto,f_jpg",
   ]);
@@ -307,7 +307,7 @@ function injectCloudinaryTransformations(url: string, resourceType: "image" | "v
   return queryPart ? `${rebuiltUrl}?${queryPart}` : rebuiltUrl;
 }
 
-function buildFilterComponents(filters?: MediaEditFilters) {
+function buildFilterComponents(filters?: MediaEditFilters, resourceType: "image" | "video" = "image") {
   if (!filters) {
     return [];
   }
@@ -327,6 +327,22 @@ function buildFilterComponents(filters?: MediaEditFilters) {
 
   if (saturationValue !== 0) {
     components.push(`e_saturation:${saturationValue}`);
+  }
+
+  // Sharpness, vignette and grain work on photos and videos alike (checked against Cloudinary).
+  const sharpenValue = Math.round(clampNumber(filters.sharpen ?? 0, 0, 100));
+  if (sharpenValue > 0) {
+    components.push(`e_sharpen:${Math.max(1, Math.round(sharpenValue * 2))}`);
+  }
+
+  const vignetteValue = Math.round(clampNumber(filters.vignette ?? 0, 0, 100));
+  if (vignetteValue > 0) {
+    components.push(`e_vignette:${vignetteValue}`);
+  }
+
+  const grainValue = Math.round(clampNumber(filters.grain ?? 0, 0, 100));
+  if (grainValue > 0) {
+    components.push(`e_noise:${grainValue}`);
   }
 
   return components;
@@ -441,4 +457,20 @@ function normalizeCloudinaryOverlayPosition(
 
 function toCloudinaryOffset(value: number, dimension: number) {
   return Math.round(clampNumber(value, 0, 1) * dimension);
+}
+
+/** Cloudinary accepts "q_auto" or "q_auto:good|eco|best|low" — "q_auto:auto" is rejected with a 400. */
+function cloudinaryQuality(quality: string) {
+  return quality === "auto" ? "q_auto" : `q_auto:${quality}`;
+}
+
+/**
+ * Repairs media links saved by older versions of the app, whose "q_auto:auto" Cloudinary setting makes
+ * Cloudinary refuse the image (so profile photos showed up blank).
+ */
+export function repairMediaUrl<T extends string | undefined | null>(url: T): T {
+  if (typeof url !== "string" || !url.includes("q_auto:auto")) {
+    return url;
+  }
+  return url.replace(/q_auto:auto/g, "q_auto") as T;
 }

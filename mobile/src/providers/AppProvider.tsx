@@ -22,6 +22,7 @@ import {
   deleteStoryWithApi,
   deleteReelWithApi,
   derivePlanType,
+  deleteApiAccount,
   fetchApiMe,
   deliverNotificationWithApi,
   fetchApiBootstrap,
@@ -183,6 +184,7 @@ import {
 import {
   DEFAULT_PUSH_NOTIFICATIONS_STATUS,
   registerForPushNotificationsAsync,
+  removeDevicePushToken,
   scheduleLocalNotificationFromAppNotification,
 } from "../services/pushNotifications";
 import {
@@ -224,6 +226,7 @@ import {
   CreateStoryPayload,
   isLanguageOption,
   LanguageOption,
+  MediaEditConfig,
   MarketplaceChatMessage,
   MarketplaceChatThread,
   MarketplaceOrder,
@@ -324,6 +327,8 @@ interface AppContextValue {
   continueWithGoogle: () => Promise<{ ok: boolean; message?: string }>;
   register: (payload: RegisterPayload) => Promise<{ ok: boolean; message?: string }>;
   logout: () => Promise<void>;
+  /** Permanently deletes the account, its content and its sign-in, then signs out. */
+  deleteAccount: () => Promise<{ ok: boolean; message?: string }>;
   googleSignInEnabled: boolean;
   googleSignInMessage: string | null;
   isAdmin: boolean;
@@ -384,6 +389,8 @@ interface AppContextValue {
   updateReportStatus: (reportId: string, status: ContentReport["status"]) => Promise<{ ok: boolean; message?: string }>;
   toggleSavePost: (postId: string) => Promise<{ ok: boolean; message?: string; saved?: boolean }>;
   getUserById: (userId: string) => User | undefined;
+  /** Fetches a profile that isn't loaded yet (opening someone's profile from a link or list). */
+  loadUserProfile: (userId: string) => Promise<User | null>;
   getPostById: (postId: string) => Post | undefined;
   getCommentsForPost: (postId: string) => PostComment[];
   getCommunityById: (communityId: string) => CommunitySpace | undefined;
@@ -449,6 +456,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [reelBoosts, setReelBoosts] = useState<ReelBoostCampaign[]>([]);
   const [startupDiagnostics, setStartupDiagnostics] = useState<string[]>(["Initializing Sohba..."]);
   const knownNotificationIdsRef = useRef<Set<string>>(new Set());
+  const pendingProfileLoadsRef = useRef<Set<string>>(new Set());
   const hasPrimedNotificationFeedRef = useRef(false);
   const reachedReelIdsRef = useRef<Set<string>>(new Set());
 
@@ -1540,8 +1548,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const accessToken = await resolveAccessToken(session);
 
     if (accessToken && isAppApiConfigured()) {
-      const response = await deliverNotificationWithApi(accessToken, input);
-      return response.notification ? mapApiNotificationToMobile(response.notification) : null;
+      try {
+        const response = await deliverNotificationWithApi(accessToken, input);
+        return response.notification ? mapApiNotificationToMobile(response.notification) : null;
+      } catch {
+        // The server sends the phone notification; if it can't be reached, still save the in-app
+        // notification directly so the person sees it next time they open Sohba.
+        return createFirebaseNotification(input).catch(() => null);
+      }
     }
 
     if (!isAppApiConfigured()) {
@@ -2191,8 +2205,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return { ok: false, message: AUTH_UNAVAILABLE_MESSAGE };
   }
 
+  async function deleteAccount() {
+    const accountCopy = getCopy(language);
+    if (!currentUser) {
+      return { ok: false, message: accountCopy.authErrGeneric };
+    }
+    const token = await resolveAccessToken(session).catch(() => null);
+    if (!token || !isAppApiConfigured()) {
+      return { ok: false, message: accountCopy.authErrNetwork };
+    }
+    try {
+      await deleteApiAccount(token);
+    } catch (error) {
+      const status = (error as { status?: number } | null)?.status;
+      return { ok: false, message: status === 401 ? accountCopy.authErrGeneric : accountCopy.deleteAccountFailed };
+    }
+    const deletedId = currentUser.id;
+    await logout();
+    setUsers((current) => current.filter((user) => user.id !== deletedId));
+    return { ok: true };
+  }
+
   async function logout() {
     const activeSession = session;
+    // Stop this phone receiving the signed-out account's notifications.
+    if (activeSession?.userId && pushNotificationsStatus.token) {
+      await removeDevicePushToken(activeSession.userId, pushNotificationsStatus.token).catch(() => undefined);
+    }
     if (isFirebaseProfilesConfigured()) {
       await logoutFromFirebaseProfile().catch(() => {
         // Local app state still needs to clear even if Firebase is already signed out.
@@ -3282,7 +3321,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (!canUsersMutuallyDirectMessage(users, currentUser.id, targetUserId)) {
-      return { ok: false, message: "Direct chat unlocks only after both of you follow each other." };
+      return { ok: false, message: getCopy(language).chatOnlyConnections };
     }
 
     if (isFirebaseBackedSession(session)) {
@@ -3356,7 +3395,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           !response.thread.participantIds.includes(currentUser.id) ||
           !canUsersMutuallyDirectMessage(users, response.thread.participantIds[0], response.thread.participantIds[1])
         ) {
-          return { ok: false, message: "Direct chat is locked until both users follow each other." };
+          return { ok: false, message: getCopy(language).chatOnlyConnections };
         }
 
         setDirectThreads((current) => upsertDirectThread(current, response.thread));
@@ -3377,7 +3416,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         !existingThread.participantIds.includes(currentUser.id) ||
         !canUsersMutuallyDirectMessage(users, existingThread.participantIds[0], existingThread.participantIds[1])
       ) {
-        return { ok: false, message: "Direct chat is locked until both users follow each other." };
+        return { ok: false, message: getCopy(language).chatOnlyConnections };
       }
 
       return { ok: true };
@@ -3425,7 +3464,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const counterpartId = targetThread.participantIds.find((participantId) => participantId !== currentUser.id);
     if (!counterpartId || !canUsersMutuallyDirectMessage(users, currentUser.id, counterpartId)) {
-      return { ok: false, message: "Direct chat is locked until both users follow each other." };
+      return { ok: false, message: getCopy(language).chatOnlyConnections };
     }
 
     if (isFirebaseBackedSession(session)) {
@@ -3926,6 +3965,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       try {
         const publicIdPrefix = normalizeUploadPrefix(`${currentUser.username}-story`);
+        payload = {
+          ...payload,
+          editConfig: await prepareStudioForPublish(firebaseSessionResult.token, payload.editConfig, `${publicIdPrefix}-sound`),
+        };
         const uploadedVideo =
           normalizedMediaType === "video" && payload.videoUrl?.trim()
             ? await uploadVideoSourceForFirebaseContent({
@@ -3940,7 +3983,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             : null;
         const imageUrl =
           normalizedMediaType === "video" && uploadedVideo
-            ? payload.imageUrl.trim()
+            ? payload.imageUrl.trim() && payload.imageUrl.trim() !== payload.videoUrl?.trim()
               ? await uploadImageSourceForFirebaseContent({
                   token: firebaseSessionResult.token,
                   source: payload.imageUrl,
@@ -4009,6 +4052,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           return { ok: false, message: accessTokenResult.message ?? SESSION_REFRESH_MESSAGE };
         }
         const publicIdPrefix = normalizeUploadPrefix(`${currentUser.username}-story`);
+        payload = {
+          ...payload,
+          editConfig: await prepareStudioForPublish(accessTokenResult.token, payload.editConfig, `${publicIdPrefix}-sound`),
+        };
         const uploadedVideo =
           normalizedMediaType === "video" && payload.videoUrl?.trim()
             ? await uploadVideoSourceForFirebaseContent({
@@ -4023,7 +4070,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             : null;
         const imageUrl =
           normalizedMediaType === "video" && uploadedVideo
-            ? payload.imageUrl.trim()
+            ? payload.imageUrl.trim() && payload.imageUrl.trim() !== payload.videoUrl?.trim()
               ? await uploadImageSourceForFirebaseContent({
                   token: accessTokenResult.token,
                   source: payload.imageUrl,
@@ -4342,6 +4389,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               thumbnailUrl: uploadedVideo.thumbnailUrl,
               mimeType: item.mimeType || "video/mp4",
               durationSeconds: item.durationSeconds,
+              studio: (
+                await prepareStudioForPublish(firebaseSessionResult.token, item.editConfig, buildUploadPublicIdPrefix(prefixBase, `sound-${index + 1}`))
+              )?.studio,
             });
             continue;
           }
@@ -4361,6 +4411,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             type: "image",
             url: imageUrl,
             mimeType: item.mimeType || "image/jpeg",
+            studio: (
+              await prepareStudioForPublish(firebaseSessionResult.token, item.editConfig, buildUploadPublicIdPrefix(prefixBase, `sound-${index + 1}`))
+            )?.studio,
           });
         } catch (mediaError) {
           throw new Error(`Media ${index + 1} could not be uploaded. ${readUploadErrorMessage(mediaError)}`);
@@ -4407,6 +4460,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!token) {
           return { ok: false, message: SESSION_REFRESH_MESSAGE };
         }
+        payload = {
+          ...payload,
+          editConfig: await prepareStudioForPublish(token, payload.editConfig, normalizeUploadPrefix(`${currentUser.username}-reel-sound`)),
+        };
         const uploadedVideo = await uploadVideoSourceForFirebaseContent({
           token,
           source: payload.videoUrl,
@@ -5260,6 +5317,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return users.find((item) => item.id === userId);
   }
 
+  async function loadUserProfile(userId: string) {
+    const existing = users.find((item) => item.id === userId);
+    if (existing) {
+      return existing;
+    }
+    if (!userId || pendingProfileLoadsRef.current.has(userId) || !isFirebaseProfilesConfigured()) {
+      return null;
+    }
+    pendingProfileLoadsRef.current.add(userId);
+    try {
+      const profile = await getFirebaseProfileById(userId);
+      if (profile) {
+        setUsers((current) => withOwnedContent(upsertUser(current, profile), reels, products));
+      }
+      return profile ?? null;
+    } catch {
+      return null;
+    } finally {
+      pendingProfileLoadsRef.current.delete(userId);
+    }
+  }
+
   function getPostById(postId: string) {
     return posts.find((item) => item.id === postId);
   }
@@ -5437,6 +5516,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           continueWithGoogle,
           register,
           logout,
+        deleteAccount,
           googleSignInEnabled,
           googleSignInMessage,
           isAdmin,
@@ -5485,6 +5565,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updateReportStatus,
         toggleSavePost,
         getUserById,
+        loadUserProfile,
         getPostById,
         getCommentsForPost,
         getCommunityById,
@@ -5624,6 +5705,31 @@ function normalizeReelHashtags(values: string[] | undefined, caption: string) {
   const provided = values ?? [];
   const fromCaption = caption.match(/#[a-zA-Z0-9_]+/g)?.map((tag) => tag.replace("#", "").toLowerCase()) ?? [];
   return [...new Set([...provided, ...fromCaption].map((item) => item.trim().replace(/^#+/, "").toLowerCase()).filter(Boolean))].slice(0, 6);
+}
+
+/**
+ * Before publishing: if the creator picked their own sound from the phone, upload it so everyone who
+ * watches the story, reel or post hears it. Library tracks ship with the app and need no upload.
+ */
+async function prepareStudioForPublish<T extends MediaEditConfig | undefined>(token: string, editConfig: T, publicIdPrefix: string): Promise<T> {
+  const music = editConfig?.studio?.music;
+  if (!editConfig || !music?.localUri) {
+    return editConfig;
+  }
+  const uploaded = await uploadMediaToCloudinary({
+    token,
+    uri: music.localUri,
+    mimeType: music.mimeType || "audio/mpeg",
+    fileName: inferFileNameFromUri(music.localUri, "sound.mp3"),
+    folder: "sounds",
+    publicIdPrefix,
+    resourceType: "video",
+  });
+  const { localUri: _localUri, mimeType: _mimeType, ...rest } = music;
+  return {
+    ...editConfig,
+    studio: { ...editConfig.studio, music: { ...rest, url: uploaded.secureUrl } },
+  } as T;
 }
 
 async function uploadImageSourceForFirebaseContent(input: {
@@ -6435,15 +6541,27 @@ function deriveFallbackPresenceTimestamp(
   ].sort((left, right) => right.localeCompare(left))[0];
 }
 
+/**
+ * Direct messages are open between people where at least one follows the other (followers and
+ * following). When one side's profile isn't loaded yet, an existing conversation is still allowed.
+ */
 function canUsersMutuallyDirectMessage(users: User[], firstUserId: string, secondUserId: string) {
   const firstUser = users.find((item) => item.id === firstUserId);
   const secondUser = users.find((item) => item.id === secondUserId);
 
-  if (!firstUser || !secondUser) {
+  if (!firstUser && !secondUser) {
     return false;
   }
+  if (!firstUser || !secondUser) {
+    return true;
+  }
 
-  return firstUser.following.includes(secondUserId) && secondUser.following.includes(firstUserId);
+  return (
+    firstUser.following.includes(secondUserId) ||
+    firstUser.followers.includes(secondUserId) ||
+    secondUser.following.includes(firstUserId) ||
+    secondUser.followers.includes(firstUserId)
+  );
 }
 
 function upsertRealtimeUser(current: User[], apiUser?: ApiUserPayload | null) {

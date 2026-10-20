@@ -88,3 +88,39 @@ function normalizeFolder(folder: string) {
 function normalizePublicIdPrefix(publicIdPrefix: string) {
   return publicIdPrefix.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-").slice(0, 60);
 }
+
+const USER_MEDIA_FOLDERS = ["profile", "stories", "reels", "products", "posts", "ai", "communities", "messages", "sounds"];
+
+/**
+ * Deletes every photo, video and sound a person uploaded. Uploads are stored under
+ * <upload folder>/<kind>/<user id>, so each kind is cleared by prefix with the Cloudinary Admin API.
+ */
+export async function deleteCloudinaryMediaForUser(userId: string) {
+  if (!isCloudinaryConfigured()) {
+    return 0;
+  }
+  const uid = userId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+  if (!uid) {
+    return 0;
+  }
+  const authorization = `Basic ${Buffer.from(`${env.cloudinaryApiKey}:${env.cloudinaryApiSecret}`).toString("base64")}`;
+  let removed = 0;
+  for (const resourceType of ["image", "video", "raw"]) {
+    for (const folder of USER_MEDIA_FOLDERS) {
+      const prefix = `${env.cloudinaryUploadFolder}/${folder}/${uid}`;
+      try {
+        const response = await fetch(
+          `https://api.cloudinary.com/v1_1/${env.cloudinaryCloudName}/resources/${resourceType}/upload?prefix=${encodeURIComponent(prefix)}`,
+          { method: "DELETE", headers: { Authorization: authorization } }
+        );
+        if (response.ok) {
+          const body = (await response.json()) as { deleted?: Record<string, string> };
+          removed += Object.keys(body.deleted ?? {}).length;
+        }
+      } catch {
+        // Media clean-up is best effort; the account itself is still removed.
+      }
+    }
+  }
+  return removed;
+}

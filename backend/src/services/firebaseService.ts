@@ -46,9 +46,25 @@ export function getFirebaseAuth() {
   return app ? admin.auth(app) : undefined;
 }
 
+let firestoreConfigured = false;
+
 export function getFirestore() {
   const app = getFirebaseAdminApp();
-  return app ? admin.firestore(app) : undefined;
+  if (!app) {
+    return undefined;
+  }
+  const db = admin.firestore(app);
+  if (!firestoreConfigured) {
+    firestoreConfigured = true;
+    try {
+      // Optional fields (e.g. a notification without an actor photo) are simply left out instead of
+      // making the whole write fail with "Cannot use undefined as a Firestore value".
+      db.settings({ ignoreUndefinedProperties: true });
+    } catch {
+      // Settings can only be applied before first use; if already used, keep going.
+    }
+  }
+  return db;
 }
 
 export interface VerifiedFirebaseUser {

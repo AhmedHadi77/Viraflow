@@ -21,6 +21,10 @@ import {
   View,
 } from "react-native";
 import { InputField } from "../components/InputField";
+import { FilterPreview } from "../components/studio/FilterPreview";
+import { StudioLayersOverlay } from "../components/studio/StudioLayers";
+import { EditorMode, EditorResult, hasFilterChanges, openMediaEditor } from "../components/studio/editorSession";
+import { getStudioFilter } from "../data/studioFilters";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { SafeLinearGradient } from "../components/SafeLinearGradient";
 import { Screen } from "../components/Screen";
@@ -46,8 +50,6 @@ type StudioSpeed = 0.5 | 1 | 1.5 | 2;
 type TrimHandle = "start" | "end";
 
 const productConditions: ProductCondition[] = ["New", "Like New", "Good", "Fair"];
-const VIDEO_SPEEDS: readonly StudioSpeed[] = [0.5, 1, 1.5, 2];
-const STICKER_OPTIONS = ["\u2728", "\u{1F525}", "\u{1F4CD}", "\u{1F60D}", "\u{1F3B5}", "\u{1F4AC}", "\u{1F334}", "\u{1F3AC}"];
 const TRIM_SEGMENTS = 18;
 const MIN_TRIM_GAP_RATIO = 0.08;
 const DEFAULT_TEXT_POSITION: MediaOverlayPosition = { x: 0.14, y: 0.34 };
@@ -84,6 +86,8 @@ interface StudioMediaItem {
   trimStartRatio: number;
   trimEndRatio: number;
   filters: StudioFilterSettings;
+  /** Result of the full-screen editor (text, stickers, music, filters, trim, speed). */
+  editor?: EditorResult;
 }
 
 export function CreateScreen({
@@ -197,6 +201,9 @@ export function CreateScreen({
       setStudioMediaItems(constrained);
       setActiveMediaId(constrained[0]?.id ?? null);
       navigation.setParams?.({ prefillAsset: undefined });
+      if (constrained[0]) {
+        openEditorFor(constrained[0], route?.params?.initialMode || mode);
+      }
     }
 
     void applyPrefill();
@@ -209,6 +216,30 @@ export function CreateScreen({
   useEffect(() => {
     setPreviewMuted(false);
   }, [activeMedia?.id]);
+
+  function openEditorFor(item: StudioMediaItem, modeOverride?: CreateMode) {
+    const editorMode: EditorMode = (modeOverride ?? mode) === "story" ? "story" : (modeOverride ?? mode) === "reel" ? "reel" : "post";
+    openMediaEditor(rootNavigation, {
+      mode: editorMode,
+      media: {
+        uri: item.uri,
+        type: item.type,
+        durationSeconds: item.durationSeconds,
+        posterUri: item.posterUri,
+        mimeType: item.mimeType,
+        fileName: item.fileName,
+      },
+      initial: item.editor,
+      doneLabel: copy.edDone,
+      onDone: (result) => {
+        setStudioMediaItems((current) =>
+          current.map((entry) =>
+            entry.id === item.id ? { ...entry, editor: result, posterUri: result.posterUri ?? entry.posterUri } : entry
+          )
+        );
+      },
+    });
+  }
 
   function switchMode(nextMode: CreateMode) {
     setMode(nextMode);
@@ -263,7 +294,14 @@ export function CreateScreen({
       return;
     }
 
-    const nextItems = await Promise.all(result.assets.map((asset, index) => createStudioMediaItem(asset, index)));
+    const fittingAssets = result.assets.filter((asset) => !isAssetTooLarge(asset));
+    if (fittingAssets.length < result.assets.length) {
+      alert(copy.csMediaIssue, copy.csFileTooBig);
+      if (fittingAssets.length === 0) {
+        return;
+      }
+    }
+    const nextItems = await Promise.all(fittingAssets.map((asset, index) => createStudioMediaItem(asset, index)));
     const filteredItems = constrainStudioItems(nextItems.filter((item) => Boolean(item.uri.trim())), mode);
     if (filteredItems.length === 0) {
       alert(
@@ -275,6 +313,10 @@ export function CreateScreen({
 
     setStudioMediaItems(filteredItems);
     setActiveMediaId(filteredItems[0]?.id ?? null);
+    // Go straight into the editor, like Instagram.
+    if (filteredItems[0]) {
+      openEditorFor(filteredItems[0]);
+    }
   }
 
   async function handleCropActiveImage() {
@@ -387,31 +429,6 @@ export function CreateScreen({
     }));
   }
 
-  function toggleSticker(sticker: string) {
-    updateActiveMedia((item) => {
-      const existingSticker = item.stickers.find((entry) => entry.value === sticker);
-      if (existingSticker) {
-        return {
-          ...item,
-          stickers: item.stickers.filter((entry) => entry.id !== existingSticker.id),
-        };
-      }
-
-      const nextPosition = DEFAULT_STICKER_POSITIONS[item.stickers.length] ?? DEFAULT_STICKER_POSITIONS[DEFAULT_STICKER_POSITIONS.length - 1];
-      return {
-        ...item,
-        stickers: [
-          ...item.stickers,
-          {
-            id: `${item.id}-${Date.now()}-${item.stickers.length + 1}`,
-            value: sticker,
-            ...normalizeOverlayPosition(nextPosition, nextPosition),
-          },
-        ].slice(0, 4),
-      };
-    });
-  }
-
   function handleTrimSegmentPress(segmentIndex: number) {
     if (!activeMedia || activeMedia.type !== "video") {
       return;
@@ -433,27 +450,6 @@ export function CreateScreen({
       return {
         ...item,
         trimEndRatio: Math.max(ratio, item.trimStartRatio + MIN_TRIM_GAP_RATIO),
-      };
-    });
-  }
-
-  function nudgeTrim(secondsDelta: number) {
-    if (!activeMedia || activeMedia.type !== "video" || !activeMedia.durationSeconds) {
-      return;
-    }
-
-    const deltaRatio = secondsDelta / activeMedia.durationSeconds;
-    updateActiveMedia((item) => {
-      if (trimHandle === "start") {
-        return {
-          ...item,
-          trimStartRatio: clampRatio(item.trimStartRatio + deltaRatio, 0, item.trimEndRatio - MIN_TRIM_GAP_RATIO),
-        };
-      }
-
-      return {
-        ...item,
-        trimEndRatio: clampRatio(item.trimEndRatio + deltaRatio, item.trimStartRatio + MIN_TRIM_GAP_RATIO, 1),
       };
     });
   }
@@ -747,7 +743,14 @@ export function CreateScreen({
                     <Image source={{ uri: activeMedia.uri }} style={styles.previewMedia} />
                   )}
 
-                  {renderFilterOverlays(activeMedia.filters)}
+                  {activeMedia.editor ? <FilterPreview filters={activeMedia.editor.filters} /> : renderFilterOverlays(activeMedia.filters)}
+                  {activeMedia.editor ? (
+                    <StudioLayersOverlay
+                      height={previewSurfaceSize.height}
+                      studio={activeMedia.editor.studio}
+                      width={previewSurfaceSize.width}
+                    />
+                  ) : null}
 
                   <SafeLinearGradient
                     colors={["rgba(0,0,0,0.08)", "rgba(0,0,0,0.18)", "rgba(0,0,0,0.64)"]}
@@ -893,126 +896,39 @@ export function CreateScreen({
               </View>
             </View>
 
-            <View style={styles.toolCluster}>
-              <Text style={styles.sectionLabel}>{copy.csTextOverlay}</Text>
-              <Text style={styles.helperCopy}>{copy.csTextOverlayBody}</Text>
-              <TextInput
-                onChangeText={(value) => {
-                  updateActiveMedia((item) => ({ ...item, overlayText: value }));
-                }}
-                placeholder={copy.csOverlayPh}
-                placeholderTextColor={palette.muted}
-                style={styles.inlineInput}
-                value={activeMedia?.overlayText ?? ""}
-              />
-            </View>
-
-            <View style={styles.toolCluster}>
-              <Text style={styles.sectionLabel}>{copy.csStickers}</Text>
-              <Text style={styles.helperCopy}>{copy.csStickersBody}</Text>
-              <View style={styles.choiceRow}>
-                {STICKER_OPTIONS.map((sticker) => (
-                  <ChoiceChip
-                    key={sticker}
-                    active={Boolean(activeMedia?.stickers.some((entry) => entry.value === sticker))}
-                    label={sticker}
-                    onPress={() => toggleSticker(sticker)}
-                  />
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.toolCluster}>
-              <Text style={styles.sectionLabel}>{copy.csFilters}</Text>
-              <FilterControl
-                label={copy.csBrightness}
-                options={[-2, -1, 0, 1, 2]}
-                value={activeMedia?.filters.brightness ?? 0}
-                onSelect={(value) => updateActiveMedia((item) => ({ ...item, filters: { ...item.filters, brightness: value as StudioFilterSettings["brightness"] } }))}
-              />
-              <FilterControl
-                label={copy.csContrast}
-                options={[-2, -1, 0, 1, 2]}
-                value={activeMedia?.filters.contrast ?? 0}
-                onSelect={(value) => updateActiveMedia((item) => ({ ...item, filters: { ...item.filters, contrast: value as StudioFilterSettings["contrast"] } }))}
-              />
-              <FilterControl
-                label={copy.csSaturation}
-                options={[-2, -1, 0, 1, 2]}
-                value={activeMedia?.filters.saturation ?? 0}
-                onSelect={(value) => updateActiveMedia((item) => ({ ...item, filters: { ...item.filters, saturation: value as StudioFilterSettings["saturation"] } }))}
-              />
-              <FilterControl
-                label={copy.csGrayscale}
-                options={[0, 25, 50, 75, 100]}
-                value={activeMedia?.filters.grayscale ?? 0}
-                onSelect={(value) => updateActiveMedia((item) => ({ ...item, filters: { ...item.filters, grayscale: value as StudioFilterSettings["grayscale"] } }))}
-                renderLabel={(value) => `${value}%`}
-              />
-            </View>
-
-            {activeMedia?.type === "video" ? (
+            {activeMedia ? (
               <View style={styles.toolCluster}>
-                <Text style={styles.sectionLabel}>{copy.csTrimSpeed}</Text>
-                <Text style={styles.helperCopy}>
-                  {copy.csTrimBody}
-                </Text>
-                <View style={styles.trimToolbar}>
-                  <View style={styles.trimHandleRow}>
-                    <ChoiceChip active={trimHandle === "start"} label={copy.csSetStart} onPress={() => setTrimHandle("start")} />
-                    <ChoiceChip active={trimHandle === "end"} label={copy.csSetEnd} onPress={() => setTrimHandle("end")} />
-                  </View>
-                  <View style={styles.trimNudgeRow}>
-                    <MiniAdjustButton label="-1s" onPress={() => nudgeTrim(-1)} />
-                    <MiniAdjustButton label="+1s" onPress={() => nudgeTrim(1)} />
-                  </View>
-                </View>
-
-                <View style={styles.trimBar}>
-                  {Array.from({ length: TRIM_SEGMENTS }).map((_, index) => {
-                    const segmentStart = index / TRIM_SEGMENTS;
-                    const segmentEnd = (index + 1) / TRIM_SEGMENTS;
-                    const isInTrimRange =
-                      segmentEnd > (activeMedia?.trimStartRatio ?? 0) &&
-                      segmentStart < (activeMedia?.trimEndRatio ?? 1);
-                    return (
-                      <Pressable
-                        key={`trim-${index}`}
-                        onPress={() => handleTrimSegmentPress(index)}
-                        style={[
-                          styles.trimSegment,
-                          isInTrimRange ? styles.trimSegmentActive : null,
-                          trimHandle === "start" && index === Math.round((activeMedia?.trimStartRatio ?? 0) * TRIM_SEGMENTS)
-                            ? styles.trimSegmentHandle
-                            : null,
-                          trimHandle === "end" && index === Math.round((activeMedia?.trimEndRatio ?? 1) * TRIM_SEGMENTS) - 1
-                            ? styles.trimSegmentHandle
-                            : null,
-                        ]}
+                <Text style={styles.sectionLabel}>{copy.edEditorTitle}</Text>
+                <Text style={styles.helperCopy}>{copy.edEditorBody}</Text>
+                <PrimaryButton label={copy.edOpenEditor} onPress={() => openEditorFor(activeMedia)} />
+                {activeMedia.editor ? (
+                  <View style={styles.choiceRow}>
+                    {activeMedia.editor.filterId !== "normal" ? (
+                      <ChoiceChip active label={copy[getStudioFilter(activeMedia.editor.filterId).labelKey]} onPress={() => openEditorFor(activeMedia)} />
+                    ) : null}
+                    {activeMedia.editor.studio.texts?.length ? (
+                      <ChoiceChip active label={`${copy.edText} ${activeMedia.editor.studio.texts.length}`} onPress={() => openEditorFor(activeMedia)} />
+                    ) : null}
+                    {activeMedia.editor.studio.stickers?.length ? (
+                      <ChoiceChip active label={`${copy.edStickers} ${activeMedia.editor.studio.stickers.length}`} onPress={() => openEditorFor(activeMedia)} />
+                    ) : null}
+                    {activeMedia.editor.studio.music ? (
+                      <ChoiceChip active label={`♪ ${activeMedia.editor.studio.music.title}`} onPress={() => openEditorFor(activeMedia)} />
+                    ) : null}
+                    {activeMedia.type === "video" && (activeMedia.editor.trimStartRatio > 0.001 || activeMedia.editor.trimEndRatio < 0.999) ? (
+                      <ChoiceChip
+                        active
+                        label={`${copy.edTrim} ${formatDuration(
+                          Math.round((activeMedia.durationSeconds ?? 0) * (activeMedia.editor.trimEndRatio - activeMedia.editor.trimStartRatio))
+                        )}`}
+                        onPress={() => openEditorFor(activeMedia)}
                       />
-                    );
-                  })}
-                </View>
-
-                <View style={styles.trimMetaRow}>
-                  <Text style={styles.trimMetaLabel}>
-                    Start {formatDuration(Math.round((activeMedia.durationSeconds ?? 0) * activeMedia.trimStartRatio))}
-                  </Text>
-                  <Text style={styles.trimMetaLabel}>
-                    End {formatDuration(Math.round((activeMedia.durationSeconds ?? 0) * activeMedia.trimEndRatio))}
-                  </Text>
-                </View>
-
-                <View style={styles.choiceRow}>
-                  {VIDEO_SPEEDS.map((speed) => (
-                    <ChoiceChip
-                      key={speed}
-                      active={activeMedia.speed === speed}
-                      label={`${speed}x`}
-                      onPress={() => updateActiveMedia((item) => ({ ...item, speed }))}
-                    />
-                  ))}
-                </View>
+                    ) : null}
+                    {activeMedia.type === "video" && activeMedia.editor.speed !== 1 ? (
+                      <ChoiceChip active label={`${activeMedia.editor.speed}x`} onPress={() => openEditorFor(activeMedia)} />
+                    ) : null}
+                  </View>
+                ) : null}
               </View>
             ) : null}
 
@@ -1153,47 +1069,6 @@ function ChoiceChip({
   return (
     <Pressable onPress={onPress} style={[styles.choiceChip, active ? styles.choiceChipActive : null]}>
       <Text style={[styles.choiceLabel, active ? styles.choiceLabelActive : null]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function FilterControl({
-  label,
-  options,
-  value,
-  onSelect,
-  renderLabel,
-}: {
-  label: string;
-  options: readonly number[];
-  value: number;
-  onSelect: (value: number) => void;
-  renderLabel?: (value: number) => string;
-}) {
-  return (
-    <View style={styles.filterControl}>
-      <View style={styles.filterLabelRow}>
-        <Text style={styles.filterLabel}>{label}</Text>
-        <Text style={styles.filterValue}>{renderLabel ? renderLabel(value) : value > 0 ? `+${value}` : String(value)}</Text>
-      </View>
-      <View style={styles.choiceRow}>
-        {options.map((option) => (
-          <ChoiceChip
-            key={`${label}-${option}`}
-            active={value === option}
-            label={renderLabel ? renderLabel(option) : option > 0 ? `+${option}` : String(option)}
-            onPress={() => onSelect(option)}
-          />
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function MiniAdjustButton({ label, onPress }: { label: string; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} style={styles.miniAdjustButton}>
-      <Text style={styles.miniAdjustLabel}>{label}</Text>
     </Pressable>
   );
 }
@@ -1537,6 +1412,17 @@ function collectPublishHashtags(inputValue: string, fallbackText: string) {
   return explicitTags.length > 0 ? explicitTags : parseHashtags(fallbackText);
 }
 
+// Upload limits of the media host: 100 MB per video and 10 MB per photo.
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+function isAssetTooLarge(asset: ImagePicker.ImagePickerAsset) {
+  if (typeof asset.fileSize !== "number" || asset.fileSize <= 0) {
+    return false;
+  }
+  return asset.fileSize > (asset.type === "video" ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES);
+}
+
 async function createStudioMediaItem(
   asset: ImagePicker.ImagePickerAsset,
   index: number,
@@ -1683,6 +1569,24 @@ function normalizeOverlayPosition(
 }
 
 function buildMediaEditConfig(item: StudioMediaItem): MediaEditConfig | undefined {
+  if (item.editor) {
+    const editor = item.editor;
+    const isVideo = item.type === "video";
+    const hasTrim = isVideo && (editor.trimStartRatio > 0.001 || editor.trimEndRatio < 0.999);
+    const hasSpeed = isVideo && editor.speed !== 1;
+    const hasFilter = hasFilterChanges(editor.filters);
+    const hasStudio = Object.keys(editor.studio).length > 0;
+    if (!hasTrim && !hasSpeed && !hasFilter && !hasStudio) {
+      return undefined;
+    }
+    return {
+      ...(hasFilter ? { filters: editor.filters } : {}),
+      ...(hasTrim ? { trimStartRatio: editor.trimStartRatio, trimEndRatio: editor.trimEndRatio } : {}),
+      ...(hasSpeed ? { playbackRate: editor.speed } : {}),
+      ...(hasStudio ? { studio: editor.studio } : {}),
+    };
+  }
+
   const overlayText = item.overlayText.trim();
   const stickers = item.stickers
     .map((sticker, index) => {

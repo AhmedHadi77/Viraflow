@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Avatar } from "../components/Avatar";
 import { communityKindLabel } from "../utils/labels";
 import { openReportSheet } from "../components/ReportSheet";
 import { CallButtons } from "../components/CallButtons";
@@ -6,20 +7,64 @@ import { useProductPriceFormatter } from "../utils/priceFormatting";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Image, Linking, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { StatPill } from "../components/StatPill";
 import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
-import { Post, Product, Reel, Story } from "../types/models";
+import { Post, Product, Reel, Story, User } from "../types/models";
 import { palette, radii, spacing, createThemedStyles } from "../theme";
 import { PAYMENTS_ENABLED } from "../data/catalog";
-import { brandTints, GradientIconButton } from "../components/GradientIcon";
+import { brandColor, GradientIconButton, STORY_GRADIENT } from "../components/GradientIcon";
 
 type ProfileSection = "posts" | "reels" | "shop" | "spaces" | "saved";
 
+// The text new accounts start with; shown in the reader's language instead.
+const DEFAULT_BIO_TEXT = "New creator on Sohba.";
+const DEFAULT_HEADLINE_TEXT = "Creator in progress";
+
 export function ProfileScreen({ navigation, route }: { navigation: any; route?: { params?: { userId?: string } } }) {
+  const { language, currentUser, getUserById, loadUserProfile } = useAppState();
+  const copy = getCopy(language);
+  const userId = route?.params?.userId ?? currentUser?.id;
+  const profileUser = userId ? getUserById(userId) : null;
+  const [lookupDone, setLookupDone] = useState(false);
+
+  // Profiles opened from a list, notification or link may not be loaded yet: fetch them.
+  useEffect(() => {
+    if (!userId || profileUser) {
+      return;
+    }
+    let active = true;
+    setLookupDone(false);
+    void loadUserProfile(userId).finally(() => {
+      if (active) {
+        setLookupDone(true);
+      }
+    });
+    return () => {
+      active = false;
+    };
+    // loadUserProfile changes identity every render; only re-run when the profile being looked up changes.
+  }, [Boolean(profileUser), userId]);
+
+  if (!profileUser) {
+    return (
+      <Screen contentContainerStyle={styles.emptyContent}>
+        {lookupDone || !userId ? (
+          <Text style={styles.emptyText}>{copy.profileNotFound}</Text>
+        ) : (
+          <ActivityIndicator color={palette.primary} size="large" />
+        )}
+      </Screen>
+    );
+  }
+
+  return <ProfileContent key={profileUser.id} navigation={navigation} profileUser={profileUser} />;
+}
+
+function ProfileContent({ navigation, profileUser }: { navigation: any; profileUser: User }) {
   const {
     language,
     currentUser,
@@ -29,7 +74,6 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
     products,
     communities,
     savedPosts,
-    getUserById,
     getTotalDirectUnreadCount,
     getTotalMarketplaceUnreadCount,
     getBoostForReel,
@@ -44,17 +88,7 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
   const copy = getCopy(language);
   const formatProductPrice = useProductPriceFormatter();
   const rootNavigation = navigation.getParent?.() ?? navigation;
-  const userId = route?.params?.userId ?? currentUser?.id;
-  const profileUser = userId ? getUserById(userId) : null;
   const [activeSection, setActiveSection] = useState<ProfileSection>("reels");
-
-  if (!profileUser) {
-    return (
-      <Screen contentContainerStyle={styles.emptyContent}>
-        <Text style={styles.emptyText}>{copy.profileNotFound}</Text>
-      </Screen>
-    );
-  }
 
   const activeProfileUser = profileUser;
   const isOwnProfile = activeProfileUser.id === currentUser?.id;
@@ -272,7 +306,7 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
               }}
               style={styles.avatarWrap}
             >
-              <Image source={{ uri: activeProfileUser.profileImage }} style={styles.avatar} />
+              <Avatar name={activeProfileUser.name} style={styles.avatar} uri={activeProfileUser.profileImage} />
               {isOwnProfile ? (
                 <View style={styles.avatarEditBadge}>
                   <Ionicons color="#04070b" name="camera-outline" size={13} />
@@ -283,7 +317,11 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
             <View style={styles.nameBlock}>
               <Text style={styles.name}>{activeProfileUser.name}</Text>
               <Text style={styles.handle}>@{activeProfileUser.username}</Text>
-              <Text style={styles.headline}>{activeProfileUser.headline}</Text>
+              {activeProfileUser.headline ? (
+                <Text style={styles.headline}>
+                  {activeProfileUser.headline === DEFAULT_HEADLINE_TEXT ? copy.defaultHeadline : activeProfileUser.headline}
+                </Text>
+              ) : null}
             </View>
           </View>
 
@@ -293,12 +331,12 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
               icon="notifications-outline"
               onPress={() => rootNavigation.navigate("Notifications")}
               size={44}
-              tint="orange"
+              tint="accent"
             />
           ) : null}
         </View>
 
-        <Text style={styles.bio}>{activeProfileUser.bio}</Text>
+        <Text style={styles.bio}>{activeProfileUser.bio === DEFAULT_BIO_TEXT ? copy.defaultBio : activeProfileUser.bio}</Text>
         {activeProfileUser.website ? (
           <Pressable onPress={() => void handleOpenWebsite()} style={styles.websiteChip}>
             <Ionicons color={palette.accentSoft} name="link-outline" size={15} />
@@ -332,7 +370,7 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
                   onPress={() => rootNavigation.navigate("StoryViewer", { userId: activeProfileUser.id, storyId: story.id })}
                   style={styles.highlightCard}
                 >
-                  <LinearGradient colors={["#ff8a3d", "#ff4d67", "#a855f7"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.highlightRing}>
+                  <LinearGradient colors={[...STORY_GRADIENT]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.highlightRing}>
                     <View style={styles.highlightRingInner}>
                       <Image source={{ uri: story.imageUrl }} style={styles.highlightImage} />
                     </View>
@@ -376,38 +414,41 @@ export function ProfileScreen({ navigation, route }: { navigation: any; route?: 
             </ScrollView>
           </>
         ) : (
-          <View style={styles.actionRow}>
-            <PrimaryButton
-              label={isFollowing ? copy.following : copy.follow}
-              onPress={() => {
-                void handleFollow();
-              }}
-              variant={isFollowing ? "ghost" : "solid"}
-            />
-            {chatUnlocked ? (
-              <PrimaryButton
-                label={copy.message}
-                onPress={() => {
-                  void handleStartDirectChat();
-                }}
-                variant="ghost"
-              />
-            ) : isFollowing ? (
-              <View style={styles.messageHintCard}>
-                <Text style={styles.messageHintText}>
-                  {followsBack ? copy.directChatSyncing : copy.directChatNeedsFollowBack}
-                </Text>
+          <View style={styles.publicActions}>
+            <View style={styles.actionRow}>
+              <View style={styles.actionFlex}>
+                <PrimaryButton
+                  label={isFollowing ? copy.following : followsBack ? copy.followBack : copy.follow}
+                  onPress={() => {
+                    void handleFollow();
+                  }}
+                  variant={isFollowing ? "ghost" : "solid"}
+                />
               </View>
-            ) : null}
-            <CallButtons navigation={navigation} userId={activeProfileUser.id} />
-            <Pressable
-              accessibilityLabel={copy.reportAction}
-              hitSlop={8}
-              onPress={() => openReportSheet({ entityType: "user", entityId: activeProfileUser.id, ownerId: activeProfileUser.id })}
-              style={styles.reportButton}
-            >
-              <Ionicons color={palette.muted} name="flag-outline" size={20} />
-            </Pressable>
+              {chatUnlocked ? (
+                <View style={styles.actionFlex}>
+                  <PrimaryButton
+                    label={copy.message}
+                    onPress={() => {
+                      void handleStartDirectChat();
+                    }}
+                    variant="ghost"
+                  />
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.secondaryActionRow}>
+              <CallButtons navigation={navigation} userId={activeProfileUser.id} />
+              <Pressable
+                accessibilityLabel={copy.reportAction}
+                hitSlop={8}
+                onPress={() => openReportSheet({ entityType: "user", entityId: activeProfileUser.id, ownerId: activeProfileUser.id })}
+                style={styles.reportButton}
+              >
+                <Ionicons color={palette.muted} name="flag-outline" size={20} />
+              </Pressable>
+            </View>
+            {!chatUnlocked ? <Text style={styles.messageHintText}>{copy.chatFollowToMessage}</Text> : null}
           </View>
         )}
       </View>
@@ -477,7 +518,7 @@ function ShortcutChip({
 }) {
   return (
     <Pressable onPress={onPress} style={styles.shortcutChip}>
-      <Ionicons color={brandTints.green} name={icon} size={16} />
+      <Ionicons color={brandColor()} name={icon} size={16} />
       <Text style={styles.shortcutLabel}>{label}</Text>
     </Pressable>
   );
@@ -670,6 +711,18 @@ const styles = createThemedStyles({
     alignItems: "center",
     flexDirection: "row",
     gap: spacing.sm,
+  },
+  actionFlex: {
+    flex: 1,
+  },
+  publicActions: {
+    gap: spacing.sm,
+  },
+  secondaryActionRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm,
+    justifyContent: "space-between",
   },
   shortcutRow: {
     gap: spacing.sm,

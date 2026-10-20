@@ -19,6 +19,7 @@ import {
   normalizeWebsiteInput,
 } from "../utils/profileValidation";
 import { DEFAULT_PROFILE_IMAGE } from "../data/defaultMedia";
+import { repairMediaUrl } from "./mediaUpload";
 import { getCopy } from "../data/copy";
 import type { CopyStrings } from "../data/locales/en";
 
@@ -547,8 +548,9 @@ function normalizeFirestoreProfile(raw: Partial<FirestoreUserProfile> & { id: st
     name: raw.name?.trim() || fallback.name,
     username: normalizeUsername(raw.username || fallback.username),
     email: raw.email?.trim().toLowerCase() || fallback.email,
-    profileImage: raw.profileImage?.trim() || fallback.profileImage,
-    bio: raw.bio?.trim() ?? fallback.bio,
+    profileImage: repairMediaUrl(raw.profileImage?.trim()) || fallback.profileImage,
+    // Older accounts were created under the app's previous name.
+    bio: (raw.bio?.trim() ?? fallback.bio).replace(/^New creator on Pulseora\.?$/, "New creator on Sohba."),
     headline: raw.headline?.trim() ?? fallback.headline,
     website: normalizeWebsiteInput(raw.website ?? fallback.website),
     language: normalizeLanguage(raw.language, fallback.language),
@@ -572,7 +574,7 @@ function mapFirestoreProfileToUser(profile: FirestoreUserProfile): User {
     name: profile.name,
     username: profile.username,
     email: profile.email,
-    profileImage: profile.profileImage,
+    profileImage: repairMediaUrl(profile.profileImage),
     bio: profile.bio,
     headline: profile.headline,
     website: profile.website,

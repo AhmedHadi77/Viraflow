@@ -1,4 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Avatar } from "../components/Avatar";
+import { StudioLayersOverlay } from "../components/studio/StudioLayers";
+import { useStudioMusic } from "../services/studioMusic";
 import { useEventListener } from "expo";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -63,6 +66,9 @@ export function StoryViewerScreen({
   const [imageProgressValue, setImageProgressValue] = useState(0);
   const activeStory = userStories[activeIndex];
   const creator = activeStory ? getUserById(activeStory.userId) : null;
+  const [mediaSize, setMediaSize] = useState({ width: 0, height: 0 });
+  // The story's soundtrack plays while it's on screen (and stops when muted or the viewers list is open).
+  useStudioMusic(activeStory?.studio?.music, Boolean(activeStory) && !isMuted && !viewerSheetOpen);
   const isOwnStory = activeStory?.userId === currentUser?.id;
   const viewerUsers = useMemo(
     () =>
@@ -242,7 +248,13 @@ export function StoryViewerScreen({
       style={[styles.container, { transform: [{ translateY }] }]}
       {...panResponder.panHandlers}
     >
-      <Animated.View style={[styles.mediaLayer, { opacity: mediaOpacity }]}>
+      <Animated.View
+        onLayout={(event) => {
+          const { width, height } = event.nativeEvent.layout;
+          setMediaSize((current) => (current.width === width && current.height === height ? current : { width, height }));
+        }}
+        style={[styles.mediaLayer, { opacity: mediaOpacity }]}
+      >
         <StoryMedia
           key={activeStory.id}
           isMuted={isMuted}
@@ -253,6 +265,7 @@ export function StoryViewerScreen({
           }}
           story={activeStory}
         />
+        <StudioLayersOverlay height={mediaSize.height} studio={activeStory.studio} width={mediaSize.width} />
       </Animated.View>
 
       <View style={[styles.topOverlay, { paddingTop: insets.top + 10 }]}>
@@ -271,7 +284,7 @@ export function StoryViewerScreen({
 
         <View style={styles.headerRow}>
           <View style={styles.headerIdentity}>
-            <Image source={{ uri: creator.profileImage }} style={styles.headerAvatar} />
+            <Avatar name={creator.name} style={styles.headerAvatar} uri={creator.profileImage} />
             <View>
               <Text style={styles.headerName}>{creator.name}</Text>
               <Text style={styles.headerMeta}>
@@ -281,7 +294,7 @@ export function StoryViewerScreen({
           </View>
 
           <View style={styles.headerActions}>
-            {activeStory.mediaType === "video" ? (
+            {activeStory.mediaType === "video" || activeStory.studio?.music ? (
               <Pressable onPress={() => setIsMuted((current) => !current)} style={styles.controlButton}>
                 <Ionicons
                   color={palette.text}
@@ -360,7 +373,7 @@ export function StoryViewerScreen({
               ) : (
                 viewerUsers.map((viewer) => (
                   <View key={viewer.id} style={styles.viewerRow}>
-                    <Image source={{ uri: viewer.profileImage }} style={styles.viewerAvatar} />
+                    <Avatar name={viewer.name} style={styles.viewerAvatar} uri={viewer.profileImage} />
                     <View style={styles.viewerCopy}>
                       <Text style={styles.viewerName}>{viewer.name}</Text>
                       <Text style={styles.viewerMeta}>@{viewer.username}</Text>
@@ -424,6 +437,7 @@ function StoryVideoPlayer({
   const player = useVideoPlayer(playableVideoUrl, (videoPlayer) => {
     videoPlayer.loop = false;
     videoPlayer.muted = isMuted;
+    videoPlayer.volume = story.studio?.originalVolume ?? 1;
     videoPlayer.timeUpdateEventInterval = 0.2;
     videoPlayer.play();
   });
@@ -445,7 +459,8 @@ function StoryVideoPlayer({
   useEffect(() => {
     try {
       player.loop = false;
-      player.muted = isMuted;
+      player.muted = isMuted || (story.studio?.originalVolume ?? 1) <= 0.001;
+      player.volume = story.studio?.originalVolume ?? 1;
       player.timeUpdateEventInterval = 0.2;
       player.play();
     } catch {

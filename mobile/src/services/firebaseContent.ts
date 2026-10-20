@@ -1,3 +1,4 @@
+import { normalizeStudioData } from "../utils/studioData";
 import {
   arrayUnion,
   collection,
@@ -78,6 +79,7 @@ export async function createFirebaseStory(userId: string, payload: CreateStoryPa
     viewerIds: [],
     highlightedAt: payload.saveToHighlights ? now.toISOString() : undefined,
     highlightLabel: payload.saveToHighlights ? highlightLabel : undefined,
+    studio: normalizeStudioData(payload.editConfig?.studio),
   };
 
   await setDoc(storyRef, compactFirestoreData(story));
@@ -191,6 +193,10 @@ export async function createFirebaseReel(userId: string, payload: CreateReelPayl
     viewCount: 0,
     reachCount: 0,
   };
+  const studio = normalizeStudioData(payload.editConfig?.studio);
+  if (studio) {
+    reel.studio = studio;
+  }
 
   await setDoc(reelRef, reel);
   await setDoc(
@@ -372,6 +378,7 @@ function normalizeStoryDoc(id: string, data: Record<string, unknown>): Story {
     viewerIds: readStringArray(data.viewerIds),
     highlightedAt: readOptionalString(data.highlightedAt),
     highlightLabel: readOptionalString(data.highlightLabel),
+    studio: normalizeStudioData(data.studio),
   };
 }
 
@@ -392,6 +399,7 @@ function normalizeReelDoc(id: string, data: Record<string, unknown>): Reel {
     viewCount: readNumber(data.viewCount, 0),
     reachCount: readNumber(data.reachCount, 0),
     boostedUntil: typeof data.boostedUntil === "string" && data.boostedUntil.trim() ? data.boostedUntil.trim() : undefined,
+    studio: normalizeStudioData(data.studio),
   };
 }
 

@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Avatar } from "../components/Avatar";
 import { ComponentProps, useEffect, useState } from "react";
 import { Image, Pressable, StatusBar, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -123,7 +124,7 @@ export function CallScreen({ navigation, route }: { navigation: any; route: { pa
       <SafeAreaView style={styles.safe}>
         <View style={styles.header}>
           {!showRemoteVideo ? (
-            peer?.profileImage ? <Image source={{ uri: peer.profileImage }} style={styles.avatar} /> : <View style={styles.avatar} />
+            peer?.profileImage ? <Avatar name={peer.name} style={styles.avatar} uri={peer.profileImage} /> : <View style={styles.avatar} />
           ) : null}
           <Text numberOfLines={1} style={styles.name}>
             {peer?.name ?? ""}
@@ -144,7 +145,7 @@ export function CallScreen({ navigation, route }: { navigation: any; route: { pa
                 <CallButton color="#334155" icon="mic" label={copy.callAnswerAsVoice} onPress={() => void acceptCall({ asAudio: true })} />
               ) : null}
               <CallButton
-                color="#22c55e"
+                color="#36e0a1"
                 icon={isVideo ? "videocam" : "call"}
                 label={copy.callAccept}
                 onPress={() => void acceptCall()}

@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Avatar } from "../components/Avatar";
 import { useEffect, useMemo, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { PostPreviewSheet } from "../components/PostPreviewSheet";
@@ -99,7 +100,7 @@ export function ExploreScreen({
                   onPress={() => rootNavigation.navigate("PublicProfile", { userId: user.id })}
                   style={styles.userResultCard}
                 >
-                  <Image source={{ uri: user.profileImage }} style={styles.userAvatar} />
+                  <Avatar name={user.name} style={styles.userAvatar} uri={user.profileImage} />
                   <View style={styles.userCopy}>
                     <Text style={styles.userName}>{user.name}</Text>
                     <Text style={styles.userMeta}>@{user.username}</Text>
@@ -177,7 +178,7 @@ export function ExploreScreen({
                   onPress={() => rootNavigation.navigate("PublicProfile", { userId: user.id })}
                   style={styles.suggestedCard}
                 >
-                  <Image source={{ uri: user.profileImage }} style={styles.suggestedAvatar} />
+                  <Avatar name={user.name} style={styles.suggestedAvatar} uri={user.profileImage} />
                   <Text numberOfLines={1} style={styles.suggestedName}>
                     {user.name}
                   </Text>
@@ -503,7 +504,7 @@ const styles = createThemedStyles({
     lineHeight: 19,
   },
   postResultHashtags: {
-    color: "#6fb8ff",
+    color: palette.primary,
     fontSize: 12,
     fontWeight: "700",
   },

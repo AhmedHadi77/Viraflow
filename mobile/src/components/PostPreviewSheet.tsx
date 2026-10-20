@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Avatar } from "./Avatar";
 import { formatDate } from "../utils/timeFormatting";
 import { Modal, Image, Pressable, ScrollView, Text, View } from "react-native";
 import { getCopy } from "../data/copy";
@@ -37,7 +38,7 @@ export function PostPreviewSheet({ post, author, visible, onClose, onAuthorPress
           <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
             {author ? (
               <Pressable disabled={!onAuthorPress} onPress={onAuthorPress} style={styles.authorRow}>
-                <Image source={{ uri: author.profileImage }} style={styles.avatar} />
+                <Avatar name={author.name} style={styles.avatar} uri={author.profileImage} />
                 <View style={styles.authorCopy}>
                   <Text style={styles.authorName}>{author.name}</Text>
                   <Text style={styles.authorMeta}>@{author.username}</Text>
@@ -250,7 +251,7 @@ const styles = createThemedStyles({
     lineHeight: 22,
   },
   hashtags: {
-    color: "#6fb8ff",
+    color: palette.primary,
     fontSize: 13,
     fontWeight: "700",
     lineHeight: 20,

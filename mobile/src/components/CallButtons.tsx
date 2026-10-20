@@ -5,7 +5,7 @@ import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
 import { CallType } from "../services/calls";
 import { palette, createThemedStyles } from "../theme";
-import { brandTints } from "./GradientIcon";
+import { brandColor } from "./GradientIcon";
 import { isCallConnection } from "../utils/callConnection";
 
 /** Voice and video call icons for a profile or chat header. */
@@ -62,7 +62,7 @@ export function CallButtons({
         onPress={() => void handleCall("audio")}
         style={({ pressed }) => [styles.button, compact ? styles.compact : null, pressed || busy ? styles.pressed : null]}
       >
-        <Ionicons color={brandTints.green} name="call" size={compact ? size - 2 : size} />
+        <Ionicons color={brandColor()} name="call" size={compact ? size - 2 : size} />
       </Pressable>
       <Pressable
         accessibilityLabel={copy.callVideo}
@@ -72,7 +72,7 @@ export function CallButtons({
         onPress={() => void handleCall("video")}
         style={({ pressed }) => [styles.button, compact ? styles.compact : null, pressed || busy ? styles.pressed : null]}
       >
-        <Ionicons color={brandTints.cyan} name="videocam" size={compact ? size : size + 2} />
+        <Ionicons color={brandColor()} name="videocam" size={compact ? size : size + 2} />
       </Pressable>
     </View>
   );

@@ -1779,7 +1779,7 @@ const styles = createThemedStyles({
     gap: spacing.xs,
     padding: spacing.lg,
   },
-  demoNoticeTitle: { color: "#FFD27A", fontSize: 16, fontWeight: "900", textTransform: "uppercase" },
+  demoNoticeTitle: { color: "#ff7a2f", fontSize: 16, fontWeight: "900", textTransform: "uppercase" },
   demoNoticeBody: { color: palette.text, fontSize: 14, lineHeight: 22 },
   tabs: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   panel: { backgroundColor: palette.surface, borderColor: palette.borderStrong, borderRadius: radii.xl, borderWidth: 1, gap: spacing.md, padding: spacing.xl },

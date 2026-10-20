@@ -1,12 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Avatar } from "./Avatar";
 import { useCopy } from "../utils/useCopy";
 import { fill } from "../utils/labels";
+import { StudioLayersOverlay } from "./studio/StudioLayers";
+import { useStudioMusic } from "../services/studioMusic";
 import { useEventListener } from "expo";
 import { useEffect, useState } from "react";
 import {
   AppState,
   GestureResponderEvent,
-  Image,
   ImageBackground,
   LayoutChangeEvent,
   Pressable,
@@ -81,6 +83,13 @@ export function ReelCard({
   const isFollowing = currentUserId ? creator.followers.includes(currentUserId) : false;
   const [localMuted, setLocalMuted] = useState(false);
   const isMuted = muted ?? localMuted;
+  const [layerSize, setLayerSize] = useState({ width: 0, height: 0 });
+  // A reel's soundtrack plays while the reel is playing and sound is on.
+  useStudioMusic(reel.studio?.music, Boolean(playVideo) && !isMuted);
+  const measureLayers = (event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setLayerSize((current) => (current.width === width && current.height === height ? current : { width, height }));
+  };
 
   function handleToggleMuted(event?: GestureResponderEvent) {
     event?.stopPropagation();
@@ -104,7 +113,7 @@ export function ReelCard({
         ]}
       >
         <View style={styles.immersiveMediaShell}>
-          <View style={styles.mediaFillLayer}>
+          <View onLayout={measureLayers} style={styles.mediaFillLayer}>
             <ReelMedia
               controlsBottomOffset={Math.max(0, bottomInset - 16)}
               muted={isMuted}
@@ -118,6 +127,7 @@ export function ReelCard({
               pointerEvents="none"
               style={StyleSheet.absoluteFillObject}
             />
+            <StudioLayersOverlay height={layerSize.height} studio={reel.studio} width={layerSize.width} />
           </View>
 
           {boostLabel ? (
@@ -140,7 +150,7 @@ export function ReelCard({
                   onPress={onOpenCreator}
                   style={styles.creatorPressable}
                 >
-                  <Image source={{ uri: creator.profileImage }} style={styles.avatar} />
+                  <Avatar name={creator.name} style={styles.avatar} uri={creator.profileImage} />
                   <Text numberOfLines={1} style={styles.immersiveHandle}>
                     @{creator.username}
                   </Text>
@@ -200,7 +210,7 @@ export function ReelCard({
           onPress={onOpenCreator}
           style={styles.feedCreatorRow}
         >
-          <Image source={{ uri: creator.profileImage }} style={styles.feedAvatar} />
+          <Avatar name={creator.name} style={styles.feedAvatar} uri={creator.profileImage} />
           <View style={styles.feedCreatorMeta}>
             <Text style={styles.feedHandle}>@{creator.username}</Text>
             <Text style={styles.feedDate}>{formatRelativeDate(reel.createdAt)}</Text>
@@ -228,8 +238,9 @@ export function ReelCard({
         </View>
       </View>
 
-      <View style={styles.feedMediaShell}>
+      <View onLayout={measureLayers} style={styles.feedMediaShell}>
         <ReelMedia muted={isMuted} playVideo={playVideo} reel={reel} rounded viewerMode={false} />
+        <StudioLayersOverlay height={layerSize.height} studio={reel.studio} width={layerSize.width} />
         <Pressable hitSlop={12} onPress={handleToggleMuted} style={styles.feedAudioToggle}>
           <Ionicons color="#ffffff" name={isMuted ? "volume-mute" : "volume-high"} size={16} />
         </Pressable>
@@ -280,7 +291,9 @@ function ReelMedia({
       <PlayableReelMedia
         controlsBottomOffset={controlsBottomOffset}
         fallbackUri={reel.thumbnailUrl}
+        hasSoundtrack={Boolean(reel.studio?.music)}
         muted={muted}
+        originalVolume={reel.studio?.originalVolume ?? 1}
         rounded={rounded}
         uri={playableVideoUri}
         viewerMode={viewerMode}
@@ -305,6 +318,8 @@ function PlayableReelMedia({
   fallbackUri,
   rounded,
   muted,
+  originalVolume = 1,
+  hasSoundtrack = false,
   viewerMode = false,
   controlsBottomOffset = 24,
 }: {
@@ -312,6 +327,8 @@ function PlayableReelMedia({
   fallbackUri: string;
   rounded: boolean;
   muted: boolean;
+  originalVolume?: number;
+  hasSoundtrack?: boolean;
   viewerMode?: boolean;
   controlsBottomOffset?: number;
 }) {
@@ -334,7 +351,9 @@ function PlayableReelMedia({
     <LoadedPlayableReelMedia
       controlsBottomOffset={controlsBottomOffset}
       expoVideo={expoVideo}
+      hasSoundtrack={hasSoundtrack}
       muted={muted}
+      originalVolume={originalVolume}
       rounded={rounded}
       uri={uri}
       viewerMode={viewerMode}
@@ -347,6 +366,8 @@ function LoadedPlayableReelMedia({
   uri,
   rounded,
   muted,
+  originalVolume,
+  hasSoundtrack,
   viewerMode,
   controlsBottomOffset,
 }: {
@@ -354,15 +375,17 @@ function LoadedPlayableReelMedia({
   uri: string;
   rounded: boolean;
   muted: boolean;
+  originalVolume: number;
+  hasSoundtrack: boolean;
   viewerMode: boolean;
   controlsBottomOffset: number;
 }) {
   const { VideoView, useVideoPlayer } = expoVideo;
   const player = useVideoPlayer(uri, (videoPlayer) => {
     videoPlayer.loop = true;
-    videoPlayer.audioMixingMode = "doNotMix";
-    videoPlayer.muted = muted;
-    videoPlayer.volume = muted ? 0 : 1;
+    videoPlayer.audioMixingMode = hasSoundtrack ? "mixWithOthers" : "doNotMix";
+    videoPlayer.muted = muted || originalVolume <= 0.001;
+    videoPlayer.volume = muted ? 0 : originalVolume;
     videoPlayer.staysActiveInBackground = false;
     videoPlayer.showNowPlayingNotification = false;
     videoPlayer.timeUpdateEventInterval = 0.25;
@@ -410,9 +433,10 @@ function LoadedPlayableReelMedia({
   useEffect(() => {
     try {
       player.loop = true;
-      player.audioMixingMode = "doNotMix";
-      player.muted = muted;
-      player.volume = muted ? 0 : 1;
+      // With a soundtrack the video's own sound must mix with the music instead of stopping it.
+      player.audioMixingMode = hasSoundtrack ? "mixWithOthers" : "doNotMix";
+      player.muted = muted || originalVolume <= 0.001;
+      player.volume = muted ? 0 : originalVolume;
       player.staysActiveInBackground = false;
       player.showNowPlayingNotification = false;
       player.timeUpdateEventInterval = 0.25;
@@ -424,9 +448,9 @@ function LoadedPlayableReelMedia({
     const subscription = AppState.addEventListener("change", (nextState) => {
       try {
         if (nextState === "active") {
-          player.audioMixingMode = "doNotMix";
-          player.muted = muted;
-          player.volume = muted ? 0 : 1;
+          player.audioMixingMode = hasSoundtrack ? "mixWithOthers" : "doNotMix";
+          player.muted = muted || originalVolume <= 0.001;
+          player.volume = muted ? 0 : originalVolume;
           player.play();
         } else {
           player.pause();
@@ -444,7 +468,7 @@ function LoadedPlayableReelMedia({
         // Ignore cleanup failures from native player teardown.
       }
     };
-  }, [muted, player]);
+  }, [hasSoundtrack, muted, originalVolume, player]);
 
   const progressRatio = durationSeconds > 0 ? Math.min(1, Math.max(0, currentTimeSeconds / durationSeconds)) : 0;
 

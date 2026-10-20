@@ -1,3 +1,5 @@
+import { deleteCloudinaryMediaForUser } from "./cloudinaryService";
+import { readPushTargets, sendPush } from "./pushSender";
 import type { firestore as FirestoreNamespace } from "firebase-admin";
 import admin from "firebase-admin";
 import { env } from "../config/env";
@@ -6,8 +8,6 @@ import { getFirebaseAuth, getFirestore } from "./firebaseService";
 type Firestore = FirestoreNamespace.Firestore;
 type Query = FirestoreNamespace.Query;
 
-const EXPO_PUSH_API_URL = "https://exp.host/--/api/v2/push/send";
-const ANDROID_CHANNEL_ID = "pulseora-social";
 const SERIES_DAYS = 14;
 
 export class AdminError extends Error {
@@ -322,11 +322,21 @@ export async function deleteUserAccount(actor: AdminActor, userId: string) {
     throw new AdminError("You can't delete your own account from the dashboard.");
   }
   const db = requireDb();
-  const userRef = db.collection("users").doc(userId);
-  const snapshot = await userRef.get();
+  const snapshot = await db.collection("users").doc(userId).get();
   if (snapshot.exists) {
     await assertCanActOn(actor, snapshot);
   }
+  return purgeUserAccount(userId);
+}
+
+/**
+ * Removes an account completely: every post, reel, story, product, message, call and notification,
+ * the person from everyone's follower lists, the profile, and finally the sign-in itself.
+ * Used both by admins and by people deleting their own account.
+ */
+export async function purgeUserAccount(userId: string) {
+  const db = requireDb();
+  const userRef = db.collection("users").doc(userId);
 
   const byUser = (name: string, field = "userId") => db.collection(name).where(field, "==", userId);
   const byParticipant = (name: string) => db.collection(name).where("participantIds", "array-contains", userId);
@@ -363,6 +373,7 @@ export async function deleteUserAccount(actor: AdminActor, userId: string) {
     }
   }
 
+  removed.media = await deleteCloudinaryMediaForUser(userId).catch(() => 0);
   await removeFromArrays(db, userId, "followers").catch(() => undefined);
   await removeFromArrays(db, userId, "following").catch(() => undefined);
   await userRef.delete().catch(() => undefined);
@@ -416,38 +427,10 @@ export async function broadcastToAllUsers(actor: AdminActor, input: { title: str
 
   const tokenSnapshot = await db.collection("devicePushTokens").get();
   const recipientSet = new Set(recipients);
-  const tokens = [
-    ...new Set(
-      tokenSnapshot.docs
-        .filter((item) => recipientSet.has(String(item.get("userId") ?? "")))
-        .map((item) => String(item.get("token") ?? ""))
-        .filter((token) => /^(Exponent|Expo)PushToken\[.+\]$/.test(token))
-    ),
-  ];
-
-  let pushed = 0;
-  for (let index = 0; index < tokens.length; index += 100) {
-    const messages = tokens.slice(index, index + 100).map((to) => ({
-      to,
-      sound: "default",
-      title,
-      body,
-      data: { type: "system" },
-      channelId: ANDROID_CHANNEL_ID,
-    }));
-    try {
-      const response = await fetch(EXPO_PUSH_API_URL, {
-        method: "POST",
-        headers: { Accept: "application/json", "Content-Type": "application/json" },
-        body: JSON.stringify(messages),
-      });
-      if (response.ok) {
-        pushed += messages.length;
-      }
-    } catch {
-      // Keep going: in-app notifications are already saved.
-    }
-  }
+  const targets = readPushTargets(
+    tokenSnapshot.docs.filter((item) => recipientSet.has(String(item.get("userId") ?? "")))
+  );
+  const pushed = await sendPush(db, targets, { title, body, data: { type: "system" } });
 
   await db.collection("adminBroadcasts").doc(broadcastId).set({
     title,

@@ -126,7 +126,6 @@ export function MarketplaceScreen({ navigation }: { navigation: any }) {
             icon="chatbubble-ellipses-outline"
             onPress={() => rootNavigation.navigate("MarketplaceInbox")}
             size={44}
-            tint="cyan"
           />
         </View>
 
@@ -326,7 +325,7 @@ const styles = createThemedStyles({
   },
   inboxBadge: {
     alignItems: "center",
-    backgroundColor: "#ff4d67",
+    backgroundColor: palette.accent,
     borderColor: "#081018",
     borderRadius: 10,
     borderWidth: 2,

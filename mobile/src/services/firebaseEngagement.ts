@@ -1,3 +1,4 @@
+import { normalizeStudioData } from "../utils/studioData";
 import {
   collection,
   doc,
@@ -237,6 +238,7 @@ function normalizeReelDoc(id: string, data: Record<string, unknown>): Reel {
     viewCount: readNumber(data.viewCount, 0),
     reachCount: readNumber(data.reachCount, 0),
     boostedUntil: typeof data.boostedUntil === "string" && data.boostedUntil.trim() ? data.boostedUntil.trim() : undefined,
+    studio: normalizeStudioData(data.studio),
   };
 }
 

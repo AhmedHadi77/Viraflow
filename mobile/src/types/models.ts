@@ -85,6 +85,7 @@ export interface Reel {
   viewCount: number;
   reachCount: number;
   boostedUntil?: string;
+  studio?: MediaStudioData;
 }
 
 export interface ReelComment {
@@ -104,6 +105,7 @@ export interface PostMediaItem {
   thumbnailUrl?: string;
   mimeType?: string;
   durationSeconds?: number;
+  studio?: MediaStudioData;
 }
 
 export interface Post {
@@ -141,6 +143,7 @@ export interface Story {
   viewerIds: string[];
   highlightedAt?: string;
   highlightLabel?: string;
+  studio?: MediaStudioData;
 }
 
 export interface Product {
@@ -306,6 +309,12 @@ export interface MediaEditFilters {
   contrast?: number;
   saturation?: number;
   grayscale?: number;
+  /** 0..100 darkened edges. */
+  vignette?: number;
+  /** 0..100 film grain. */
+  grain?: number;
+  /** 0..100 extra sharpness. */
+  sharpen?: number;
 }
 
 export interface MediaOverlayPosition {
@@ -317,6 +326,58 @@ export interface MediaStickerPlacement extends MediaOverlayPosition {
   value: string;
 }
 
+export type StudioTextStyle = "classic" | "modern" | "neon" | "typewriter" | "strong";
+export type StudioTextBackground = "none" | "solid" | "soft";
+export type StudioStickerKind = "emoji" | "location" | "mention" | "hashtag" | "time";
+
+/** A piece of text placed on a photo or video in the editor. Position is the centre, as 0..1 of the frame. */
+export interface StudioTextLayer {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+  color: string;
+  style: StudioTextStyle;
+  background: StudioTextBackground;
+  align: "left" | "center" | "right";
+}
+
+export interface StudioStickerLayer {
+  id: string;
+  kind: StudioStickerKind;
+  value: string;
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+}
+
+/** A soundtrack: a track from the Sohba library (trackId) or the creator's own uploaded sound (url). */
+export interface StudioMusic {
+  trackId?: string;
+  url?: string;
+  title: string;
+  artist: string;
+  startSeconds: number;
+  volume: number;
+  /** Only while editing: the creator's own sound file before it is uploaded. */
+  localUri?: string;
+  mimeType?: string;
+  durationSeconds?: number;
+}
+
+/** Editor results that are shown live on top of the media (text, stickers) or played with it (music). */
+export interface MediaStudioData {
+  texts?: StudioTextLayer[];
+  stickers?: StudioStickerLayer[];
+  music?: StudioMusic;
+  /** Volume of the video's own sound, 0..1. */
+  originalVolume?: number;
+  filterName?: string;
+}
+
 export interface MediaEditConfig {
   overlayText?: string;
   overlayTextPosition?: MediaOverlayPosition;
@@ -325,6 +386,8 @@ export interface MediaEditConfig {
   trimStartRatio?: number;
   trimEndRatio?: number;
   playbackRate?: StudioPlaybackRate;
+  /** Live layers and soundtrack from the editor (kept with the post, reel or story). */
+  studio?: MediaStudioData;
 }
 
 export interface CreateReelPayload {

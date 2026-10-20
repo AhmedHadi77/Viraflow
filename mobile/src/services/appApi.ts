@@ -1,3 +1,4 @@
+import { repairMediaUrl } from "./mediaUpload";
 import {
   AppNotification,
   ChatMessageMediaType,
@@ -335,6 +336,11 @@ export async function fetchApiBootstrap(token: string) {
     marketplaceMessages: marketplace.messages,
     marketplaceOrders: marketplace.orders,
   };
+}
+
+/** Permanently deletes the signed-in account and everything in it (server side). */
+export async function deleteApiAccount(token: string) {
+  return request<{ ok: boolean }>("/auth/account", { method: "DELETE", token });
 }
 
 export async function fetchApiMe(token: string) {
@@ -855,7 +861,7 @@ export function mapApiUserToMobile(
     name: apiUser.name,
     username: apiUser.username,
     email: apiUser.email || options?.existing?.email || `${apiUser.username}@pulseora.app`,
-    profileImage: apiUser.profileImage,
+    profileImage: repairMediaUrl(apiUser.profileImage),
     bio: apiUser.bio,
     headline: apiUser.headline,
     website: apiUser.website ?? options?.existing?.website ?? "",

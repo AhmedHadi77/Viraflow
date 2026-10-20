@@ -1,5 +1,5 @@
 import { Platform } from "react-native";
-import { doc, setDoc } from "firebase/firestore";
+import { deleteDoc, doc, setDoc } from "firebase/firestore";
 import { getFirebaseClientFirestore, isFirebaseClientConfigured } from "./firebaseClient";
 import { buildNotificationNavigationData } from "./notificationRouting";
 import { getPublicEnv } from "./publicEnv";
@@ -7,6 +7,7 @@ import { AppNotification, PushNotificationsStatus } from "../types/models";
 
 const DEVICE_PUSH_TOKENS_COLLECTION = "devicePushTokens";
 const ANDROID_CHANNEL_ID = "pulseora-social";
+const CALLS_CHANNEL_ID = "sohba-calls";
 
 let notificationHandlerConfigured = false;
 
@@ -171,9 +172,35 @@ async function registerRemotePush(
     };
   }
 
+  // Android: register the Firebase Cloud Messaging token. The Sohba server sends to it directly, so
+  // follows, messages and calls arrive even when the app is closed.
+  if (Platform.OS === "android") {
+    try {
+      const deviceToken = await Notifications.getDevicePushTokenAsync();
+      if (typeof deviceToken.data === "string" && deviceToken.data) {
+        await saveDevicePushToken(userId, deviceToken.data, projectId, "fcm");
+        // Drop this phone's older Expo token so the same notification isn't delivered twice.
+        try {
+          const legacy = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+          await removeDevicePushToken(userId, legacy);
+        } catch {
+          // No Expo token on this phone: nothing to clean up.
+        }
+        return {
+          mode: "remote",
+          permissionStatus,
+          token: deviceToken.data,
+          message: "Remote push notifications are connected on this device.",
+        };
+      }
+    } catch {
+      // Fall back to the Expo push service below.
+    }
+  }
+
   try {
     const pushToken = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-    await saveDevicePushToken(userId, pushToken, projectId);
+    await saveDevicePushToken(userId, pushToken, projectId, "expo");
 
     return {
       mode: "remote",
@@ -188,6 +215,15 @@ async function registerRemotePush(
       message: buildPushSetupErrorMessage(error),
     };
   }
+}
+
+/** Removes this phone's token for a user (on sign-out, so a signed-out phone stops getting their alerts). */
+export async function removeDevicePushToken(userId: string, token: string) {
+  const db = getFirebaseClientFirestore();
+  if (!db || !token) {
+    return;
+  }
+  await deleteDoc(doc(db, DEVICE_PUSH_TOKENS_COLLECTION, normalizePushTokenId(userId, token))).catch(() => undefined);
 }
 
 function configureNotificationHandler() {
@@ -215,7 +251,7 @@ function configureNotificationHandler() {
   notificationHandlerConfigured = true;
 }
 
-async function saveDevicePushToken(userId: string, token: string, projectId: string) {
+async function saveDevicePushToken(userId: string, token: string, projectId: string, provider: "fcm" | "expo") {
   const Constants = getExpoConstants();
   const db = getFirebaseClientFirestore();
   if (!db) {
@@ -231,6 +267,7 @@ async function saveDevicePushToken(userId: string, token: string, projectId: str
       id: tokenRef.id,
       userId: userId.trim(),
       token: token.trim(),
+      provider,
       platform: Platform.OS,
       projectId,
       executionEnvironment: String(Constants?.executionEnvironment ?? ""),
@@ -257,6 +294,16 @@ async function ensureAndroidNotificationChannel() {
     vibrationPattern: [0, 250, 120, 250],
     lightColor: "#36E0A1",
     sound: "default",
+  });
+  // Incoming calls get their own channel so they can ring loudly and show over the lock screen.
+  await Notifications.setNotificationChannelAsync(CALLS_CHANNEL_ID, {
+    name: "Calls",
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 600, 400, 600, 400, 600],
+    lightColor: "#36E0A1",
+    sound: "default",
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    bypassDnd: false,
   });
 }
 

@@ -1,4 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
+import { StudioLayersOverlay } from "./studio/StudioLayers";
+import { Avatar } from "./Avatar";
 import { useCopy } from "../utils/useCopy";
 import { formatDate } from "../utils/timeFormatting";
 import { useEventListener } from "expo";
@@ -72,7 +74,7 @@ export function PostCard({
     <View style={styles.card}>
       <View style={styles.header}>
         <Pressable onPress={onAuthorPress} style={styles.authorRow}>
-          <Image source={{ uri: author.profileImage }} style={styles.avatar} />
+          <Avatar name={author.name} style={styles.avatar} uri={author.profileImage} />
           <View style={styles.authorCopy}>
             <Text numberOfLines={1} style={styles.username}>
               {author.username}
@@ -173,11 +175,23 @@ export function PostCard({
 }
 
 function PostMediaFrame({ media, active }: { media: PostMediaItem; active: boolean }) {
-  if (media.type === "video") {
-    return <InlineVideo media={media} playing={active} />;
-  }
-
-  return <Image resizeMode="cover" source={{ uri: media.url }} style={styles.mediaImage} />;
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  return (
+    <View
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout;
+        setSize((current) => (current.width === width && current.height === height ? current : { width, height }));
+      }}
+      style={styles.mediaImage}
+    >
+      {media.type === "video" ? (
+        <InlineVideo media={media} playing={active} />
+      ) : (
+        <Image resizeMode="cover" source={{ uri: media.url }} style={styles.mediaImage} />
+      )}
+      <StudioLayersOverlay height={size.height} studio={media.studio} width={size.width} />
+    </View>
+  );
 }
 
 function InlineVideo({ media, playing }: { media: PostMediaItem; playing: boolean }) {
@@ -316,7 +330,7 @@ function ActionButton({
 }) {
   return (
     <Pressable onPress={onPress} style={styles.actionButton}>
-      <Ionicons color={active ? "#ff5d7d" : palette.text} name={icon} size={22} />
+      <Ionicons color={active ? palette.accent : palette.text} name={icon} size={22} />
     </Pressable>
   );
 }
@@ -541,7 +555,7 @@ const styles = createThemedStyles({
     fontWeight: "800",
   },
   hashtags: {
-    color: "#79b8ff",
+    color: palette.primary,
     fontSize: 13,
     fontWeight: "700",
     lineHeight: 20,

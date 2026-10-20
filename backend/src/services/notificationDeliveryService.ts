@@ -1,11 +1,10 @@
 import { z } from "zod";
 import { getFirestore } from "./firebaseService";
 import { localizePushText } from "./notificationText";
+import { readPushTargets, sendPush } from "./pushSender";
 
 const DEVICE_PUSH_TOKENS_COLLECTION = "devicePushTokens";
 const NOTIFICATIONS_COLLECTION = "notifications";
-const EXPO_PUSH_API_URL = "https://exp.host/--/api/v2/push/send";
-const ANDROID_CHANNEL_ID = "pulseora-social";
 
 const notificationTypeSchema = z.enum([
   "post_like",
@@ -117,11 +116,8 @@ async function sendExpoPushNotificationsForUser(
   notification: DeliveredNotification
 ) {
   const snapshot = await db.collection(DEVICE_PUSH_TOKENS_COLLECTION).where("userId", "==", userId).limit(12).get();
-  const tokens = snapshot.docs
-    .map((item) => readPushToken(item.data().token))
-    .filter((token): token is string => Boolean(token));
-
-  if (tokens.length === 0) {
+  const targets = readPushTargets(snapshot.docs);
+  if (targets.length === 0) {
     return 0;
   }
 
@@ -139,11 +135,10 @@ async function sendExpoPushNotificationsForUser(
     typeof recipient?.get("language") === "string" ? recipient.get("language") : undefined
   );
 
-  const messages = tokens.map((token) => ({
-    to: token,
-    sound: "default",
+  return sendPush(db, targets, {
     title: pushText.title,
-    ...(pushText.body ? { body: pushText.body } : {}),
+    body: pushText.body || undefined,
+    urgent: notification.type === "call",
     data: {
       notificationId: notification.id,
       type: notification.type,
@@ -153,33 +148,10 @@ async function sendExpoPushNotificationsForUser(
       conversationType: notification.conversationType,
       actorId: notification.actorId,
     },
-    channelId: ANDROID_CHANNEL_ID,
-    // Incoming calls must wake the phone right away.
-    priority: notification.type === "call" ? "high" : "default",
-    ...(notification.type === "call" ? { ttl: 45 } : {}),
-  }));
-
-  const response = await fetch(EXPO_PUSH_API_URL, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Accept-Encoding": "gzip, deflate",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(messages),
   });
-
-  if (!response.ok) {
-    throw new Error("Expo Push API could not deliver this notification.");
-  }
-
-  return tokens.length;
 }
 
 function normalizeDocId(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-").slice(0, 150);
 }
 
-function readPushToken(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}

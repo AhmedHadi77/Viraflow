@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Avatar } from "../components/Avatar";
 import { Alert, Image, Pressable, Text, View } from "react-native";
 import { InputField } from "../components/InputField";
 import { Screen } from "../components/Screen";
@@ -121,7 +122,7 @@ export function DirectInboxScreen({ navigation }: { navigation: any }) {
                   }}
                   style={styles.searchResultCard}
                 >
-                  <Image source={{ uri: user.profileImage }} style={styles.searchAvatar} />
+                  <Avatar name={user.name} style={styles.searchAvatar} uri={user.profileImage} />
                   <View style={styles.searchBody}>
                     <Text style={styles.searchName}>{user.name}</Text>
                     <Text style={styles.searchMeta}>@{user.username}</Text>

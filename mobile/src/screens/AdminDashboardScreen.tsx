@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Avatar } from "../components/Avatar";
 import { useMemo, useState } from "react";
 import {
   Alert,
@@ -562,8 +563,8 @@ export function AdminDashboardScreen({ navigation }: { navigation: any }) {
         <View style={styles.analyticsGrid}>
           <AnalyticsCard accent={palette.primary} icon="people-outline" label={`${copy.total} ${copy.usersTitle.toLowerCase()}`} value={users.length} />
           <AnalyticsCard accent={palette.accent} icon="images-outline" label={`${copy.total} ${copy.posts.toLowerCase()}`} value={posts.length} />
-          <AnalyticsCard accent="#9d7dff" icon="play-circle-outline" label={`${copy.total} ${copy.reels.toLowerCase()}`} value={reels.length} />
-          <AnalyticsCard accent="#52c2ff" icon="timer-outline" label={`${copy.total} ${adminCopy.storiesTitle.toLowerCase()}`} value={stories.length} />
+          <AnalyticsCard accent="#ff7a2f" icon="play-circle-outline" label={`${copy.total} ${copy.reels.toLowerCase()}`} value={reels.length} />
+          <AnalyticsCard accent="#36e0a1" icon="timer-outline" label={`${copy.total} ${adminCopy.storiesTitle.toLowerCase()}`} value={stories.length} />
           <AnalyticsCard accent={palette.success} icon="pulse-outline" label={adminCopy.activeUsers} value={activeUsersCount} />
           <AnalyticsCard
             accent={palette.danger}
@@ -628,7 +629,7 @@ export function AdminDashboardScreen({ navigation }: { navigation: any }) {
             return (
               <View key={user.id} style={styles.panelCard}>
                 <View style={styles.entityRow}>
-                  <Image source={{ uri: user.profileImage }} style={styles.avatar} />
+                  <Avatar name={user.name} style={styles.avatar} uri={user.profileImage} />
                   <View style={styles.entityCopy}>
                     <View style={styles.inlineRow}>
                       <Text style={styles.entityTitle}>{user.name}</Text>

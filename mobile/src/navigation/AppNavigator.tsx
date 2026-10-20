@@ -3,7 +3,7 @@ import { BottomTabBarProps, createBottomTabNavigator } from "@react-navigation/b
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { brandTints, GradientIconFill } from "../components/GradientIcon";
+import { GradientIconFill } from "../components/GradientIcon";
 import { PAYMENTS_ENABLED } from "../data/catalog";
 import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
@@ -44,6 +44,8 @@ export type RootStackParamList = {
   MarketplaceCheckout: { productId: string };
   EditProfile: undefined;
   Settings: undefined;
+  MyContent: undefined;
+  MediaEditor: { sessionId: string };
   Subscription: undefined;
   AITools: undefined;
   Notifications: undefined;
@@ -212,6 +214,16 @@ export function AppNavigator() {
             name="Settings"
             options={{ title: copy.settingsTitle }}
           />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/MediaEditorScreen").MediaEditorScreen)}
+            name="MediaEditor"
+            options={{ animation: "fade", gestureEnabled: false, headerShown: false, presentation: "fullScreenModal" }}
+          />
+          <Stack.Screen
+            getComponent={loadScreen(() => require("../screens/MyContentScreen").MyContentScreen)}
+            name="MyContent"
+            options={{ title: "" }}
+          />
           {PAYMENTS_ENABLED ? (
             <Stack.Screen
               getComponent={loadScreen(() => require("../screens/SubscriptionScreen").SubscriptionScreen)}
@@ -290,14 +302,8 @@ function SohbaTabBar({ descriptors, navigation, state }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   // Reels is a full-screen video feed, so the bar stays dark there in both themes.
   const onReels = state.routes[state.index]?.name === "Reels";
-  // Each tab keeps its own colour from the Sohba gradient; the open tab becomes a filled gradient circle.
-  const tabTints: Record<keyof AppTabParamList, string> = {
-    Home: brandTints.green,
-    Reels: brandTints.pink,
-    Create: brandTints.purple,
-    Marketplace: brandTints.orange,
-    Profile: brandTints.cyan,
-  };
+  // Tabs use the brand green; the open tab becomes a filled green-to-orange gradient circle.
+  const idleTint = onReels ? "#36e0a1" : palette.primary;
 
   return (
     <View
@@ -365,7 +371,7 @@ function SohbaTabBar({ descriptors, navigation, state }: BottomTabBarProps) {
               {focused || isCreate ? (
                 <GradientIconFill icon={isCreate ? "add" : icon} iconSize={isCreate ? 26 : 21} size={isCreate ? 42 : 38} />
               ) : (
-                <Ionicons color={tabTints[route.name as keyof AppTabParamList]} name={icon} size={25} />
+                <Ionicons color={idleTint} name={icon} size={25} />
               )}
               <View accessible={false} style={styles.screenReaderOnly} />
             </Pressable>

@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { ComponentProps, useMemo, useState } from "react";
-import { Pressable, Switch, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Modal, Pressable, Switch, Text, TextInput, View } from "react-native";
+import { fill } from "../utils/labels";
 import { setConvertPrices, useExchangeRates } from "../services/exchangeRates";
 import { rtlFlipStyle } from "../utils/layoutDirection";
 import { Screen } from "../components/Screen";
@@ -15,8 +16,12 @@ import { formatDate } from "../utils/timeFormatting";
 
 type OpenSheet = "language" | "region" | null;
 
-export function SettingsScreen() {
-  const { language, region, localeTag, setLanguage, setRegion } = useAppState();
+export function SettingsScreen({ navigation }: { navigation: any }) {
+  const { language, region, localeTag, setLanguage, setRegion, currentUser, logout, deleteAccount, pushNotificationsStatus } =
+    useAppState();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const { mode, setMode } = useThemeMode();
   const { convertPrices } = useExchangeRates();
   const copy = getCopy(language);
@@ -125,6 +130,109 @@ export function SettingsScreen() {
         </View>
       </View>
 
+      {currentUser ? (
+        <>
+          <Text style={styles.sectionLabel}>{copy.accountSection}</Text>
+          <View style={styles.card}>
+            <SettingRow
+              icon="notifications-outline"
+              onPress={() => {
+                void Linking.openSettings();
+              }}
+              title={copy.notificationsSetting}
+              value={pushNotificationsStatus.mode === "remote" ? copy.notificationsOn : copy.notificationsOff}
+            />
+            <SettingRow
+              icon="albums-outline"
+              onPress={() => navigation.navigate("MyContent")}
+              title={copy.mcTitle}
+              value={copy.mcSubtitleShort}
+            />
+            <SettingRow
+              icon="log-out-outline"
+              onPress={() => {
+                void logout();
+              }}
+              title={copy.logout}
+              value={`@${currentUser.username}`}
+            />
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setConfirmText("");
+              setDeleteOpen(true);
+            }}
+            style={({ pressed }) => [styles.dangerCard, pressed ? styles.rowPressed : null]}
+          >
+            <Ionicons color={palette.danger} name="trash-outline" size={20} />
+            <View style={styles.rowText}>
+              <Text style={styles.dangerTitle}>{copy.deleteAccountTitle}</Text>
+              <Text style={styles.helper}>{copy.deleteAccountBody}</Text>
+            </View>
+          </Pressable>
+        </>
+      ) : null}
+
+      <Modal animationType="fade" onRequestClose={() => setDeleteOpen(false)} transparent visible={deleteOpen}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Ionicons color={palette.danger} name="warning-outline" size={32} />
+            <Text style={styles.modalTitle}>{copy.deleteAccountTitle}</Text>
+            <Text style={styles.modalBody}>{copy.deleteAccountWarning}</Text>
+            <Text style={styles.modalBody}>{fill(copy.deleteAccountTypeToConfirm, { username: currentUser?.username ?? "" })}</Text>
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!deleting}
+              onChangeText={setConfirmText}
+              placeholder={currentUser?.username ?? ""}
+              placeholderTextColor={palette.mutedSoft}
+              style={styles.modalInput}
+              value={confirmText}
+            />
+            <View style={styles.modalActions}>
+              <Pressable
+                disabled={deleting}
+                onPress={() => setDeleteOpen(false)}
+                style={[styles.modalButton, styles.modalButtonGhost]}
+              >
+                <Text style={styles.modalButtonGhostLabel}>{copy.cancel}</Text>
+              </Pressable>
+              <Pressable
+                disabled={deleting || confirmText.trim().replace(/^@/, "").toLowerCase() !== (currentUser?.username ?? "").toLowerCase()}
+                onPress={() => {
+                  setDeleting(true);
+                  void deleteAccount().then((result) => {
+                    setDeleting(false);
+                    if (result.ok) {
+                      setDeleteOpen(false);
+                      Alert.alert(copy.deleteAccountDone);
+                    } else {
+                      Alert.alert(copy.deleteAccountFailed, result.message);
+                    }
+                  });
+                }}
+                style={[
+                  styles.modalButton,
+                  styles.modalButtonDanger,
+                  confirmText.trim().replace(/^@/, "").toLowerCase() !== (currentUser?.username ?? "").toLowerCase()
+                    ? styles.modalButtonDisabled
+                    : null,
+                ]}
+              >
+                {deleting ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text style={styles.modalButtonDangerLabel}>{copy.deleteAccountConfirm}</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <SelectionSheet
         onClose={() => setOpenSheet(null)}
         onSelect={(value) => {
@@ -186,6 +294,91 @@ function SettingRow({
 }
 
 const styles = createThemedStyles({
+  dangerCard: {
+    alignItems: "center",
+    backgroundColor: palette.surface,
+    borderColor: palette.danger,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.md,
+    marginTop: spacing.md,
+    padding: spacing.md,
+  },
+  dangerTitle: {
+    color: palette.danger,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  modalBackdrop: {
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.6)",
+    flex: 1,
+    justifyContent: "center",
+    padding: spacing.lg,
+  },
+  modalCard: {
+    alignItems: "center",
+    alignSelf: "stretch",
+    backgroundColor: palette.surface,
+    borderRadius: radii.xl,
+    gap: spacing.sm,
+    padding: spacing.xl,
+  },
+  modalTitle: {
+    color: palette.text,
+    fontSize: 20,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  modalBody: {
+    color: palette.muted,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+  },
+  modalInput: {
+    alignSelf: "stretch",
+    backgroundColor: palette.input,
+    borderRadius: radii.md,
+    color: palette.text,
+    fontSize: 16,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+  },
+  modalActions: {
+    alignSelf: "stretch",
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  modalButton: {
+    alignItems: "center",
+    borderRadius: radii.pill,
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 48,
+  },
+  modalButtonGhost: {
+    backgroundColor: palette.surfaceMuted,
+  },
+  modalButtonGhostLabel: {
+    color: palette.text,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  modalButtonDanger: {
+    backgroundColor: palette.danger,
+  },
+  modalButtonDisabled: {
+    opacity: 0.45,
+  },
+  modalButtonDangerLabel: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "800",
+  },
   content: {
     gap: spacing.sm,
     paddingBottom: spacing.xxl,

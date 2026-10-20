@@ -10,7 +10,7 @@ import {
 } from "../services/cloudinaryService";
 
 const signatureSchema = z.object({
-  folder: z.enum(["profile", "stories", "reels", "products", "posts", "ai", "communities", "messages"]).default("reels"),
+  folder: z.enum(["profile", "stories", "reels", "products", "posts", "ai", "communities", "messages", "sounds"]).default("reels"),
   publicIdPrefix: z.string().max(60).optional(),
   resourceType: z.enum(["image", "video", "raw"]).default("image"),
 });

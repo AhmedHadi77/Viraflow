@@ -1,3 +1,4 @@
+import { purgeUserAccount } from "../services/adminService";
 import { Request, Response } from "express";
 import { AuthenticatedRequest } from "../middleware/auth";
 import { getOrCreateAuthenticatedUser } from "../services/authenticatedUserService";
@@ -34,4 +35,19 @@ export async function me(req: AuthenticatedRequest, res: Response) {
   res.json({
     user: getOrCreateAuthenticatedUser(req.user),
   });
+}
+
+/** Lets a signed-in person permanently delete their own account and everything in it. */
+export async function deleteOwnAccount(req: AuthenticatedRequest, res: Response) {
+  if (!req.user?.id || req.user.provider !== "firebase") {
+    res.status(401).json({ message: "Unauthorized." });
+    return;
+  }
+  try {
+    const removed = await purgeUserAccount(req.user.id);
+    res.json({ ok: true, removed });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "The account could not be deleted. Try again.";
+    res.status(500).json({ message });
+  }
 }
