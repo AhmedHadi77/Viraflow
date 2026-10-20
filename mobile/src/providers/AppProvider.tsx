@@ -4,7 +4,7 @@ import { AppState, I18nManager, Linking } from "react-native";
 import { applyLayoutDirection, isRtlLanguage } from "../utils/layoutDirection";
 import { getCopy } from "../data/copy";
 import { isCallConnection } from "../utils/callConnection";
-import { onFirestoreReset } from "../services/firebaseClient";
+import { isFirestoreOfflineError, onFirestoreReset, setFirebaseErrorLanguage, withFirestoreRetry } from "../services/firebaseClient";
 import { reelBoostPlans, subscriptionPlans } from "../data/catalog";
 import {
   AppApiError,
@@ -679,6 +679,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // not on every sign-in token refresh (restarting them all at once can break the Firestore SDK).
   const [firestoreEpoch, setFirestoreEpoch] = useState(0);
   useEffect(() => onFirestoreReset(() => setFirestoreEpoch((value) => value + 1)), []);
+  useEffect(() => {
+    setFirebaseErrorLanguage(language);
+  }, [language]);
   const firebaseListenKey = isFirebaseBackedSession(session) && session?.userId ? `${session.userId}:${firestoreEpoch}` : "";
   const isAdmin = currentUser?.role === "admin";
   const googleSignInEnabled = isGoogleSignInConfigured();
@@ -1573,7 +1576,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return { ok: true, callId };
     } catch (error) {
       const code = (error as { code?: string } | null)?.code;
-      return { ok: false, message: code === "permission-denied" ? callCopy.callOnlyConnections : callCopy.callStartFailed };
+      console.warn("Sohba call failed to start.", code, error instanceof Error ? error.message : error);
+      const message =
+        code === "permission-denied"
+          ? callCopy.callOnlyConnections
+          : code === "call/mic-permission"
+            ? callCopy.callNeedMic
+            : code === "call/camera-permission"
+              ? callCopy.callNeedCamera
+              : code === "call/busy"
+                ? callCopy.callBusy
+                : isFirestoreOfflineError(error)
+                  ? callCopy.netOffline
+                  : callCopy.callStartFailed;
+      return { ok: false, message };
     }
   }
 
@@ -3374,12 +3390,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     if (isFirebaseBackedSession(session)) {
       try {
-        const response = await startFirebaseDirectChat(currentUser, targetUser);
+        const response = await withFirestoreRetry(() => startFirebaseDirectChat(currentUser, targetUser));
         setDirectThreads((current) => upsertDirectThread(current, response.thread));
         setDirectMessages((current) => mergeDirectMessages(current, response.messages));
         return { ok: true, threadId: response.thread.id };
       } catch (error) {
-        return { ok: false, message: getFirebaseChatErrorMessage(error) };
+        return { ok: false, message: isFirestoreOfflineError(error) ? getCopy(language).netOffline : getFirebaseChatErrorMessage(error) };
       }
     }
 
@@ -3552,7 +3568,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }).catch(() => undefined);
         return { ok: true };
       } catch (error) {
-        return { ok: false, message: getFirebaseChatErrorMessage(error) };
+        return { ok: false, message: isFirestoreOfflineError(error) ? getCopy(language).netOffline : getFirebaseChatErrorMessage(error) };
       }
     }
 

@@ -873,6 +873,11 @@ const ja: Partial<CopyStrings> = {
   sfNoir: "ノワール",
   csFileTooBig: "大きすぎるファイルがあります。動画は100MB、写真は10MBまでです。短いクリップでお試しください。",
   adminDeletedBody: "削除しました。全員の画面から削除されました。",
+  netOffline: "現在Sohbaに接続できません。インターネット接続を確認して、もう一度お試しください。",
+  callNeedMic: "通話するには、端末の設定でSohbaのマイクへのアクセスを許可してください。",
+  callNeedCamera: "ビデオ通話をするには、端末の設定でSohbaのカメラとマイクへのアクセスを許可してください。",
+  callBusy: "すでに通話中です。",
+  errNoPermission: "この操作を行う権限がありません。",
 };
 
 export default ja;

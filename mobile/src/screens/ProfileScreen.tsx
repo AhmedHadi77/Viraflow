@@ -336,7 +336,7 @@ function ProfileContent({ navigation, profileUser }: { navigation: any; profileU
           ) : null}
         </View>
 
-        <Text style={styles.bio}>{activeProfileUser.bio === DEFAULT_BIO_TEXT ? copy.defaultBio : activeProfileUser.bio}</Text>
+        <Text style={styles.bio}>{activeProfileUser.bio === DEFAULT_BIO_TEXT || activeProfileUser.bio === "New creator on Pulseora." ? copy.defaultBio : activeProfileUser.bio}</Text>
         {activeProfileUser.website ? (
           <Pressable onPress={() => void handleOpenWebsite()} style={styles.websiteChip}>
             <Ionicons color={palette.accentSoft} name="link-outline" size={15} />

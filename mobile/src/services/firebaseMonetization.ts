@@ -10,6 +10,7 @@ import {
 } from "firebase/firestore";
 import {
   combineUnsubscribers,
+  friendlyFirebaseError,
   getFirebaseClientFirestore,
   handleFirestoreListenError,
   isFirebaseClientConfigured,
@@ -76,6 +77,10 @@ export function subscribeToFirebaseMonetization(
 }
 
 export function getFirebaseMonetizationErrorMessage(error: unknown) {
+  const friendly = friendlyFirebaseError(error);
+  if (friendly) {
+    return friendly;
+  }
   if (error instanceof Error) {
     return error.message;
   }

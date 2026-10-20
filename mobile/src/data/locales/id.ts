@@ -873,6 +873,11 @@ const id: Partial<CopyStrings> = {
   sfNoir: "Noir",
   csFileTooBig: "Beberapa file terlalu besar. Video maksimal 100 MB dan foto maksimal 10 MB — coba klip yang lebih pendek.",
   adminDeletedBody: "Dihapus. Konten telah dihapus untuk semua orang.",
+  netOffline: "Tidak dapat terhubung ke Sohba sekarang. Periksa koneksi internet lalu coba lagi.",
+  callNeedMic: "Izinkan akses mikrofon untuk Sohba di pengaturan ponsel agar bisa menelepon.",
+  callNeedCamera: "Izinkan akses kamera dan mikrofon untuk Sohba di pengaturan ponsel untuk panggilan video.",
+  callBusy: "Anda sedang dalam panggilan.",
+  errNoPermission: "Anda tidak memiliki izin untuk melakukannya.",
 };
 
 export default id;

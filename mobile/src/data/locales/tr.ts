@@ -873,6 +873,11 @@ const tr: Partial<CopyStrings> = {
   sfNoir: "Noir",
   csFileTooBig: "Bazı dosyalar çok büyük. Videolar en fazla 100 MB, fotoğraflar 10 MB olabilir — daha kısa bir klip dene.",
   adminDeletedBody: "Silindi. İçerik herkes için kaldırıldı.",
+  netOffline: "Şu anda Sohba'ya bağlanılamıyor. İnternet bağlantını kontrol edip tekrar dene.",
+  callNeedMic: "Arama yapmak için telefon ayarlarından Sohba'ya mikrofon izni ver.",
+  callNeedCamera: "Görüntülü arama için telefon ayarlarından Sohba'ya kamera ve mikrofon izni ver.",
+  callBusy: "Zaten bir aramadasın.",
+  errNoPermission: "Bunu yapma iznin yok.",
 };
 
 export default tr;

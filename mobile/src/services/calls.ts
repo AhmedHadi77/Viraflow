@@ -13,7 +13,7 @@ import {
 import { useSyncExternalStore } from "react";
 import { PermissionsAndroid, Platform, Vibration } from "react-native";
 import type { MediaStream, RTCPeerConnection } from "react-native-webrtc";
-import { combineUnsubscribers, getFirebaseClientFirestore, handleFirestoreListenError } from "./firebaseClient";
+import { combineUnsubscribers, getFirebaseClientFirestore, handleFirestoreListenError, withFirestoreRetry } from "./firebaseClient";
 import { getPublicEnv } from "./publicEnv";
 
 type WebRtcModule = typeof import("react-native-webrtc");
@@ -193,8 +193,29 @@ async function openLocalMedia(type: CallType) {
   return stream;
 }
 
+// The caller's network addresses are found before the call record is saved, and the database only
+// accepts them once that record exists, so they wait here until it does.
+let callDocReady = false;
+let outgoingCandidates: Array<{ path: string[]; data: Record<string, unknown> }> = [];
+
+function publishCandidate(callId: string, candidateCollection: string, data: Record<string, unknown>) {
+  if (!callDocReady) {
+    outgoingCandidates.push({ path: [callId, candidateCollection], data });
+    return;
+  }
+  void addDoc(collection(requireDb(), CALLS_COLLECTION, callId, candidateCollection), data).catch(() => undefined);
+}
+
+function markCallDocReady() {
+  callDocReady = true;
+  const queued = outgoingCandidates;
+  outgoingCandidates = [];
+  queued.forEach((item) => publishCandidate(item.path[0], item.path[1], item.data));
+}
+
 function createPeer(callId: string, candidateCollection: "callerCandidates" | "calleeCandidates") {
-  const db = requireDb();
+  callDocReady = candidateCollection === "calleeCandidates";
+  outgoingCandidates = [];
   const connection = new (loadWebRtc().RTCPeerConnection)({ iceServers: buildIceServers() });
   peer = connection;
   const events = connection as unknown as {
@@ -203,9 +224,7 @@ function createPeer(callId: string, candidateCollection: "callerCandidates" | "c
 
   events.addEventListener("icecandidate", (event) => {
     if (event?.candidate) {
-      void addDoc(collection(db, CALLS_COLLECTION, callId, candidateCollection), event.candidate.toJSON()).catch(
-        () => undefined
-      );
+      publishCandidate(callId, candidateCollection, event.candidate.toJSON());
     }
   });
 
@@ -286,10 +305,13 @@ function handleRemoteEnd(call: CallRecord) {
 /** Starts a call to another user and returns the new call id (navigate to the call screen with it). */
 export async function startCall(input: { callerId: string; calleeId: string; type: CallType }) {
   if (state.phase !== "idle" && state.phase !== "ended") {
-    throw new Error("You are already in a call.");
+    throw Object.assign(new Error("You are already in a call."), { code: "call/busy" });
   }
   if (!(await ensureCallPermissions(input.type))) {
-    throw new Error(input.type === "video" ? "Allow camera and microphone access to make video calls." : "Allow microphone access to make calls.");
+    throw Object.assign(
+      new Error(input.type === "video" ? "Allow camera and microphone access to make video calls." : "Allow microphone access to make calls."),
+      { code: input.type === "video" ? "call/camera-permission" : "call/mic-permission" }
+    );
   }
 
   const db = requireDb();
@@ -315,7 +337,8 @@ export async function startCall(input: { callerId: string; calleeId: string; typ
       createdAt: new Date().toISOString(),
       offer: { type: offer.type, sdp: offer.sdp },
     };
-    await setDoc(callRef, record);
+    await withFirestoreRetry(() => setDoc(callRef, record));
+    markCallDocReady();
 
     watchCallDoc(callId, (call) => {
       if (call.answer && connection.remoteDescription == null) {
@@ -440,6 +463,8 @@ function teardown(reason: CallStatus) {
   }
   combineUnsubscribers(cleanupFns)();
   cleanupFns = [];
+  outgoingCandidates = [];
+  callDocReady = false;
   try {
     localStream?.getTracks().forEach((track) => track.stop());
     localStream?.release();

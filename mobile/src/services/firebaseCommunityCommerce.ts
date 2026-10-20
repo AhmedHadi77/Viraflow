@@ -13,6 +13,7 @@ import {
 } from "firebase/firestore";
 import {
   combineUnsubscribers,
+  friendlyFirebaseError,
   getFirebaseClientFirestore,
   handleFirestoreListenError,
   isFirebaseClientConfigured,
@@ -252,6 +253,10 @@ export async function createFirebaseMarketplaceOrder(
 }
 
 export function getFirebaseCommunityCommerceErrorMessage(error: unknown) {
+  const friendly = friendlyFirebaseError(error);
+  if (friendly) {
+    return friendly;
+  }
   if (error instanceof Error) {
     return error.message;
   }

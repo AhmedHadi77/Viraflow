@@ -873,6 +873,11 @@ const de: Partial<CopyStrings> = {
   sfNoir: "Noir",
   csFileTooBig: "Einige Dateien sind zu groß. Videos dürfen bis zu 100 MB, Fotos bis zu 10 MB groß sein – versuche einen kürzeren Clip.",
   adminDeletedBody: "Gelöscht. Der Inhalt wurde für alle entfernt.",
+  netOffline: "Sohba ist gerade nicht erreichbar. Prüfe deine Internetverbindung und versuche es erneut.",
+  callNeedMic: "Erlaube Sohba in den Telefoneinstellungen den Mikrofonzugriff, um anzurufen.",
+  callNeedCamera: "Erlaube Sohba in den Telefoneinstellungen Kamera- und Mikrofonzugriff für Videoanrufe.",
+  callBusy: "Du bist bereits in einem Anruf.",
+  errNoPermission: "Dafür hast du keine Berechtigung.",
 };
 
 export default de;

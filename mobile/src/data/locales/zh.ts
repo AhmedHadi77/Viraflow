@@ -873,6 +873,11 @@ const zh: Partial<CopyStrings> = {
   sfNoir: "黑色电影",
   csFileTooBig: "部分文件过大。视频最大 100 MB，照片最大 10 MB，请尝试更短的片段。",
   adminDeletedBody: "已删除，所有人都看不到了。",
+  netOffline: "暂时无法连接 Sohba，请检查网络后重试。",
+  callNeedMic: "请在手机设置中允许 Sohba 使用麦克风后再拨打电话。",
+  callNeedCamera: "请在手机设置中允许 Sohba 使用摄像头和麦克风后再进行视频通话。",
+  callBusy: "你已在通话中。",
+  errNoPermission: "你没有执行此操作的权限。",
 };
 
 export default zh;

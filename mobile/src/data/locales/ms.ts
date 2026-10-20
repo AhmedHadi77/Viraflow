@@ -873,6 +873,11 @@ const ms: Partial<CopyStrings> = {
   sfNoir: "Noir",
   csFileTooBig: "Sesetengah fail terlalu besar. Video maksimum 100 MB dan foto 10 MB — cuba klip yang lebih pendek.",
   adminDeletedBody: "Dipadam. Kandungan telah dibuang untuk semua orang.",
+  netOffline: "Tidak dapat menyambung ke Sohba sekarang. Semak sambungan internet dan cuba lagi.",
+  callNeedMic: "Benarkan akses mikrofon untuk Sohba dalam tetapan telefon untuk membuat panggilan.",
+  callNeedCamera: "Benarkan akses kamera dan mikrofon untuk Sohba dalam tetapan telefon untuk panggilan video.",
+  callBusy: "Anda sedang dalam panggilan.",
+  errNoPermission: "Anda tiada kebenaran untuk melakukannya.",
 };
 
 export default ms;

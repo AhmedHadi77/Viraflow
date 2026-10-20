@@ -15,6 +15,7 @@ import {
 } from "firebase/firestore";
 import {
   combineUnsubscribers,
+  friendlyFirebaseError,
   getFirebaseClientFirestore,
   handleFirestoreListenError,
   isFirebaseClientConfigured,
@@ -230,6 +231,10 @@ async function deleteFirebasePostDocument(postId: string, ownerId?: string) {
 }
 
 export function getFirebasePostsErrorMessage(error: unknown) {
+  const friendly = friendlyFirebaseError(error);
+  if (friendly) {
+    return friendly;
+  }
   if (error instanceof Error) {
     return error.message;
   }

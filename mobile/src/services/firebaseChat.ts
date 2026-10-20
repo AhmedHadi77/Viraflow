@@ -13,6 +13,7 @@ import {
 } from "firebase/firestore";
 import {
   combineUnsubscribers,
+  friendlyFirebaseError,
   getFirebaseClientFirestore,
   handleFirestoreListenError,
   isFirebaseClientConfigured,
@@ -379,6 +380,10 @@ export async function markFirebaseCommunityMessagesRead(userId: string, messageI
 }
 
 export function getFirebaseChatErrorMessage(error: unknown) {
+  const friendly = friendlyFirebaseError(error);
+  if (friendly) {
+    return friendly;
+  }
   if (error instanceof Error) {
     return error.message;
   }

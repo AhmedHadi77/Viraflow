@@ -872,6 +872,11 @@ const en = {
   sfNoir: "Noir",
   csFileTooBig: "Some files are too large. Videos can be up to 100 MB and photos up to 10 MB — try a shorter clip.",
   adminDeletedBody: "Deleted. It has been removed for everyone.",
+  netOffline: "Can't reach Sohba right now. Check your internet connection and try again.",
+  callNeedMic: "Allow microphone access for Sohba in your phone settings to make calls.",
+  callNeedCamera: "Allow camera and microphone access for Sohba in your phone settings to make video calls.",
+  callBusy: "You're already in a call.",
+  errNoPermission: "You don't have permission to do that.",
 };
 
 export type CopyStrings = typeof en;

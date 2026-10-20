@@ -15,6 +15,7 @@ import {
 } from "firebase/firestore";
 import {
   combineUnsubscribers,
+  friendlyFirebaseError,
   getFirebaseClientFirestore,
   handleFirestoreListenError,
   isFirebaseClientConfigured,
@@ -209,6 +210,10 @@ export async function toggleFirebaseFollow(viewerInput: User, targetInput: User)
 }
 
 export function getFirebaseEngagementErrorMessage(error: unknown) {
+  const friendly = friendlyFirebaseError(error);
+  if (friendly) {
+    return friendly;
+  }
   if (error instanceof Error) {
     return error.message;
   }
@@ -267,7 +272,7 @@ function normalizeUserDoc(id: string, data: Record<string, unknown>): User {
     username,
     email: readString(data.email, `${username}@pulseora.app`),
     profileImage: repairMediaUrl(readString(data.profileImage, DEFAULT_PROFILE_IMAGE)),
-    bio: readString(data.bio, "New creator on Sohba."),
+    bio: readString(data.bio, "New creator on Sohba.").replace(/^New creator on Pulseora\.?$/, "New creator on Sohba."),
     headline: readString(data.headline, "Creator in progress"),
     language: normalizeLanguage(readString(data.language, "en")),
     region: readString(data.region, "").toUpperCase() || undefined,

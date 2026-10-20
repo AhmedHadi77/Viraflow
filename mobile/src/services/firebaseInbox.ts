@@ -6,7 +6,6 @@ import {
   getDocs,
   limit,
   onSnapshot,
-  orderBy,
   query,
   setDoc,
   where,
@@ -14,6 +13,7 @@ import {
 } from "firebase/firestore";
 import {
   combineUnsubscribers,
+  friendlyFirebaseError,
   getFirebaseClientFirestore,
   handleFirestoreListenError,
   isFirebaseClientConfigured,
@@ -34,18 +34,23 @@ export function isFirebaseInboxConfigured() {
   return isFirebaseClientConfigured();
 }
 
+// Queries filter by user only (no database index needed); the newest items are put first here.
+function newestFirst<T extends { createdAt: string }>(items: T[]) {
+  return [...items].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+}
+
 export async function fetchFirebaseInboxSnapshot(userId: string) {
   const db = getRequiredFirestore();
   const [savedSnapshot, notificationsSnapshot] = await Promise.all([
-    getDocs(query(collection(db, SAVED_POSTS_COLLECTION), where("userId", "==", userId), orderBy("createdAt", "desc"), limit(300))),
+    getDocs(query(collection(db, SAVED_POSTS_COLLECTION), where("userId", "==", userId), limit(500))),
     getDocs(
-      query(collection(db, NOTIFICATIONS_COLLECTION), where("userId", "==", userId), orderBy("createdAt", "desc"), limit(200))
+      query(collection(db, NOTIFICATIONS_COLLECTION), where("userId", "==", userId), limit(500))
     ),
   ]);
 
   return {
-    savedPosts: savedSnapshot.docs.map((item) => normalizeSavedPostDoc(item.id, item.data())),
-    notifications: notificationsSnapshot.docs.map((item) => normalizeNotificationDoc(item.id, item.data())),
+    savedPosts: newestFirst(savedSnapshot.docs.map((item) => normalizeSavedPostDoc(item.id, item.data()))),
+    notifications: newestFirst(notificationsSnapshot.docs.map((item) => normalizeNotificationDoc(item.id, item.data()))),
   };
 }
 
@@ -63,16 +68,16 @@ export function subscribeToFirebaseInbox(
 
   const unsubscribers = [
     onSnapshot(
-      query(collection(db, SAVED_POSTS_COLLECTION), where("userId", "==", userId), orderBy("createdAt", "desc"), limit(300)),
+      query(collection(db, SAVED_POSTS_COLLECTION), where("userId", "==", userId), limit(500)),
       (snapshot) => {
-        input.onSavedPosts(snapshot.docs.map((item) => normalizeSavedPostDoc(item.id, item.data())));
+        input.onSavedPosts(newestFirst(snapshot.docs.map((item) => normalizeSavedPostDoc(item.id, item.data()))));
       },
       handleFirestoreListenError
     ),
     onSnapshot(
-      query(collection(db, NOTIFICATIONS_COLLECTION), where("userId", "==", userId), orderBy("createdAt", "desc"), limit(200)),
+      query(collection(db, NOTIFICATIONS_COLLECTION), where("userId", "==", userId), limit(500)),
       (snapshot) => {
-        input.onNotifications(snapshot.docs.map((item) => normalizeNotificationDoc(item.id, item.data())));
+        input.onNotifications(newestFirst(snapshot.docs.map((item) => normalizeNotificationDoc(item.id, item.data()))));
       },
       handleFirestoreListenError
     ),
@@ -153,7 +158,7 @@ export async function createFirebaseNotification(input: {
 export async function markAllFirebaseNotificationsRead(userId: string) {
   const db = getRequiredFirestore();
   const snapshot = await getDocs(
-    query(collection(db, NOTIFICATIONS_COLLECTION), where("userId", "==", userId), orderBy("createdAt", "desc"), limit(200))
+    query(collection(db, NOTIFICATIONS_COLLECTION), where("userId", "==", userId), limit(500))
   );
   const readAt = new Date().toISOString();
   const batch = writeBatch(db);
@@ -219,6 +224,10 @@ export async function markFirebaseNotificationRead(userId: string, notificationI
 }
 
 export function getFirebaseInboxErrorMessage(error: unknown) {
+  const friendly = friendlyFirebaseError(error);
+  if (friendly) {
+    return friendly;
+  }
   if (error instanceof Error) {
     return error.message;
   }
