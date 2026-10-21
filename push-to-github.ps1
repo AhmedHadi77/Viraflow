@@ -9,7 +9,7 @@ if (-not (git config user.email)) { git config user.email "ahmed777hady@gmail.co
 if (-not (git config user.name)) { git config user.name "Ahmed Hadi" }
 
 git add -A -- . ':!*.apk' ':!android' ':!.vscode' ':!mobile/google-services (2).json' ':!.claude-sync' ':!sohba' ':!sohba-site.zip'
-git commit -m "Calls relay servers and sound routing, chat and story permission fixes, follower notifications for new posts, reels and stories" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -m "Claude-Session: https://claude.ai/code/session_01Y5eZbnuB2VMsVoRpWv7ru8"
+git commit -m "Sohba 1.0.13: call relay servers and sound routing, live stories, follower notifications" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -m "Claude-Session: https://claude.ai/code/session_01Y5eZbnuB2VMsVoRpWv7ru8"
 $commitCode = $LASTEXITCODE
 git push origin main
 $pushCode = $LASTEXITCODE
