@@ -878,6 +878,11 @@ const es: Partial<CopyStrings> = {
   callNeedCamera: "Permite el acceso a la cámara y al micrófono para Sohba en los ajustes del teléfono para videollamadas.",
   callBusy: "Ya estás en una llamada.",
   errNoPermission: "No tienes permiso para hacer eso.",
+  callSpeaker: "Altavoz",
+  fsNewPost: "{name} compartió una nueva publicación",
+  fsNewReel: "{name} publicó un nuevo reel",
+  fsNewStory: "{name} añadió una historia",
+  nlNewContent: "Nuevo",
 };
 
 export default es;

@@ -453,7 +453,7 @@ function ProfileContent({ navigation, profileUser }: { navigation: any; profileU
         )}
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRow}>
+      <ScrollView contentContainerStyle={styles.tabRow} horizontal showsHorizontalScrollIndicator={false} style={styles.tabScroller}>
         <SectionChip active={activeSection === "posts"} label={`${copy.posts} ${userPosts.length}`} onPress={() => setActiveSection("posts")} />
         <SectionChip active={activeSection === "reels"} label={`${copy.reels} ${userReels.length}`} onPress={() => setActiveSection("reels")} />
         <SectionChip active={activeSection === "shop"} label={`${copy.shop} ${userProducts.length}`} onPress={() => setActiveSection("shop")} />
@@ -759,8 +759,12 @@ const styles = createThemedStyles({
     lineHeight: 18,
   },
   tabRow: {
+    alignItems: "center",
     gap: spacing.sm,
     paddingRight: spacing.sm,
+  },
+  tabScroller: {
+    flexGrow: 0,
   },
   sectionChip: {
     backgroundColor: "#0c151d",

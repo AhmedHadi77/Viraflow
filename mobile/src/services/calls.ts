@@ -15,6 +15,10 @@ import { PermissionsAndroid, Platform, Vibration } from "react-native";
 import type { MediaStream, RTCPeerConnection } from "react-native-webrtc";
 import { combineUnsubscribers, getFirebaseClientFirestore, handleFirestoreListenError, withFirestoreRetry } from "./firebaseClient";
 import { getPublicEnv } from "./publicEnv";
+import { loadWebRtcEngine } from "./webrtcEngine";
+import { setCallSpeaker, startCallAudio, startIncomingRing, stopCallAudio, stopIncomingRing } from "./callAudio";
+import { getCurrentFirebaseIdToken } from "./firebaseProfiles";
+import { getPublicApiBaseUrl } from "./publicEnv";
 
 type WebRtcModule = typeof import("react-native-webrtc");
 let webRtcModule: WebRtcModule | null = null;
@@ -25,7 +29,7 @@ let webRtcModule: WebRtcModule | null = null;
  */
 export function loadWebRtc(): WebRtcModule {
   if (!webRtcModule) {
-    webRtcModule = require("react-native-webrtc") as WebRtcModule;
+    webRtcModule = loadWebRtcEngine() as WebRtcModule;
   }
   return webRtcModule;
 }
@@ -64,6 +68,7 @@ export interface CallState {
   remoteStreamUrl: string | null;
   micMuted: boolean;
   cameraOff: boolean;
+  speakerOn: boolean;
   connectedAt: number | null;
   endReason: CallStatus | null;
   error: string | null;
@@ -84,6 +89,7 @@ const idleState: CallState = {
   remoteStreamUrl: null,
   micMuted: false,
   cameraOff: false,
+  speakerOn: false,
   connectedAt: null,
   endReason: null,
   error: null,
@@ -129,6 +135,37 @@ function requireDb() {
   return db;
 }
 
+type IceServer = { urls: string | string[]; username?: string; credential?: string };
+let relayServers: { servers: IceServer[]; fetchedAt: number } | null = null;
+
+/** Asks the Sohba server for relay (TURN) servers. Called early so a call never waits for it. */
+export async function prefetchCallServers() {
+  if (relayServers && Date.now() - relayServers.fetchedAt < 6 * 60 * 60 * 1000) {
+    return relayServers.servers;
+  }
+  const base = getPublicApiBaseUrl();
+  if (!base) {
+    return [];
+  }
+  try {
+    const token = await getCurrentFirebaseIdToken(false).catch(() => null);
+    if (!token) {
+      return relayServers?.servers ?? [];
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`${base}/meta/ice-servers`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal });
+    clearTimeout(timeout);
+    if (res.ok) {
+      const data = (await res.json()) as { iceServers?: IceServer[] };
+      relayServers = { servers: Array.isArray(data.iceServers) ? data.iceServers : [], fetchedAt: Date.now() };
+    }
+  } catch {
+    // Without relay servers calls still work on most Wi-Fi networks.
+  }
+  return relayServers?.servers ?? [];
+}
+
 function buildIceServers() {
   const servers: Array<{ urls: string | string[]; username?: string; credential?: string }> = [
     { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:stun2.l.google.com:19302"] },
@@ -145,6 +182,7 @@ function buildIceServers() {
       credential: getPublicEnv("EXPO_PUBLIC_TURN_CREDENTIAL") || undefined,
     });
   }
+  servers.push(...(relayServers?.servers ?? []));
   return servers;
 }
 
@@ -322,6 +360,9 @@ export async function startCall(input: { callerId: string; calleeId: string; typ
 
   try {
     const stream = await openLocalMedia(input.type);
+    startCallAudio(input.type);
+    setState({ speakerOn: input.type === "video" });
+    await prefetchCallServers();
     const connection = createPeer(callId, "callerCandidates");
     stream.getTracks().forEach((track) => connection.addTrack(track, stream));
 
@@ -381,6 +422,7 @@ export function presentIncomingCall(call: CallRecord) {
   setState({ callId: call.id, role: "callee", phase: "incoming", type: call.type, peerId: call.callerId });
   watchCallDoc(call.id, handleRemoteEnd);
   Vibration.vibrate([0, 900, 700], true);
+  startIncomingRing();
   ringTimer = setTimeout(() => {
     if (state.callId === call.id && state.phase === "incoming") {
       teardown("missed");
@@ -405,9 +447,12 @@ export async function acceptCall(options?: { asAudio?: boolean }) {
     return;
   }
 
-  setState({ phase: "connecting", type });
+  setState({ phase: "connecting", type, speakerOn: type === "video" });
   try {
+    stopIncomingRing();
     const stream = await openLocalMedia(type);
+    startCallAudio(type);
+    await prefetchCallServers();
     const connection = createPeer(callId, "calleeCandidates");
     stream.getTracks().forEach((track) => connection.addTrack(track, stream));
     await connection.setRemoteDescription(new (loadWebRtc().RTCSessionDescription)(call.offer));
@@ -453,6 +498,7 @@ export async function hangUp(reason?: CallStatus) {
 
 function teardown(reason: CallStatus) {
   Vibration.cancel();
+  stopCallAudio();
   if (ringTimer) {
     clearTimeout(ringTimer);
     ringTimer = null;
@@ -496,6 +542,12 @@ export function clearEndedCall() {
   }
 }
 
+export function toggleSpeaker() {
+  const next = !state.speakerOn;
+  setCallSpeaker(next);
+  setState({ speakerOn: next });
+}
+
 export function toggleMute() {
   const next = !state.micMuted;
   localStream?.getAudioTracks().forEach((track) => {
@@ -515,7 +567,9 @@ export function toggleCamera() {
 export function switchCamera() {
   localStream?.getVideoTracks().forEach((track) => {
     try {
-      track._switchCamera();
+      if (typeof (track as { _switchCamera?: () => void })._switchCamera === "function") {
+        track._switchCamera();
+      }
     } catch {
       // Some devices only have one camera.
     }

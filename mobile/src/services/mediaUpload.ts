@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { getPublicApiBaseUrl } from "./publicEnv";
 import type { MediaEditConfig, MediaEditFilters } from "../types/models";
 
@@ -85,11 +86,17 @@ export async function uploadMediaToCloudinary(input: UploadMediaInput): Promise<
   });
   const formData = new FormData();
 
-  formData.append("file", {
-    uri: input.uri,
-    name: input.fileName,
-    type: input.mimeType,
-  } as unknown as Blob);
+  if (Platform.OS === "web") {
+    // In the browser the picked file is a blob: or data: address; send the real file contents.
+    const blob = await (await fetch(input.uri)).blob();
+    formData.append("file", new File([blob], input.fileName, { type: input.mimeType || blob.type }));
+  } else {
+    formData.append("file", {
+      uri: input.uri,
+      name: input.fileName,
+      type: input.mimeType,
+    } as unknown as Blob);
+  }
   formData.append("api_key", signature.apiKey);
   formData.append("folder", signature.folder);
   formData.append("timestamp", String(signature.timestamp));

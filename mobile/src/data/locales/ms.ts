@@ -878,6 +878,11 @@ const ms: Partial<CopyStrings> = {
   callNeedCamera: "Benarkan akses kamera dan mikrofon untuk Sohba dalam tetapan telefon untuk panggilan video.",
   callBusy: "Anda sedang dalam panggilan.",
   errNoPermission: "Anda tiada kebenaran untuk melakukannya.",
+  callSpeaker: "Pembesar suara",
+  fsNewPost: "{name} berkongsi siaran baharu",
+  fsNewReel: "{name} menyiarkan reel baharu",
+  fsNewStory: "{name} menambah cerita",
+  nlNewContent: "Baharu",
 };
 
 export default ms;

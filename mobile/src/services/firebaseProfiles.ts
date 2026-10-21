@@ -4,10 +4,12 @@ import {
   GoogleAuthProvider,
   signInWithEmailAndPassword,
   signInWithCredential,
+  signInWithPopup,
   signOut,
   updateProfile as updateFirebaseAuthProfile,
 } from "firebase/auth";
 import Constants, { AppOwnership } from "expo-constants";
+import { Platform } from "react-native";
 import { collection, doc, getDoc, getDocs, limit, query, setDoc, where } from "firebase/firestore";
 import { getFirebaseClientAuth, getFirebaseClientFirestore, isFirebaseClientConfigured } from "./firebaseClient";
 import { getPublicEnv } from "./publicEnv";
@@ -70,6 +72,11 @@ export function isGoogleSignInConfigured() {
 export function getGoogleSignInUnavailableMessage() {
   if (!isFirebaseProfilesConfigured()) {
     return "Firebase Auth is not configured in this app yet.";
+  }
+
+  // The web app signs in with Google's own sign-in window.
+  if (Platform.OS === "web") {
+    return null;
   }
 
   if (!GOOGLE_WEB_CLIENT_ID) {
@@ -160,6 +167,15 @@ export async function continueWithFirebaseGoogleProfile(language: LanguageOption
   const unavailableMessage = getGoogleSignInUnavailableMessage();
   if (unavailableMessage) {
     throw new Error(unavailableMessage);
+  }
+
+  if (Platform.OS === "web") {
+    const webAuth = getRequiredFirebaseAuth();
+    const webDb = getRequiredFirestore();
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    const result = await signInWithPopup(webAuth, provider);
+    return buildFirebaseProfileSession(result.user, webDb, languageOrDefault(language, result.user.email ?? ""));
   }
 
   const GoogleSignin = getRequiredGoogleSignin();

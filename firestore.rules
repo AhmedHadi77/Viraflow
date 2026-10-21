@@ -174,7 +174,13 @@ service cloud.firestore {
 
     // Free voice/video calls: only the two people in the call can see or change it.
     match /calls/{callId} {
-      allow read: if signedIn() && resource.data.participantIds.hasAny([request.auth.uid]);
+      // The phone listens for calls with "calleeId == me", so that condition is allowed on its own too.
+      allow read: if signedIn() && (
+        resource == null ||
+        resource.data.calleeId == request.auth.uid ||
+        resource.data.callerId == request.auth.uid ||
+        request.auth.uid in resource.data.participantIds
+      );
       allow create: if signedIn() &&
         request.resource.data.callerId == request.auth.uid &&
         request.resource.data.participantIds.hasAll([request.resource.data.callerId, request.resource.data.calleeId]) &&
@@ -182,7 +188,7 @@ service cloud.firestore {
         request.resource.data.status == "ringing" &&
         isCallConnection(request.resource.data.calleeId);
       allow update: if signedIn() &&
-        resource.data.participantIds.hasAny([request.auth.uid]) &&
+        request.auth.uid in resource.data.participantIds &&
         request.resource.data.callerId == resource.data.callerId &&
         request.resource.data.calleeId == resource.data.calleeId &&
         request.resource.data.participantIds == resource.data.participantIds;
@@ -190,57 +196,57 @@ service cloud.firestore {
 
       match /{candidateCollection}/{candidateId} {
         allow read, create: if signedIn() &&
-          get(/databases/$(database)/documents/calls/$(callId)).data.participantIds.hasAny([request.auth.uid]);
+          request.auth.uid in get(/databases/$(database)/documents/calls/$(callId)).data.participantIds;
       }
     }
 
     match /directThreads/{threadId} {
-      allow read: if signedIn() && resource.data.participantIds.hasAny([request.auth.uid]);
-      allow create: if signedIn() && request.resource.data.participantIds.hasAny([request.auth.uid]);
-      allow update: if signedIn() && resource.data.participantIds.hasAny([request.auth.uid]);
+      allow read: if signedIn() && (resource == null || request.auth.uid in resource.data.participantIds);
+      allow create: if signedIn() && request.request.auth.uid in resource.data.participantIds;
+      allow update: if signedIn() && request.auth.uid in resource.data.participantIds;
     }
 
     match /directMessages/{messageId} {
-      allow read: if signedIn() && resource.data.participantIds.hasAny([request.auth.uid]);
+      allow read: if signedIn() && request.auth.uid in resource.data.participantIds;
       allow create: if signedIn() &&
         request.resource.data.senderId == request.auth.uid &&
-        request.resource.data.participantIds.hasAny([request.auth.uid]);
-      allow update: if signedIn() && resource.data.participantIds.hasAny([request.auth.uid]);
+        request.request.auth.uid in resource.data.participantIds;
+      allow update: if signedIn() && request.auth.uid in resource.data.participantIds;
     }
 
     match /marketplaceThreads/{threadId} {
-      allow read: if signedIn() && resource.data.participantIds.hasAny([request.auth.uid]);
-      allow create: if signedIn() && request.resource.data.participantIds.hasAny([request.auth.uid]);
-      allow update: if signedIn() && resource.data.participantIds.hasAny([request.auth.uid]);
+      allow read: if signedIn() && (resource == null || request.auth.uid in resource.data.participantIds);
+      allow create: if signedIn() && request.request.auth.uid in resource.data.participantIds;
+      allow update: if signedIn() && request.auth.uid in resource.data.participantIds;
     }
 
     match /marketplaceMessages/{messageId} {
-      allow read: if signedIn() && resource.data.participantIds.hasAny([request.auth.uid]);
+      allow read: if signedIn() && request.auth.uid in resource.data.participantIds;
       allow create: if signedIn() &&
         request.resource.data.senderId == request.auth.uid &&
-        request.resource.data.participantIds.hasAny([request.auth.uid]);
-      allow update: if signedIn() && resource.data.participantIds.hasAny([request.auth.uid]);
+        request.request.auth.uid in resource.data.participantIds;
+      allow update: if signedIn() && request.auth.uid in resource.data.participantIds;
     }
 
     match /marketplaceOrders/{orderId} {
-      allow read: if signedIn() && resource.data.participantIds.hasAny([request.auth.uid]);
+      allow read: if signedIn() && request.auth.uid in resource.data.participantIds;
       allow create: if signedIn() &&
         request.resource.data.buyerId == request.auth.uid &&
-        request.resource.data.participantIds.hasAny([request.auth.uid]);
-      allow update: if signedIn() && resource.data.participantIds.hasAny([request.auth.uid]);
+        request.request.auth.uid in resource.data.participantIds;
+      allow update: if signedIn() && request.auth.uid in resource.data.participantIds;
     }
 
     match /communityChatMessages/{messageId} {
-      allow read: if signedIn() && resource.data.participantIds.hasAny([request.auth.uid]);
+      allow read: if signedIn() && request.auth.uid in resource.data.participantIds;
       allow create: if signedIn() &&
         request.resource.data.senderId == request.auth.uid &&
-        request.resource.data.participantIds.hasAny([request.auth.uid]);
-      allow update: if signedIn() && resource.data.participantIds.hasAny([request.auth.uid]);
+        request.request.auth.uid in resource.data.participantIds;
+      allow update: if signedIn() && request.auth.uid in resource.data.participantIds;
     }
 
     // Subscriptions and boosts are written only by the backend after Stripe confirms payment.
     match /subscriptions/{userId} {
-      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow read: if signedIn() && userId == request.auth.uid;
       allow write: if false;
     }
 

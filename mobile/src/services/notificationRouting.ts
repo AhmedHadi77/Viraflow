@@ -32,6 +32,24 @@ export function getNotificationNavigationTarget(input: Partial<AppNotification> 
     } satisfies NotificationNavigationTarget;
   }
 
+  if (payload.type === "new_story" && payload.actorId) {
+    return {
+      name: "StoryViewer",
+      params: {
+        userId: payload.actorId,
+        ...(payload.entityId ? { storyId: payload.entityId } : {}),
+      },
+    } satisfies NotificationNavigationTarget;
+  }
+
+  if (payload.type === "new_reel" && payload.entityId) {
+    return { name: "ReelDetails", params: { reelId: payload.entityId } } satisfies NotificationNavigationTarget;
+  }
+
+  if (payload.type === "new_post" && payload.entityId) {
+    return { name: "PostDetails", params: { postId: payload.entityId } } satisfies NotificationNavigationTarget;
+  }
+
   if (payload.type === "story_view" && payload.entityId && payload.userId) {
     return {
       name: "StoryViewer",
@@ -148,7 +166,10 @@ function normalizeNotificationType(value: unknown) {
     value === "message" ||
     value === "order" ||
     value === "call" ||
-    value === "system"
+    value === "system" ||
+    value === "new_post" ||
+    value === "new_reel" ||
+    value === "new_story"
   ) {
     return value;
   }

@@ -878,6 +878,11 @@ const ru: Partial<CopyStrings> = {
   callNeedCamera: "Разрешите Sohba доступ к камере и микрофону в настройках телефона для видеозвонков.",
   callBusy: "Вы уже разговариваете.",
   errNoPermission: "У вас нет прав на это действие.",
+  callSpeaker: "Динамик",
+  fsNewPost: "{name} опубликовал(а) новый пост",
+  fsNewReel: "{name} опубликовал(а) новый рилс",
+  fsNewStory: "{name} добавил(а) историю",
+  nlNewContent: "Новое",
 };
 
 export default ru;

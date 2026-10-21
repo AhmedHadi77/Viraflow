@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { env } from "../config/env";
 import { getExchangeRates } from "../services/exchangeRateService";
 import { getFirebaseAdminStatus, isFirebaseAdminConfigured } from "../services/firebaseService";
+import { getIceServers, isTurnConfigured } from "../services/iceServerService";
+import type { AuthenticatedRequest } from "../middleware/auth";
 
 export function health(_req: Request, res: Response) {
   res.json({
@@ -12,6 +14,7 @@ export function health(_req: Request, res: Response) {
     port: env.port,
     firebaseConfigured: isFirebaseAdminConfigured(),
     firebaseAdmin: getFirebaseAdminStatus(),
+    callRelayConfigured: isTurnConfigured(),
     cloudinaryConfigured: Boolean(env.cloudinaryCloudName && env.cloudinaryApiKey && env.cloudinaryApiSecret),
     stripeConfigured: Boolean(env.stripeSecretKey && env.stripeWebhookSecret && env.stripeSuccessUrl && env.stripeCancelUrl),
     stripeSubscriptionPricesConfigured: Boolean(env.stripePriceWeekly && env.stripePriceMonthly && env.stripePriceYearly),
@@ -51,4 +54,14 @@ export function getLanguages(_req: Request, res: Response) {
       { code: "ja", label: "Japanese" },
     ],
   });
+}
+
+/** Connection servers for voice and video calls (signed-in users only; relay credentials are short-lived). */
+export async function iceServers(req: AuthenticatedRequest, res: Response) {
+  if (!req.user?.id) {
+    res.status(401).json({ message: "Unauthorized." });
+    return;
+  }
+  res.set("Cache-Control", "private, max-age=3600");
+  res.json({ iceServers: await getIceServers() });
 }

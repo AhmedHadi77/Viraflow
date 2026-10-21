@@ -878,6 +878,11 @@ const ur: Partial<CopyStrings> = {
   callNeedCamera: "ویڈیو کال کے لیے فون کی سیٹنگز میں Sohba کو کیمرا اور مائیکروفون کی اجازت دیں۔",
   callBusy: "آپ پہلے سے ایک کال پر ہیں۔",
   errNoPermission: "آپ کو ایسا کرنے کی اجازت نہیں ہے۔",
+  callSpeaker: "اسپیکر",
+  fsNewPost: "{name} نے ایک نئی پوسٹ شیئر کی",
+  fsNewReel: "{name} نے ایک نئی ریل پوسٹ کی",
+  fsNewStory: "{name} نے اسٹوری شامل کی",
+  nlNewContent: "نیا",
 };
 
 export default ur;

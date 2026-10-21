@@ -42,7 +42,10 @@ export type NotificationType =
   | "message"
   | "order"
   | "call"
-  | "system";
+  | "system"
+  | "new_post"
+  | "new_reel"
+  | "new_story";
 
 export interface User {
   id: string;

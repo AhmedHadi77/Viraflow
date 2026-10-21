@@ -878,6 +878,11 @@ const ar: Partial<CopyStrings> = {
   callNeedCamera: "اسمح لصحبة باستخدام الكاميرا والميكروفون من إعدادات الهاتف لإجراء مكالمات الفيديو.",
   callBusy: "أنت في مكالمة بالفعل.",
   errNoPermission: "ليس لديك صلاحية للقيام بذلك.",
+  callSpeaker: "مكبر الصوت",
+  fsNewPost: "نشر {name} منشوراً جديداً",
+  fsNewReel: "نشر {name} ريلاً جديداً",
+  fsNewStory: "أضاف {name} قصة جديدة",
+  nlNewContent: "جديد",
 };
 
 export default ar;

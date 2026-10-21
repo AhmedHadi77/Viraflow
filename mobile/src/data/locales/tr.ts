@@ -878,6 +878,11 @@ const tr: Partial<CopyStrings> = {
   callNeedCamera: "Görüntülü arama için telefon ayarlarından Sohba'ya kamera ve mikrofon izni ver.",
   callBusy: "Zaten bir aramadasın.",
   errNoPermission: "Bunu yapma iznin yok.",
+  callSpeaker: "Hoparlör",
+  fsNewPost: "{name} yeni bir gönderi paylaştı",
+  fsNewReel: "{name} yeni bir reels paylaştı",
+  fsNewStory: "{name} hikayesine ekleme yaptı",
+  nlNewContent: "Yeni",
 };
 
 export default tr;

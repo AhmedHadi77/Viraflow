@@ -878,6 +878,11 @@ const ja: Partial<CopyStrings> = {
   callNeedCamera: "ビデオ通話をするには、端末の設定でSohbaのカメラとマイクへのアクセスを許可してください。",
   callBusy: "すでに通話中です。",
   errNoPermission: "この操作を行う権限がありません。",
+  callSpeaker: "スピーカー",
+  fsNewPost: "{name}さんが新しい投稿をシェアしました",
+  fsNewReel: "{name}さんが新しいリールを投稿しました",
+  fsNewStory: "{name}さんがストーリーを追加しました",
+  nlNewContent: "新着",
 };
 
 export default ja;

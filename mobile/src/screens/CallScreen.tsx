@@ -16,6 +16,7 @@ import {
   switchCamera,
   toggleCamera,
   toggleMute,
+  toggleSpeaker,
   useCallState,
 } from "../services/calls";
 import { createDarkStyles } from "../theme";
@@ -159,6 +160,13 @@ export function CallScreen({ navigation, route }: { navigation: any; route: { pa
                 icon={call.micMuted ? "mic-off" : "mic"}
                 label={call.micMuted ? copy.callUnmute : copy.callMute}
                 onPress={toggleMute}
+              />
+              <CallButton
+                active={call.speakerOn}
+                color="rgba(255,255,255,0.18)"
+                icon={call.speakerOn ? "volume-high" : "volume-medium"}
+                label={copy.callSpeaker}
+                onPress={toggleSpeaker}
               />
               {isVideo ? (
                 <>

@@ -8,8 +8,8 @@ Set-Location "D:\Viraflow1"
 if (-not (git config user.email)) { git config user.email "ahmed777hady@gmail.com" }
 if (-not (git config user.name)) { git config user.name "Ahmed Hadi" }
 
-git add -A -- . ':!*.apk' ':!android' ':!.vscode' ':!mobile/google-services (2).json' ':!.claude-sync'
-git commit -m "Sohba 1.0.12: steadier database connection, call and chat fixes, notifications list fix" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -m "Claude-Session: https://claude.ai/code/session_01Y5eZbnuB2VMsVoRpWv7ru8"
+git add -A -- . ':!*.apk' ':!android' ':!.vscode' ':!mobile/google-services (2).json' ':!.claude-sync' ':!sohba' ':!sohba-site.zip'
+git commit -m "Calls relay servers and sound routing, chat and story permission fixes, follower notifications for new posts, reels and stories" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -m "Claude-Session: https://claude.ai/code/session_01Y5eZbnuB2VMsVoRpWv7ru8"
 $commitCode = $LASTEXITCODE
 git push origin main
 $pushCode = $LASTEXITCODE

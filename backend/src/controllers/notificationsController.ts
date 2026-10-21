@@ -2,7 +2,12 @@ import { Response } from "express";
 import { listNotificationsByUser, markAllNotificationsRead, markNotificationRead } from "../data/mockDb";
 import { AuthenticatedRequest } from "../middleware/auth";
 import { buildNotificationPayload } from "./helpers";
-import { deliverNotification, notificationDeliverySchema } from "../services/notificationDeliveryService";
+import {
+  deliverNotification,
+  followerFanoutSchema,
+  notificationDeliverySchema,
+  notifyFollowersOfNewContent,
+} from "../services/notificationDeliveryService";
 import {
   emitNotificationPayloadRealtime,
   emitNotificationReadRealtime,
@@ -92,5 +97,23 @@ export async function deliverNotificationToUser(req: AuthenticatedRequest, res: 
   } catch (error) {
     const message = error instanceof Error ? error.message : "Notification delivery failed.";
     res.status(500).json({ message });
+  }
+}
+
+/** Called by the app after someone publishes a post, reel or story, to tell their followers. */
+export async function notifyFollowers(req: AuthenticatedRequest, res: Response) {
+  if (!req.user?.id) {
+    res.status(401).json({ message: "Unauthorized." });
+    return;
+  }
+  const parsed = followerFanoutSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json(parsed.error.flatten());
+    return;
+  }
+  try {
+    res.status(202).json(await notifyFollowersOfNewContent(req.user.id, parsed.data));
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : "Could not notify followers." });
   }
 }

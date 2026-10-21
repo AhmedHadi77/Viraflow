@@ -739,6 +739,18 @@ export async function fetchNotificationsWithApi(token: string) {
   return response.notifications;
 }
 
+/** Tells the author's followers about a new post, reel or story (the server sends the notifications). */
+export async function notifyFollowersWithApi(
+  token: string,
+  payload: { type: "new_post" | "new_reel" | "new_story"; entityId: string; preview?: string }
+) {
+  return request<{ notified: number; pushed: number }>("/notifications/followers", {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
 export async function deliverNotificationWithApi(
   token: string,
   payload: {

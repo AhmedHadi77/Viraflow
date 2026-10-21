@@ -878,6 +878,11 @@ const id: Partial<CopyStrings> = {
   callNeedCamera: "Izinkan akses kamera dan mikrofon untuk Sohba di pengaturan ponsel untuk panggilan video.",
   callBusy: "Anda sedang dalam panggilan.",
   errNoPermission: "Anda tidak memiliki izin untuk melakukannya.",
+  callSpeaker: "Speaker",
+  fsNewPost: "{name} membagikan postingan baru",
+  fsNewReel: "{name} memposting reel baru",
+  fsNewStory: "{name} menambahkan cerita",
+  nlNewContent: "Baru",
 };
 
 export default id;

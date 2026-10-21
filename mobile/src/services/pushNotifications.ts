@@ -42,6 +42,10 @@ export const DEFAULT_PUSH_NOTIFICATIONS_STATUS: PushNotificationsStatus = {
 };
 
 export async function registerForPushNotificationsAsync(userId: string): Promise<PushNotificationsStatus> {
+  if (Platform.OS === "web") {
+    // The web app shows notifications inside Sohba; phone alerts come with the Android app.
+    return { mode: "unavailable", permissionStatus: "undetermined", message: "" };
+  }
   const Device = getExpoDevice();
   const Notifications = getExpoNotifications();
   configureNotificationHandler();

@@ -877,6 +877,11 @@ const en = {
   callNeedCamera: "Allow camera and microphone access for Sohba in your phone settings to make video calls.",
   callBusy: "You're already in a call.",
   errNoPermission: "You don't have permission to do that.",
+  callSpeaker: "Speaker",
+  fsNewPost: "{name} shared a new post",
+  fsNewReel: "{name} posted a new reel",
+  fsNewStory: "{name} added to their story",
+  nlNewContent: "New",
 };
 
 export type CopyStrings = typeof en;

@@ -8,6 +8,7 @@ import {
   getDoc,
   getDocs,
   limit,
+  onSnapshot,
   orderBy,
   query,
   setDoc,
@@ -15,7 +16,13 @@ import {
   where,
   writeBatch,
 } from "firebase/firestore";
-import { friendlyFirebaseError, getFirebaseClientFirestore, isFirebaseClientConfigured } from "./firebaseClient";
+import {
+  combineUnsubscribers,
+  friendlyFirebaseError,
+  getFirebaseClientFirestore,
+  handleFirestoreListenError,
+  isFirebaseClientConfigured,
+} from "./firebaseClient";
 import {
   CreateProductPayload,
   CreateReelPayload,
@@ -44,11 +51,25 @@ export function isFirebaseContentConfigured() {
   return isFirebaseClientConfigured();
 }
 
+/** Live stories, so new stories from the people you follow appear without restarting the app. */
+export function subscribeToFirebaseStories(onStories: (stories: Story[]) => void) {
+  const db = getFirebaseClientFirestore();
+  if (!db) {
+    return () => undefined;
+  }
+  const unsubscribe = onSnapshot(
+    query(collection(db, STORIES_COLLECTION), orderBy("createdAt", "desc"), limit(150)),
+    (snapshot) => onStories(snapshot.docs.map((item) => normalizeStoryDoc(item.id, item.data()))),
+    handleFirestoreListenError
+  );
+  return combineUnsubscribers([unsubscribe]);
+}
+
 export async function fetchFirebaseCatalogFromFirestore() {
   const db = getRequiredFirestore();
   const [usersSnapshot, storiesSnapshot, reelsSnapshot, productsSnapshot] = await Promise.all([
     getDocs(collection(db, USERS_COLLECTION)),
-    getDocs(query(collection(db, STORIES_COLLECTION), orderBy("createdAt", "desc"), limit(80))),
+    getDocs(query(collection(db, STORIES_COLLECTION), orderBy("createdAt", "desc"), limit(150))),
     getDocs(query(collection(db, REELS_COLLECTION), orderBy("createdAt", "desc"), limit(80))),
     getDocs(query(collection(db, PRODUCTS_COLLECTION), orderBy("createdAt", "desc"), limit(120))),
   ]);

@@ -878,6 +878,11 @@ const hi: Partial<CopyStrings> = {
   callNeedCamera: "वीडियो कॉल के लिए फ़ोन सेटिंग में Sohba को कैमरा और माइक्रोफ़ोन की अनुमति दें।",
   callBusy: "आप पहले से एक कॉल में हैं।",
   errNoPermission: "आपको यह करने की अनुमति नहीं है।",
+  callSpeaker: "स्पीकर",
+  fsNewPost: "{name} ने एक नई पोस्ट शेयर की",
+  fsNewReel: "{name} ने एक नई रील पोस्ट की",
+  fsNewStory: "{name} ने स्टोरी जोड़ी",
+  nlNewContent: "नया",
 };
 
 export default hi;

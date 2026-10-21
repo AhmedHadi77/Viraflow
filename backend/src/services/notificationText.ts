@@ -21,7 +21,10 @@ const TEMPLATES: Record<string, Templates> = {
     "fsCalling": "{name} is calling you",
     "fsVideoCalling": "{name} is video calling you",
     "fsCalled": "{name} called you",
-    "fsTapToAnswer": "Tap to answer"
+    "fsTapToAnswer": "Tap to answer",
+    "fsNewPost": "{name} shared a new post",
+    "fsNewReel": "{name} posted a new reel",
+    "fsNewStory": "{name} added to their story"
   },
   "ar": {
     "fsLikedPost": "أعجب {name} بمنشورك",
@@ -40,7 +43,10 @@ const TEMPLATES: Record<string, Templates> = {
     "fsCalling": "{name} يتصل بك",
     "fsVideoCalling": "{name} يتصل بك بالفيديو",
     "fsCalled": "اتصل بك {name}",
-    "fsTapToAnswer": "اضغط للرد"
+    "fsTapToAnswer": "اضغط للرد",
+    "fsNewPost": "نشر {name} منشوراً جديداً",
+    "fsNewReel": "نشر {name} ريلاً جديداً",
+    "fsNewStory": "أضاف {name} قصة جديدة"
   },
   "fr": {
     "fsLikedPost": "{name} a aimé votre publication",
@@ -59,7 +65,10 @@ const TEMPLATES: Record<string, Templates> = {
     "fsCalling": "{name} vous appelle",
     "fsVideoCalling": "{name} vous appelle en vidéo",
     "fsCalled": "{name} vous a appelé",
-    "fsTapToAnswer": "Touchez pour répondre"
+    "fsTapToAnswer": "Touchez pour répondre",
+    "fsNewPost": "{name} a publié un nouveau post",
+    "fsNewReel": "{name} a publié un nouveau reel",
+    "fsNewStory": "{name} a ajouté une story"
   },
   "es": {
     "fsLikedPost": "A {name} le gustó tu publicación",
@@ -78,7 +87,10 @@ const TEMPLATES: Record<string, Templates> = {
     "fsCalling": "{name} te está llamando",
     "fsVideoCalling": "{name} te está haciendo una videollamada",
     "fsCalled": "{name} te llamó",
-    "fsTapToAnswer": "Toca para responder"
+    "fsTapToAnswer": "Toca para responder",
+    "fsNewPost": "{name} compartió una nueva publicación",
+    "fsNewReel": "{name} publicó un nuevo reel",
+    "fsNewStory": "{name} añadió una historia"
   },
   "pt": {
     "fsLikedPost": "{name} curtiu seu post",
@@ -97,7 +109,10 @@ const TEMPLATES: Record<string, Templates> = {
     "fsCalling": "{name} está ligando para você",
     "fsVideoCalling": "{name} está fazendo uma chamada de vídeo",
     "fsCalled": "{name} ligou para você",
-    "fsTapToAnswer": "Toque para atender"
+    "fsTapToAnswer": "Toque para atender",
+    "fsNewPost": "{name} compartilhou uma nova publicação",
+    "fsNewReel": "{name} publicou um novo reel",
+    "fsNewStory": "{name} adicionou um story"
   },
   "de": {
     "fsLikedPost": "{name} gefällt dein Beitrag",
@@ -116,7 +131,10 @@ const TEMPLATES: Record<string, Templates> = {
     "fsCalling": "{name} ruft dich an",
     "fsVideoCalling": "{name} ruft dich per Video an",
     "fsCalled": "{name} hat dich angerufen",
-    "fsTapToAnswer": "Tippen zum Annehmen"
+    "fsTapToAnswer": "Tippen zum Annehmen",
+    "fsNewPost": "{name} hat einen neuen Beitrag geteilt",
+    "fsNewReel": "{name} hat ein neues Reel gepostet",
+    "fsNewStory": "{name} hat eine Story hinzugefügt"
   },
   "tr": {
     "fsLikedPost": "{name} gönderini beğendi",
@@ -135,7 +153,10 @@ const TEMPLATES: Record<string, Templates> = {
     "fsCalling": "{name} seni arıyor",
     "fsVideoCalling": "{name} seni görüntülü arıyor",
     "fsCalled": "{name} seni aradı",
-    "fsTapToAnswer": "Yanıtlamak için dokun"
+    "fsTapToAnswer": "Yanıtlamak için dokun",
+    "fsNewPost": "{name} yeni bir gönderi paylaştı",
+    "fsNewReel": "{name} yeni bir reels paylaştı",
+    "fsNewStory": "{name} hikayesine ekleme yaptı"
   },
   "ru": {
     "fsLikedPost": "{name} нравится ваш пост",
@@ -154,7 +175,10 @@ const TEMPLATES: Record<string, Templates> = {
     "fsCalling": "{name} звонит вам",
     "fsVideoCalling": "{name} звонит вам по видео",
     "fsCalled": "{name} звонил(а) вам",
-    "fsTapToAnswer": "Нажмите, чтобы ответить"
+    "fsTapToAnswer": "Нажмите, чтобы ответить",
+    "fsNewPost": "{name} опубликовал(а) новый пост",
+    "fsNewReel": "{name} опубликовал(а) новый рилс",
+    "fsNewStory": "{name} добавил(а) историю"
   },
   "hi": {
     "fsLikedPost": "{name} ने आपकी पोस्ट लाइक की",
@@ -173,7 +197,10 @@ const TEMPLATES: Record<string, Templates> = {
     "fsCalling": "{name} आपको कॉल कर रहे हैं",
     "fsVideoCalling": "{name} आपको वीडियो कॉल कर रहे हैं",
     "fsCalled": "{name} ने आपको कॉल किया",
-    "fsTapToAnswer": "जवाब देने के लिए टैप करें"
+    "fsTapToAnswer": "जवाब देने के लिए टैप करें",
+    "fsNewPost": "{name} ने एक नई पोस्ट शेयर की",
+    "fsNewReel": "{name} ने एक नई रील पोस्ट की",
+    "fsNewStory": "{name} ने स्टोरी जोड़ी"
   },
   "ur": {
     "fsLikedPost": "{name} نے آپ کی پوسٹ پسند کی",
@@ -192,7 +219,10 @@ const TEMPLATES: Record<string, Templates> = {
     "fsCalling": "{name} آپ کو کال کر رہے ہیں",
     "fsVideoCalling": "{name} آپ کو ویڈیو کال کر رہے ہیں",
     "fsCalled": "{name} نے آپ کو کال کی",
-    "fsTapToAnswer": "جواب دینے کے لیے ٹیپ کریں"
+    "fsTapToAnswer": "جواب دینے کے لیے ٹیپ کریں",
+    "fsNewPost": "{name} نے ایک نئی پوسٹ شیئر کی",
+    "fsNewReel": "{name} نے ایک نئی ریل پوسٹ کی",
+    "fsNewStory": "{name} نے اسٹوری شامل کی"
   },
   "ms": {
     "fsLikedPost": "{name} menyukai hantaran anda",
@@ -211,7 +241,10 @@ const TEMPLATES: Record<string, Templates> = {
     "fsCalling": "{name} sedang memanggil anda",
     "fsVideoCalling": "{name} membuat panggilan video kepada anda",
     "fsCalled": "{name} telah memanggil anda",
-    "fsTapToAnswer": "Ketik untuk menjawab"
+    "fsTapToAnswer": "Ketik untuk menjawab",
+    "fsNewPost": "{name} berkongsi siaran baharu",
+    "fsNewReel": "{name} menyiarkan reel baharu",
+    "fsNewStory": "{name} menambah cerita"
   },
   "id": {
     "fsLikedPost": "{name} menyukai postingan kamu",
@@ -230,7 +263,10 @@ const TEMPLATES: Record<string, Templates> = {
     "fsCalling": "{name} sedang menelepon kamu",
     "fsVideoCalling": "{name} melakukan panggilan video",
     "fsCalled": "{name} menelepon kamu",
-    "fsTapToAnswer": "Ketuk untuk menjawab"
+    "fsTapToAnswer": "Ketuk untuk menjawab",
+    "fsNewPost": "{name} membagikan postingan baru",
+    "fsNewReel": "{name} memposting reel baru",
+    "fsNewStory": "{name} menambahkan cerita"
   },
   "zh": {
     "fsLikedPost": "{name} 赞了你的帖子",
@@ -249,7 +285,10 @@ const TEMPLATES: Record<string, Templates> = {
     "fsCalling": "{name} 正在呼叫你",
     "fsVideoCalling": "{name} 邀请你视频通话",
     "fsCalled": "{name} 给你打过电话",
-    "fsTapToAnswer": "点按接听"
+    "fsTapToAnswer": "点按接听",
+    "fsNewPost": "{name} 发布了新帖子",
+    "fsNewReel": "{name} 发布了新短视频",
+    "fsNewStory": "{name} 发布了新快拍"
   },
   "ja": {
     "fsLikedPost": "{name}さんがあなたの投稿にいいねしました",
@@ -268,7 +307,10 @@ const TEMPLATES: Record<string, Templates> = {
     "fsCalling": "{name}さんから着信",
     "fsVideoCalling": "{name}さんからビデオ通話の着信",
     "fsCalled": "{name}さんから着信がありました",
-    "fsTapToAnswer": "タップして応答"
+    "fsTapToAnswer": "タップして応答",
+    "fsNewPost": "{name}さんが新しい投稿をシェアしました",
+    "fsNewReel": "{name}さんが新しいリールを投稿しました",
+    "fsNewStory": "{name}さんがストーリーを追加しました"
   }
 };
 
@@ -305,6 +347,9 @@ export function localizePushText(input: PushTextInput, language: string | undefi
     repost: "fsReposted",
     save: "fsSaved",
     call: "fsCalling",
+    new_post: "fsNewPost",
+    new_reel: "fsNewReel",
+    new_story: "fsNewStory",
   };
   const key = keyByType[input.type];
   if (!key || !t[key]) {
@@ -312,7 +357,7 @@ export function localizePushText(input: PushTextInput, language: string | undefi
   }
   const title = fill(t[key], name);
   // Comments, messages, mentions and orders keep the text the person wrote; fixed English filler is dropped.
-  const keepsBody = ["post_comment", "reel_comment", "comment", "message", "mention", "order"].includes(input.type);
+  const keepsBody = ["post_comment", "reel_comment", "comment", "message", "mention", "order", "new_post", "new_reel"].includes(input.type);
   const body = input.type === "call" ? t.fsTapToAnswer : keepsBody ? input.body : "";
   return { title, body };
 }

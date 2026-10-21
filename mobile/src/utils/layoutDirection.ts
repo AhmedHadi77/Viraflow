@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { reloadAppAsync } from "expo";
-import { I18nManager } from "react-native";
+import { I18nManager, Platform } from "react-native";
 import { getLanguageInfo } from "../data/copy";
 import { LanguageOption } from "../types/models";
 
@@ -20,6 +20,16 @@ export const rtlFlipStyle = I18nManager.isRTL ? { transform: [{ scaleX: -1 }] } 
  */
 export async function applyLayoutDirection(language: LanguageOption | null | undefined) {
   const wantRtl = isRtlLanguage(language);
+  if (Platform.OS === "web") {
+    // In the browser the page direction is set on the document; no reload is needed.
+    if (typeof document !== "undefined") {
+      document.documentElement.dir = wantRtl ? "rtl" : "ltr";
+      if (language) {
+        document.documentElement.lang = language;
+      }
+    }
+    return false;
+  }
   // allowRTL(false) for left-to-right languages stops a phone set to Arabic from mirroring an English UI.
   I18nManager.allowRTL(wantRtl);
   I18nManager.swapLeftAndRightInRTL(true);

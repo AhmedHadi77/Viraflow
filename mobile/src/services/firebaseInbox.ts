@@ -337,7 +337,10 @@ function normalizeNotificationType(value: string, entityType?: AppNotification["
     value === "message" ||
     value === "order" ||
     value === "call" ||
-    value === "system"
+    value === "system" ||
+    value === "new_post" ||
+    value === "new_reel" ||
+    value === "new_story"
   ) {
     return value;
   }

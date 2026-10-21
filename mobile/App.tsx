@@ -6,7 +6,7 @@ import {
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import React from "react";
-import { Pressable, Text, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import { AppNavigator, RootStackParamList } from "./src/navigation/AppNavigator";
 import { AppProvider } from "./src/providers/AppProvider";
 import { CallCoordinator } from "./src/components/CallCoordinator";
@@ -141,7 +141,8 @@ function ThemedNavigation() {
     <NavigationContainer
       initialState={navigationStateRef.current}
       key={mode}
-      linking={navigationStateRef.current ? undefined : linking}
+      // The web app (for iPhone) lives at /app; it keeps one address instead of changing the URL per screen.
+      linking={navigationStateRef.current || Platform.OS === "web" ? undefined : linking}
       onStateChange={(state) => {
         navigationStateRef.current = state;
       }}

@@ -34,6 +34,12 @@ export const env = {
   openAiVoiceModel: process.env.OPENAI_VOICE_MODEL ?? "gpt-4o-mini-tts",
   openAiTranscriptionModel: process.env.OPENAI_TRANSCRIPTION_MODEL ?? "whisper-1",
   openAiDefaultVoice: process.env.OPENAI_DEFAULT_VOICE ?? "coral",
+  /** Relay servers for calls (see services/iceServerService.ts). */
+  cloudflareTurnKeyId: (process.env.CLOUDFLARE_TURN_KEY_ID ?? "").trim(),
+  cloudflareTurnApiToken: (process.env.CLOUDFLARE_TURN_API_TOKEN ?? "").trim(),
+  turnUrls: (process.env.TURN_URLS ?? "").trim(),
+  turnUsername: (process.env.TURN_USERNAME ?? "").trim(),
+  turnCredential: (process.env.TURN_CREDENTIAL ?? "").trim(),
   /** Comma-separated sign-in emails of the app owner(s). The owner can choose admins. */
   ownerEmails: (process.env.OWNER_EMAILS ?? "")
     .split(",")

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { navigationRef } from "../navigation/navigationRef";
 import { useAppState } from "../providers/AppProvider";
-import { getCallState, presentIncomingCall, subscribeToIncomingCalls } from "../services/calls";
+import { getCallState, prefetchCallServers, presentIncomingCall, subscribeToIncomingCalls } from "../services/calls";
 import { onFirestoreReset } from "../services/firebaseClient";
 
 /** Rings this phone when someone calls while the app is open, and opens the call screen. */
@@ -16,6 +16,8 @@ export function CallCoordinator() {
     if (!userId) {
       return;
     }
+    // Get the call relay servers ready so calls connect quickly on mobile data.
+    void prefetchCallServers();
     return subscribeToIncomingCalls(userId, (call) => {
       const before = getCallState();
       presentIncomingCall(call);

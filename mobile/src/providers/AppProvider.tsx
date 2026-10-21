@@ -26,6 +26,7 @@ import {
   deleteApiAccount,
   fetchApiMe,
   deliverNotificationWithApi,
+  notifyFollowersWithApi,
   fetchApiBootstrap,
   fetchApiCatalog,
   fetchCommunityActivityWithApi,
@@ -110,6 +111,7 @@ import {
   deleteFirebaseReelAsAdmin,
   deleteFirebaseProduct,
   fetchFirebaseCatalogFromFirestore,
+  subscribeToFirebaseStories,
   getFirebaseContentErrorMessage,
   isFirebaseContentConfigured,
   markFirebaseStoryViewed,
@@ -1115,6 +1117,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
+      return subscribeToFirebaseStories((nextStories) => {
+        // Saved highlights older than the live window stay; everything else follows the database.
+        setStories((current) =>
+          pruneStoriesForState(
+            mergeStoriesById(
+              nextStories,
+              current.filter((story) => story.highlightedAt && !nextStories.some((item) => item.id === story.id))
+            )
+          )
+        );
+      });
+    } catch (error) {
+      console.warn("Sohba story sync was skipped for safety.", error);
+      return;
+    }
+  }, [firebaseListenKey]);
+
+  useEffect(() => {
+    if (!isFirebaseBackedSession(session)) {
+      return;
+    }
+
+    try {
       return subscribeToFirebasePosts({
         onPosts: (nextPosts) => {
           setPosts(mergePostsById(nextPosts, []));
@@ -1268,7 +1293,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const firebaseUserId = preferredUser?.id ?? session?.userId;
-      const [catalog, engagement, postsSnapshot, inbox, chat, communityCommerce, monetization] = await Promise.all([
+      // Each part loads on its own: one failing part (for example a missing permission) must not stop
+      // stories, reels and posts from showing.
+      const settled = await Promise.allSettled([
         fetchFirebaseCatalogFromFirestore(),
         fetchFirebaseEngagementSnapshot(),
         fetchFirebasePostsSnapshot(),
@@ -1296,6 +1323,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               boosts: [],
             }),
       ]);
+      const pick = <T,>(index: number, fallback: T): T => {
+        const result = settled[index];
+        if (result.status === "fulfilled") {
+          return result.value as T;
+        }
+        console.warn("Sohba could not load part of the catalog.", index, result.reason instanceof Error ? result.reason.message : result.reason);
+        return fallback;
+      };
+      type Loaded<F extends (...args: never[]) => Promise<unknown>> = Awaited<ReturnType<F>>;
+      const catalog = pick<Loaded<typeof fetchFirebaseCatalogFromFirestore>>(0, { users: [], stories: [], reels: [], products: [] } as never);
+      if (settled[0].status === "rejected") {
+        return false;
+      }
+      const engagement = pick<Loaded<typeof fetchFirebaseEngagementSnapshot>>(1, { comments: [] } as never);
+      const postsSnapshot = pick<Loaded<typeof fetchFirebasePostsSnapshot>>(2, { posts: [], comments: [] } as never);
+      const inbox = pick<Loaded<typeof fetchFirebaseInboxSnapshot>>(3, { savedPosts: [], notifications: [] });
+      const chat = pick<Loaded<typeof fetchFirebaseChatSnapshot>>(4, {
+        directThreads: [],
+        directMessages: [],
+        marketplaceThreads: [],
+        marketplaceMessages: [],
+        communityChatMessages: [],
+      } as never);
+      const communityCommerce = pick<Loaded<typeof fetchFirebaseCommunityCommerceSnapshot>>(5, {
+        communities: [],
+        communityPosts: [],
+        marketplaceOrders: [],
+      } as never);
+      const monetization = pick<Loaded<typeof fetchFirebaseMonetizationSnapshot>>(6, { subscription: null, boosts: [] } as never);
       const nextStories = pruneStoriesForState(mergeStoriesById(catalog.stories, []));
       const nextPosts = mergePostsById(postsSnapshot.posts, []);
       const nextReels = mergeReelsById(catalog.reels, []);
@@ -1606,6 +1662,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         void updateFirebaseUserPreferences(currentUser.id, { region: nextRegion }).catch(() => undefined);
       }
     }
+  }
+
+  /** Lets the author's followers know about something new they just published (server sends the alerts). */
+  function announceNewContent(type: "new_post" | "new_reel" | "new_story", entityId: string, preview?: string) {
+    void (async () => {
+      try {
+        const token = await resolveAccessToken(session);
+        if (token && isAppApiConfigured()) {
+          await notifyFollowersWithApi(token, { type, entityId, preview: preview?.trim().slice(0, 200) || undefined });
+        }
+      } catch {
+        // Followers still see the new content in their feed; only the alert is skipped.
+      }
+    })();
   }
 
   async function publishFirebaseNotification(input: Parameters<typeof createFirebaseNotification>[0]) {
@@ -4073,6 +4143,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
 
         setStories((current) => [story, ...pruneStoriesForState(current.filter((item) => item.id !== story.id))]);
+        announceNewContent("new_story", story.id);
         return { ok: true, story };
       } catch (error) {
         return { ok: false, message: getFirebaseContentErrorMessage(error) };
@@ -4492,6 +4563,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
 
       setPosts((current) => upsertPost(current, createdPost));
+      announceNewContent("new_post", createdPost.id, normalizedCaption);
       return { ok: true };
     } catch (error) {
       return { ok: false, message: getFirebasePostsErrorMessage(error) };
@@ -4560,6 +4632,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         setReels(nextReels);
         setUsers((current) => withOwnedContent(upsertUser(current, currentUser), nextReels, products));
+        announceNewContent("new_reel", newReel.id, normalizedCaption);
         return { ok: true, reel: newReel };
       } catch (error) {
         return { ok: false, message: getFirebaseContentErrorMessage(error) };
@@ -6081,7 +6154,7 @@ function appendCacheBust(url: string) {
 }
 
 function isLocalMediaUri(value: string) {
-  return /^(file|content|ph|assets-library):\/\//i.test(value);
+  return /^(file|content|ph|assets-library):\/\//i.test(value) || /^blob:/i.test(value);
 }
 
 function isHttpUrl(value: string) {

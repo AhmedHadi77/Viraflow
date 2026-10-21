@@ -23,8 +23,11 @@ const notificationTypeSchema = z.enum([
   "order",
   "call",
   "system",
+  "new_post",
+  "new_reel",
+  "new_story",
 ]);
-const savedEntityTypeSchema = z.enum(["reel", "product", "post"]);
+const savedEntityTypeSchema = z.enum(["reel", "product", "post", "story"]);
 const conversationTypeSchema = z.enum(["marketplace", "direct"]);
 
 export const notificationDeliverySchema = z.object({
@@ -79,6 +82,18 @@ export async function deliverNotification(input: NotificationDeliveryInput) {
   const db = getFirestore();
   if (!db) {
     throw new Error("Firebase Admin is not configured on the backend.");
+  }
+
+  if (!input.actor.name || !input.actor.picture) {
+    const actorDoc = await db.collection("users").doc(input.actor.id).get().catch(() => null);
+    input = {
+      ...input,
+      actor: {
+        id: input.actor.id,
+        name: input.actor.name || (actorDoc?.get("name") as string | undefined) || undefined,
+        picture: input.actor.picture || (actorDoc?.get("profileImage") as string | undefined) || undefined,
+      },
+    };
   }
 
   const notificationRef = input.dedupeId
@@ -155,3 +170,87 @@ function normalizeDocId(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-").slice(0, 150);
 }
 
+
+export const followerFanoutSchema = z.object({
+  type: z.enum(["new_post", "new_reel", "new_story"]),
+  entityId: z.string().min(1).max(160),
+  preview: z.string().max(240).optional(),
+});
+
+const FANOUT_LIMIT = 5000;
+
+/**
+ * Tells everyone who follows the author about a new post, reel or story: one in-app notification each,
+ * plus a phone notification in each follower's language.
+ */
+export async function notifyFollowersOfNewContent(authorId: string, input: z.infer<typeof followerFanoutSchema>) {
+  const db = getFirestore();
+  if (!db) {
+    throw new Error("Firebase Admin is not configured on the backend.");
+  }
+  const authorDoc = await db.collection("users").doc(authorId).get();
+  if (!authorDoc.exists) {
+    return { notified: 0, pushed: 0 };
+  }
+  const followers = ((authorDoc.get("followers") as unknown[]) ?? [])
+    .filter((id): id is string => typeof id === "string" && id.length > 0 && id !== authorId)
+    .slice(0, FANOUT_LIMIT);
+  if (followers.length === 0) {
+    return { notified: 0, pushed: 0 };
+  }
+  const actorName = (authorDoc.get("name") as string | undefined)?.trim() || "Sohba";
+  const actorAvatar = (authorDoc.get("profileImage") as string | undefined) || undefined;
+  const entityType = input.type === "new_reel" ? "reel" : input.type === "new_story" ? "story" : "post";
+  const body = input.type === "new_story" ? "" : (input.preview ?? "").trim().slice(0, 240);
+  const createdAt = new Date().toISOString();
+
+  for (let index = 0; index < followers.length; index += 400) {
+    const batch = db.batch();
+    followers.slice(index, index + 400).forEach((userId) => {
+      const ref = db.collection(NOTIFICATIONS_COLLECTION).doc(normalizeDocId(`${input.type}-${input.entityId}-${userId}`));
+      batch.set(
+        ref,
+        {
+          id: ref.id,
+          userId,
+          type: input.type,
+          title: `${actorName} shared something new`,
+          body: body || " ",
+          actorId: authorId,
+          actorName,
+          ...(actorAvatar ? { actorAvatar } : {}),
+          entityType,
+          entityId: input.entityId,
+          createdAt,
+        },
+        { merge: true }
+      );
+    });
+    await batch.commit();
+  }
+
+  // Phone notifications, written in each follower's own language.
+  let pushed = 0;
+  for (let index = 0; index < followers.length; index += 30) {
+    const chunk = followers.slice(index, index + 30);
+    const [tokenSnapshot, userDocs] = await Promise.all([
+      db.collection(DEVICE_PUSH_TOKENS_COLLECTION).where("userId", "in", chunk).get(),
+      db.getAll(...chunk.map((id) => db.collection("users").doc(id))),
+    ]);
+    const languageByUser = new Map(userDocs.map((doc) => [doc.id, doc.get("language") as string | undefined]));
+    const docsByLanguage = new Map<string, typeof tokenSnapshot.docs>();
+    tokenSnapshot.docs.forEach((doc) => {
+      const language = languageByUser.get(String(doc.get("userId"))) ?? "en";
+      docsByLanguage.set(language, [...(docsByLanguage.get(language) ?? []), doc]);
+    });
+    for (const [language, docs] of docsByLanguage) {
+      const text = localizePushText({ type: input.type, actorName, entityType, title: actorName, body }, language);
+      pushed += await sendPush(db, readPushTargets(docs), {
+        title: text.title,
+        body: text.body || undefined,
+        data: { type: input.type, entityType, entityId: input.entityId, actorId: authorId, userId: authorId },
+      });
+    }
+  }
+  return { notified: followers.length, pushed };
+}

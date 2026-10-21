@@ -52,7 +52,9 @@ function contentPreview(item: AppNotification) {
     item.type === "comment" ||
     item.type === "message" ||
     item.type === "mention" ||
-    item.type === "order"
+    item.type === "order" ||
+    item.type === "new_post" ||
+    item.type === "new_reel"
   ) {
     return item.body?.trim() ?? "";
   }
@@ -92,6 +94,12 @@ export function describeNotification(item: AppNotification, copy: Copy) {
       return fill(copy.fsSaved, { name });
     case "call":
       return fill(copy.fsCalled, { name });
+    case "new_post":
+      return fill(copy.fsNewPost, { name });
+    case "new_reel":
+      return fill(copy.fsNewReel, { name });
+    case "new_story":
+      return fill(copy.fsNewStory, { name });
     default:
       // Announcements and system updates keep the text they were sent with.
       return item.title;
@@ -207,6 +215,10 @@ export function getNotificationMeta(type: AppNotification["type"], copy: Copy) {
       return { icon: "bookmark-outline", label: copy.nlSave, color: "#36e0a1", tint: "rgba(54,224,161,0.14)" } as const;
     case "call":
       return { icon: "call-outline", label: copy.nlCall, color: "#36e0a1", tint: "rgba(54,224,161,0.14)" } as const;
+    case "new_post":
+    case "new_reel":
+    case "new_story":
+      return { icon: "sparkles-outline", label: copy.nlNewContent, color: "#ff7a2f", tint: "rgba(255,122,47,0.14)" } as const;
     case "system":
       return { icon: "megaphone-outline", label: copy.nlAnnouncement, color: "#36e0a1", tint: "rgba(54,224,161,0.14)" } as const;
     default:

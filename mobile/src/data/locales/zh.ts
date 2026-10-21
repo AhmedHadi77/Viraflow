@@ -878,6 +878,11 @@ const zh: Partial<CopyStrings> = {
   callNeedCamera: "请在手机设置中允许 Sohba 使用摄像头和麦克风后再进行视频通话。",
   callBusy: "你已在通话中。",
   errNoPermission: "你没有执行此操作的权限。",
+  callSpeaker: "扬声器",
+  fsNewPost: "{name} 发布了新帖子",
+  fsNewReel: "{name} 发布了新短视频",
+  fsNewStory: "{name} 发布了新快拍",
+  nlNewContent: "新内容",
 };
 
 export default zh;
