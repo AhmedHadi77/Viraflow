@@ -883,6 +883,7 @@ const ur: Partial<CopyStrings> = {
   fsNewReel: "{name} نے ایک نئی ریل پوسٹ کی",
   fsNewStory: "{name} نے اسٹوری شامل کی",
   nlNewContent: "نیا",
+  callPrivate: "نجی کال",
 };
 
 export default ur;

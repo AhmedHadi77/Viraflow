@@ -883,6 +883,7 @@ const ru: Partial<CopyStrings> = {
   fsNewReel: "{name} опубликовал(а) новый рилс",
   fsNewStory: "{name} добавил(а) историю",
   nlNewContent: "Новое",
+  callPrivate: "Личный звонок",
 };
 
 export default ru;

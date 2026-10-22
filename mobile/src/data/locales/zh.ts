@@ -883,6 +883,7 @@ const zh: Partial<CopyStrings> = {
   fsNewReel: "{name} 发布了新短视频",
   fsNewStory: "{name} 发布了新快拍",
   nlNewContent: "新内容",
+  callPrivate: "私密通话",
 };
 
 export default zh;

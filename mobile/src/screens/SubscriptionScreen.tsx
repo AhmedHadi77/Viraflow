@@ -40,7 +40,7 @@ export function SubscriptionScreen() {
 
   return (
     <Screen scrollable>
-      <LinearGradient colors={["rgba(255,122,47,0.18)", "rgba(54,224,161,0.10)", "rgba(255,255,255,0.02)"]} style={styles.hero}>
+      <LinearGradient colors={[palette.surface, palette.surface]} style={styles.hero}>
         <SectionTitle title={copy.premiumTitle} subtitle={copy.premiumBody} />
       </LinearGradient>
       <View style={styles.list}>
@@ -151,8 +151,8 @@ const styles = createThemedStyles({
     padding: spacing.xl,
   },
   statusCard: {
-    backgroundColor: "rgba(54,224,161,0.08)",
-    borderColor: "rgba(54,224,161,0.22)",
+    backgroundColor: "rgba(31,91,255,0.08)",
+    borderColor: "rgba(31,91,255,0.22)",
     borderRadius: radii.xl,
     borderWidth: 1,
     gap: spacing.sm,

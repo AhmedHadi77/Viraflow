@@ -883,6 +883,7 @@ const ms: Partial<CopyStrings> = {
   fsNewReel: "{name} menyiarkan reel baharu",
   fsNewStory: "{name} menambah cerita",
   nlNewContent: "Baharu",
+  callPrivate: "Panggilan peribadi",
 };
 
 export default ms;

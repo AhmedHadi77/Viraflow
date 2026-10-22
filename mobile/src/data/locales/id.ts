@@ -883,6 +883,7 @@ const id: Partial<CopyStrings> = {
   fsNewReel: "{name} memposting reel baru",
   fsNewStory: "{name} menambahkan cerita",
   nlNewContent: "Baru",
+  callPrivate: "Panggilan pribadi",
 };
 
 export default id;

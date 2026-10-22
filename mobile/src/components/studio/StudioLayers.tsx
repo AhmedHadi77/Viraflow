@@ -10,8 +10,8 @@ export const STICKER_BASE_SIZE = 56;
 export const STUDIO_TEXT_COLORS = [
   "#ffffff",
   "#000000",
-  "#36e0a1",
-  "#ff7a2f",
+  "#1f5bff",
+  "#e5294f",
   "#ffd166",
   "#ff4d67",
   "#7ce7ff",
@@ -36,7 +36,7 @@ export function textStyleFor(style: StudioTextStyle, color: string, fontSize: nu
         color: "#ffffff",
         fontSize,
         fontWeight: "800",
-        textShadowColor: color === "#ffffff" ? "#36e0a1" : color,
+        textShadowColor: color === "#ffffff" ? "#1f5bff" : color,
         textShadowOffset: { width: 0, height: 0 },
         textShadowRadius: Math.max(8, fontSize * 0.45),
       };
@@ -107,7 +107,7 @@ export function StudioStickerView({ layer, frameWidth }: { layer: StudioStickerL
         },
       ]}
     >
-      <Ionicons color="#ff7a2f" name={icon} size={fontSize * 1.05} />
+      <Ionicons color="#e5294f" name={icon} size={fontSize * 1.05} />
       <Text style={[styles.pillLabel, { fontSize }]}>{label.toUpperCase()}</Text>
     </View>
   );
@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   pillLabel: {
-    color: "#0e1720",
+    color: "#151922",
     fontWeight: "900",
   },
 });

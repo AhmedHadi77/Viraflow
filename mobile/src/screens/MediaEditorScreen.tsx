@@ -382,7 +382,7 @@ export function MediaEditorScreen({ navigation, route }: { navigation: any; rout
           <View style={styles.flexSpacer} />
         )}
         <Pressable disabled={finishing} onPress={() => void finish()} style={styles.doneButton}>
-          {finishing ? <ActivityIndicator color="#04110b" /> : <Text style={styles.doneLabel}>{session.doneLabel ?? copy.edNext}</Text>}
+          {finishing ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.doneLabel}>{session.doneLabel ?? copy.edNext}</Text>}
         </Pressable>
       </View>
 
@@ -565,7 +565,7 @@ export function MediaEditorScreen({ navigation, route }: { navigation: any; rout
             {music ? (
               <>
                 <StudioSlider
-                  accent="#ff7a2f"
+                  accent="#e5294f"
                   formatValue={(value) => `${Math.round(value * 100)}%`}
                   label={copy.edMusicVolume}
                   max={1}
@@ -574,7 +574,7 @@ export function MediaEditorScreen({ navigation, route }: { navigation: any; rout
                   value={music.volume}
                 />
                 <StudioSlider
-                  accent="#ff7a2f"
+                  accent="#e5294f"
                   formatValue={(value) => `0:${String(Math.round(value)).padStart(2, "0")}`}
                   label={copy.edMusicStart}
                   max={Math.max(1, (musicDuration || music.durationSeconds || 30) - 5)}
@@ -911,7 +911,7 @@ const styles = StyleSheet.create({
   },
   doneButton: {
     alignItems: "center",
-    backgroundColor: "#36e0a1",
+    backgroundColor: "#1f5bff",
     borderRadius: 20,
     justifyContent: "center",
     minHeight: 40,
@@ -919,18 +919,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   doneLabel: {
-    color: "#04110b",
+    color: "#ffffff",
     fontSize: 15,
     fontWeight: "800",
   },
   frame: {
     alignSelf: "center",
-    backgroundColor: "#0b0f14",
+    backgroundColor: "#151922",
     borderRadius: 18,
     overflow: "hidden",
   },
   videoFallback: {
-    backgroundColor: "#111820",
+    backgroundColor: "#151922",
   },
   rail: {
     gap: 12,
@@ -951,7 +951,7 @@ const styles = StyleSheet.create({
     width: 42,
   },
   railIconActive: {
-    backgroundColor: "#36e0a1",
+    backgroundColor: "#1f5bff",
   },
   railAa: {
     color: "#ffffff",
@@ -995,8 +995,8 @@ const styles = StyleSheet.create({
     width: 60,
   },
   trashActive: {
-    backgroundColor: "#ef4444",
-    borderColor: "#ef4444",
+    backgroundColor: "#ff5c5c",
+    borderColor: "#ff5c5c",
     transform: [{ scale: 1.15 }],
   },
   bottomArea: {
@@ -1029,7 +1029,7 @@ const styles = StyleSheet.create({
     width: 58,
   },
   filterThumbActive: {
-    borderColor: "#36e0a1",
+    borderColor: "#1f5bff",
   },
   filterThumb: {
     height: "100%",
@@ -1048,7 +1048,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   resetLabel: {
-    color: "#ff7a2f",
+    color: "#e5294f",
     fontSize: 13,
     fontWeight: "800",
   },
@@ -1065,7 +1065,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   speedChipActive: {
-    backgroundColor: "#36e0a1",
+    backgroundColor: "#1f5bff",
   },
   speedLabel: {
     color: "#ffffff",
@@ -1073,7 +1073,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   speedLabelActive: {
-    color: "#04110b",
+    color: "#ffffff",
   },
   coverRow: {
     alignItems: "center",
@@ -1082,7 +1082,7 @@ const styles = StyleSheet.create({
   },
   coverThumb: {
     backgroundColor: "rgba(255,255,255,0.1)",
-    borderColor: "#36e0a1",
+    borderColor: "#1f5bff",
     borderRadius: 10,
     borderWidth: 2,
     height: 84,

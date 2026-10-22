@@ -883,6 +883,7 @@ const ar: Partial<CopyStrings> = {
   fsNewReel: "نشر {name} ريلاً جديداً",
   fsNewStory: "أضاف {name} قصة جديدة",
   nlNewContent: "جديد",
+  callPrivate: "مكالمة خاصة",
 };
 
 export default ar;

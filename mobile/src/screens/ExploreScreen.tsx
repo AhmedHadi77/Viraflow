@@ -324,12 +324,8 @@ const styles = createThemedStyles({
     paddingBottom: 120,
   },
   hero: {
-    backgroundColor: "#081018",
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: radii.xl,
-    borderWidth: 1,
     gap: spacing.md,
-    padding: spacing.xl,
+    paddingTop: spacing.sm,
   },
   kicker: {
     color: palette.accentSoft,
@@ -352,7 +348,7 @@ const styles = createThemedStyles({
   },
   searchShell: {
     alignItems: "center",
-    backgroundColor: "#0f1a24",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: radii.pill,
     borderWidth: 1,
@@ -399,7 +395,7 @@ const styles = createThemedStyles({
   },
   userResultCard: {
     alignItems: "center",
-    backgroundColor: "#0c151d",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: radii.xl,
     borderWidth: 1,
@@ -431,8 +427,8 @@ const styles = createThemedStyles({
     fontSize: 12,
   },
   userStatsPill: {
-    backgroundColor: "rgba(54,224,161,0.12)",
-    borderColor: "rgba(54,224,161,0.22)",
+    backgroundColor: "rgba(31,91,255,0.12)",
+    borderColor: "rgba(31,91,255,0.22)",
     borderRadius: radii.pill,
     borderWidth: 1,
     paddingHorizontal: 12,
@@ -449,7 +445,7 @@ const styles = createThemedStyles({
     gap: spacing.sm,
   },
   hashtagChip: {
-    backgroundColor: "#0c151d",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: radii.lg,
     borderWidth: 1,
@@ -469,7 +465,7 @@ const styles = createThemedStyles({
   },
   postResultCard: {
     alignItems: "center",
-    backgroundColor: "#0c151d",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: radii.xl,
     borderWidth: 1,
@@ -509,9 +505,9 @@ const styles = createThemedStyles({
     fontWeight: "700",
   },
   emptyCard: {
-    backgroundColor: "#0b1219",
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: radii.xl,
+    backgroundColor: "#151922",
+    borderColor: palette.border,
+    borderRadius: radii.lg,
     borderWidth: 1,
     gap: spacing.xs,
     padding: spacing.xl,
@@ -532,7 +528,7 @@ const styles = createThemedStyles({
   },
   suggestedCard: {
     alignItems: "center",
-    backgroundColor: "#0c151d",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: radii.xl,
     borderWidth: 1,
@@ -562,7 +558,7 @@ const styles = createThemedStyles({
     marginTop: spacing.xs,
   },
   reelCard: {
-    backgroundColor: "#09131b",
+    backgroundColor: "#151922",
     borderRadius: radii.xl,
     overflow: "hidden",
     width: 182,
@@ -601,7 +597,7 @@ const styles = createThemedStyles({
     marginTop: 6,
   },
   recentPostCard: {
-    backgroundColor: "#0b1219",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: radii.xl,
     borderWidth: 1,

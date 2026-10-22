@@ -131,7 +131,7 @@ const styles = createThemedStyles({
     flex: 1,
   },
   sheet: {
-    backgroundColor: "#081018",
+    backgroundColor: "#151922",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderTopWidth: 1,
@@ -195,7 +195,7 @@ const styles = createThemedStyles({
     fontSize: 12,
   },
   mediaFrame: {
-    backgroundColor: "#04080d",
+    backgroundColor: "#ffffff",
     borderRadius: radii.xl,
     overflow: "hidden",
     position: "relative",

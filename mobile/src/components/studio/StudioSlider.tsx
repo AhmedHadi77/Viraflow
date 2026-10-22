@@ -11,7 +11,7 @@ export function StudioSlider({
   vertical = false,
   label,
   formatValue,
-  accent = "#36e0a1",
+  accent = "#1f5bff",
   length,
 }: {
   value: number;

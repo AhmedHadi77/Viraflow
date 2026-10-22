@@ -2,7 +2,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { applyThemeMode, ThemeMode } from "./index";
 
-const THEME_STORAGE_KEY = "pulseora.themeMode";
+// New key for the Daylight redesign so everyone starts on the light look once.
+const THEME_STORAGE_KEY = "sohba.themeMode.daylight";
 
 interface ThemeContextValue {
   mode: ThemeMode;
@@ -12,14 +13,14 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  mode: "dark",
+  mode: "light",
   ready: true,
   setMode: () => undefined,
   toggleMode: () => undefined,
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [mode, setModeState] = useState<ThemeMode>("dark");
+  const [mode, setModeState] = useState<ThemeMode>("light");
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -30,7 +31,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         if (!active) {
           return;
         }
-        const nextMode: ThemeMode = stored === "light" ? "light" : "dark";
+        const nextMode: ThemeMode = stored === "dark" ? "dark" : "light";
         applyThemeMode(nextMode);
         setModeState(nextMode);
         setReady(true);

@@ -247,7 +247,7 @@ const styles = createThemedStyles({
     fontWeight: "700",
   },
   choiceLabelActive: {
-    color: "#071118",
+    color: "#ffffff",
   },
   totalCard: {
     alignItems: "center",

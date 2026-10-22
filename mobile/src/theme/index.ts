@@ -3,67 +3,69 @@ import type { ImageStyle, TextStyle, ViewStyle } from "react-native";
 export type ThemeMode = "dark" | "light";
 
 export const darkPalette = {
-  background: "#071018",
-  backgroundSoft: "#102031",
-  backgroundDeep: "#03070c",
-  surface: "#0f1a24",
-  surfaceMuted: "#142231",
-  surfaceRaised: "#1a2b3d",
-  card: "#132231",
-  cardAlt: "#1a3044",
-  primary: "#36e0a1",
-  primaryDeep: "#16b881",
-  accent: "#ff7a2f",
-  accentSoft: "#ffa36b",
-  text: "#f6f3ee",
-  textSoft: "#d4d0ca",
-  muted: "#90a1b4",
-  mutedSoft: "#6f8196",
-  border: "rgba(255,255,255,0.08)",
-  borderStrong: "rgba(255,255,255,0.16)",
-  input: "#182737",
-  danger: "#f87171",
-  success: "#4ade80",
+  // Sohba "Daylight" kit (Oct 2026): the app is light by default; this is its dark companion.
+  background: "#0b0d12",
+  backgroundSoft: "#0f1218",
+  backgroundDeep: "#07080c",
+  surface: "#151922",
+  surfaceMuted: "#181c26",
+  surfaceRaised: "#1e2330",
+  card: "#151922",
+  cardAlt: "#1e2330",
+  primary: "#1f5bff",
+  primaryDeep: "#1446d6",
+  accent: "#ff5c7a",
+  accentSoft: "#7aa2ff",
+  text: "#f2f4f7",
+  textSoft: "#c8ccd4",
+  muted: "#a0a6b2",
+  mutedSoft: "#7d8492",
+  border: "#232835",
+  borderStrong: "#333a4a",
+  input: "#1e2330",
+  danger: "#ff5c5c",
+  success: "#22c58b",
   shadow: "rgba(0,0,0,0.38)",
-  overlay: "rgba(2,6,10,0.42)",
+  overlay: "rgba(4,6,10,0.5)",
   glass: "rgba(255,255,255,0.06)",
 };
 
 export type Palette = typeof darkPalette;
 
 export const lightPalette: Palette = {
-  background: "#f4f6f9",
-  backgroundSoft: "#eef2f7",
+  // Daylight: clean white, cobalt for actions, rose-red for likes and activity.
+  background: "#ffffff",
+  backgroundSoft: "#f6f7f9",
   backgroundDeep: "#ffffff",
-  surface: "#ffffff",
-  surfaceMuted: "#f1f4f8",
-  surfaceRaised: "#e8edf3",
-  card: "#ffffff",
-  cardAlt: "#eef3f8",
-  primary: "#12b47a",
-  primaryDeep: "#0e9465",
-  accent: "#f26a1b",
-  accentSoft: "#e0661c",
-  text: "#0e1720",
-  textSoft: "#33414f",
-  muted: "#5f6f80",
-  mutedSoft: "#8393a3",
-  border: "rgba(15,23,32,0.10)",
-  borderStrong: "rgba(15,23,32,0.18)",
-  input: "#f1f4f8",
-  danger: "#dc2626",
-  success: "#16a34a",
-  shadow: "rgba(15,23,32,0.12)",
-  overlay: "rgba(15,23,32,0.35)",
-  glass: "rgba(15,23,32,0.04)",
+  surface: "#f6f7f9",
+  surfaceMuted: "#f3f4f6",
+  surfaceRaised: "#eceef2",
+  card: "#f6f7f9",
+  cardAlt: "#eef0f4",
+  primary: "#1f5bff",
+  primaryDeep: "#1446d6",
+  accent: "#e5294f",
+  accentSoft: "#1446d6",
+  text: "#0d1117",
+  textSoft: "#3b4250",
+  muted: "#5b6270",
+  mutedSoft: "#6b7280",
+  border: "#eceef2",
+  borderStrong: "#dadde3",
+  input: "#f3f4f6",
+  danger: "#d92d20",
+  success: "#12a26b",
+  shadow: "rgba(13,17,23,0.08)",
+  overlay: "rgba(13,17,23,0.40)",
+  glass: "rgba(13,17,23,0.04)",
 };
 
 // `palette` is mutated in place when the theme changes, so code that reads palette.x while
 // rendering always gets the active theme. Screens that must always stay dark (full-screen video)
 // import `darkPalette` instead.
-export const palette: Palette = { ...darkPalette };
+export const palette: Palette = { ...lightPalette };
 
-let currentMode: ThemeMode = "dark";
+let currentMode: ThemeMode = "light";
 
 export function getThemeMode() {
   return currentMode;
@@ -79,12 +81,72 @@ export const spacing = {
 };
 
 export const radii = {
-  sm: 12,
-  md: 18,
-  lg: 24,
-  xl: 32,
+  sm: 10,
+  md: 14,
+  lg: 20,
+  xl: 28,
   pill: 999,
 };
+
+/* Typography: Manrope throughout; heavier weights carry the titles. */
+export const fonts = {
+  regular: "Manrope_400Regular",
+  medium: "Manrope_500Medium",
+  semibold: "Manrope_600SemiBold",
+  bold: "Manrope_700Bold",
+  display: "Manrope_800ExtraBold",
+  displayHeavy: "Manrope_800ExtraBold",
+};
+
+let customFontsEnabled = true;
+
+/** Turns the custom fonts off (used if they fail to load, so text never disappears). */
+export function setCustomFontsEnabled(enabled: boolean) {
+  customFontsEnabled = enabled;
+}
+
+/** Picks the font file for a text style from its size and weight. */
+export function fontFamilyFor(fontSize: number | undefined, fontWeight: string | number | undefined) {
+  const weight = Number(fontWeight ?? 400) || 400;
+  if ((fontSize ?? 0) >= 20 && weight >= 700) {
+    return (fontSize ?? 0) >= 28 && weight >= 800 ? fonts.displayHeavy : fonts.display;
+  }
+  if (weight >= 700) return fonts.bold;
+  if (weight >= 600) return fonts.semibold;
+  if (weight >= 500) return fonts.medium;
+  return fonts.regular;
+}
+
+function applyFonts(style: Record<string, unknown>) {
+  // Sentence case everywhere: small all-caps labels read as shouting, so they become quiet labels.
+  if (style.textTransform === "uppercase" && typeof style.fontSize === "number" && style.fontSize <= 13) {
+    delete style.textTransform;
+    style.letterSpacing = 0;
+    style.fontSize = Math.max(12, style.fontSize as number);
+    if (style.fontWeight === "800" || style.fontWeight === "900") {
+      style.fontWeight = "600";
+    }
+    // Orange is for activity from other people, not for labels.
+    if (typeof style.color === "string" && /^(#e5294f|#ff5c7a|#ff8aa0|#7aa2ff|#1446d6)$/i.test(style.color)) {
+      style.color = darkPalette.muted;
+    }
+  }
+  if (!customFontsEnabled || style.fontFamily !== undefined) {
+    return;
+  }
+  if (style.fontSize === undefined && style.fontWeight === undefined) {
+    return;
+  }
+  style.fontFamily = fontFamilyFor(style.fontSize as number | undefined, style.fontWeight as string | undefined);
+  // The font file already carries the weight; a weight on top makes Android fall back to the system font.
+  delete style.fontWeight;
+}
+
+/** StyleSheet.create replacement for sheets that are not themed: adds the Sohba fonts. */
+export function sheet<T extends NamedStyles<T> | NamedStyles<any>>(input: T & NamedStyles<any>): T {
+  Object.keys(input).forEach((key) => applyFonts((input as Record<string, Record<string, unknown>>)[key]));
+  return input;
+}
 
 export const shadows = {
   card: {
@@ -147,6 +209,7 @@ export function createThemedStyles<T extends NamedStyles<T> | NamedStyles<any>>(
   const styles = input as unknown as StyleRecord;
   const base: StyleRecord = {};
   Object.keys(styles).forEach((key) => {
+    applyFonts(styles[key]);
     const copy: Record<string, unknown> = { ...styles[key] };
     if (currentMode === "light") {
       // Screens loaded while light mode is active read light palette values; store the dark
@@ -254,9 +317,10 @@ function convertColor(value: string, prop: string) {
   const isTextProp = prop === "color" || prop === "tintColor" || prop === "textDecorationColor";
 
   if (exact) {
-    // Light text colours used as a *background* (white pills) stay light in light mode.
+    // Text colour used as a *background* is an inverted pill (selected chip): on the light theme it
+    // becomes a near-black pill, and its label (the background colour) becomes white.
     if (!isTextProp && TEXT_PALETTE_KEYS.has(exact.key)) {
-      return value;
+      return exact.key === "text" ? lightPalette.text : exact.light;
     }
 
     return exact.light;

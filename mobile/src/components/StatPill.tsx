@@ -1,5 +1,5 @@
 import { Pressable, Text, View } from "react-native";
-import { palette, radii, spacing, createThemedStyles } from "../theme";
+import { palette, spacing, createThemedStyles } from "../theme";
 
 interface StatPillProps {
   label: string;
@@ -27,24 +27,17 @@ export function StatPill({ label, value, onPress }: StatPillProps) {
 const styles = createThemedStyles({
   container: {
     alignItems: "center",
-    backgroundColor: palette.surfaceMuted,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.lg,
-    borderWidth: 1,
     flex: 1,
-    gap: 4,
-    paddingVertical: spacing.md + 2,
+    gap: 2,
+    paddingVertical: spacing.xs,
   },
   value: {
     color: palette.text,
-    fontSize: 18,
-    fontWeight: "900",
+    fontSize: 20,
+    fontWeight: "700",
   },
   label: {
     color: palette.muted,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
+    fontSize: 13,
   },
 });

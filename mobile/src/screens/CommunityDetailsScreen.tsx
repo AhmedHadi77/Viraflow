@@ -522,7 +522,7 @@ const styles = createThemedStyles({
     lineHeight: 21,
   },
   chatTextOwn: {
-    color: "#071118",
+    color: "#ffffff",
   },
   chatTime: {
     color: palette.muted,
@@ -538,8 +538,8 @@ const styles = createThemedStyles({
   },
   emptyCard: {
     backgroundColor: palette.surface,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.xl,
+    borderColor: palette.border,
+    borderRadius: radii.lg,
     borderWidth: 1,
     gap: spacing.sm,
     padding: spacing.xl,

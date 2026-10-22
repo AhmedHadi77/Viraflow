@@ -197,12 +197,8 @@ const styles = createThemedStyles({
     paddingBottom: 120,
   },
   hero: {
-    backgroundColor: "#081018",
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: radii.xl,
-    borderWidth: 1,
     gap: spacing.md,
-    padding: spacing.xl,
+    paddingTop: spacing.sm,
   },
   kicker: {
     color: palette.accentSoft,
@@ -228,7 +224,7 @@ const styles = createThemedStyles({
   statCard: {
     backgroundColor: "rgba(255,255,255,0.05)",
     borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: radii.lg,
+    borderRadius: radii.md,
     borderWidth: 1,
     flex: 1,
     gap: 4,
@@ -257,7 +253,7 @@ const styles = createThemedStyles({
     paddingRight: spacing.md,
   },
   relatedChip: {
-    backgroundColor: "#0c151d",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: radii.lg,
     borderWidth: 1,
@@ -276,7 +272,7 @@ const styles = createThemedStyles({
   },
   creatorCard: {
     alignItems: "center",
-    backgroundColor: "#0c151d",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: radii.xl,
     borderWidth: 1,
@@ -372,9 +368,9 @@ const styles = createThemedStyles({
   },
   emptyCard: {
     alignItems: "center",
-    backgroundColor: "#0b1219",
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: radii.xl,
+    backgroundColor: "#151922",
+    borderColor: palette.border,
+    borderRadius: radii.lg,
     borderWidth: 1,
     gap: spacing.xs,
     padding: spacing.xl,

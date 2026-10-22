@@ -883,6 +883,7 @@ const tr: Partial<CopyStrings> = {
   fsNewReel: "{name} yeni bir reels paylaştı",
   fsNewStory: "{name} hikayesine ekleme yaptı",
   nlNewContent: "Yeni",
+  callPrivate: "Özel arama",
 };
 
 export default tr;

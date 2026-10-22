@@ -134,7 +134,7 @@ export function MusicSheet({
 
           <Pressable onPress={() => void pickOwnSound()} style={styles.ownRow}>
             <View style={styles.ownIcon}>
-              <Ionicons color="#04110b" name="folder-open" size={20} />
+              <Ionicons color="#ffffff" name="folder-open" size={20} />
             </View>
             <View style={styles.trackText}>
               <Text style={styles.trackTitle}>{copy.edOwnSound}</Text>
@@ -169,7 +169,7 @@ export function MusicSheet({
                     </Text>
                   </View>
                   {selected ? (
-                    <Ionicons color="#36e0a1" name="checkmark-circle" size={22} />
+                    <Ionicons color="#1f5bff" name="checkmark-circle" size={22} />
                   ) : (
                     <Text style={styles.useLabel}>{copy.edUse}</Text>
                   )}
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sheet: {
-    backgroundColor: "#121a22",
+    backgroundColor: "#151922",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: "78%",
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   genreChipActive: {
-    backgroundColor: "#36e0a1",
+    backgroundColor: "#1f5bff",
   },
   genreLabel: {
     color: "rgba(255,255,255,0.85)",
@@ -248,12 +248,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   genreLabelActive: {
-    color: "#04110b",
+    color: "#ffffff",
   },
   ownRow: {
     alignItems: "center",
-    backgroundColor: "rgba(54,224,161,0.12)",
-    borderColor: "rgba(54,224,161,0.4)",
+    backgroundColor: "rgba(31,91,255,0.12)",
+    borderColor: "rgba(31,91,255,0.4)",
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: "row",
@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
   },
   ownIcon: {
     alignItems: "center",
-    backgroundColor: "#36e0a1",
+    backgroundColor: "#1f5bff",
     borderRadius: 12,
     height: 40,
     justifyContent: "center",
@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
   },
   playButton: {
     alignItems: "center",
-    backgroundColor: "rgba(255,122,47,0.9)",
+    backgroundColor: "rgba(229,41,79,0.9)",
     borderRadius: 20,
     height: 40,
     justifyContent: "center",
@@ -305,7 +305,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   useLabel: {
-    color: "#36e0a1",
+    color: "#1f5bff",
     fontSize: 14,
     fontWeight: "800",
   },

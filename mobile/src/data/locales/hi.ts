@@ -883,6 +883,7 @@ const hi: Partial<CopyStrings> = {
   fsNewReel: "{name} ने एक नई रील पोस्ट की",
   fsNewStory: "{name} ने स्टोरी जोड़ी",
   nlNewContent: "नया",
+  callPrivate: "निजी कॉल",
 };
 
 export default hi;

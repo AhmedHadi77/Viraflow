@@ -418,28 +418,31 @@ const styles = createThemedStyles({
   },
   messageBubble: {
     backgroundColor: palette.surfaceRaised,
-    borderRadius: 18,
+    borderBottomLeftRadius: 6,
+    borderRadius: 20,
     gap: 4,
     maxWidth: "78%",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   messageBubbleOwn: {
     backgroundColor: palette.primary,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 6,
     borderColor: palette.primary,
   },
   messageName: {
-    color: palette.accentSoft,
+    color: palette.muted,
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "600",
   },
   messageText: {
     color: palette.text,
-    fontSize: 14,
+    fontSize: 15,
     lineHeight: 21,
   },
   messageTextOwn: {
-    color: "#071118",
+    color: "#ffffff",
   },
   messageTime: {
     color: palette.muted,

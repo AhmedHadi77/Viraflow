@@ -57,7 +57,7 @@ export function ChatComposer({
         onPress={onSend}
         style={[styles.sendButton, !canSend || isSending ? styles.sendButtonDisabled : null]}
       >
-        {isSending ? <ActivityIndicator color="#04110b" size="small" /> : <Ionicons color="#04110b" name="send" size={18} style={rtlFlipStyle} />}
+        {isSending ? <ActivityIndicator color="#ffffff" size="small" /> : <Ionicons color="#ffffff" name="send" size={18} style={rtlFlipStyle} />}
       </Pressable>
     </View>
   );
@@ -83,11 +83,11 @@ const styles = createThemedStyles({
   inputShell: {
     backgroundColor: palette.input,
     borderColor: palette.borderStrong,
-    borderRadius: 20,
+    borderRadius: 22,
     borderWidth: 1,
     flex: 1,
     justifyContent: "center",
-    minHeight: 40,
+    minHeight: 44,
     paddingHorizontal: 14,
   },
   input: {
@@ -100,10 +100,10 @@ const styles = createThemedStyles({
   sendButton: {
     alignItems: "center",
     backgroundColor: palette.primary,
-    borderRadius: 20,
-    height: 40,
+    borderRadius: 22,
+    height: 44,
     justifyContent: "center",
-    width: 40,
+    width: 44,
   },
   sendButtonDisabled: {
     opacity: 0.35,

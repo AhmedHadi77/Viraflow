@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     top: 0,
   },
   window: {
-    borderColor: "#36e0a1",
+    borderColor: "#1f5bff",
     borderRadius: 8,
     borderWidth: 3,
     height: 56,
@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
   },
   handle: {
     alignItems: "center",
-    backgroundColor: "#36e0a1",
+    backgroundColor: "#1f5bff",
     borderRadius: 6,
     height: 64,
     justifyContent: "center",
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
     width: 16,
   },
   grip: {
-    backgroundColor: "#04110b",
+    backgroundColor: "#ffffff",
     borderRadius: 2,
     height: 22,
     width: 3,

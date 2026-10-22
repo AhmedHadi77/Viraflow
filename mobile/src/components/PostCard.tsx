@@ -18,7 +18,7 @@ import {
 } from "react-native";
 import { buildCloudinaryPlayableVideoUrl } from "../services/mediaUpload";
 import { Post, PostMediaItem, User } from "../types/models";
-import { palette, radii, shadows, spacing, createThemedStyles } from "../theme";
+import { palette, radii, spacing, createThemedStyles } from "../theme";
 
 type ExpoVideoModule = typeof import("expo-video");
 let cachedExpoVideoModule: ExpoVideoModule | null | undefined;
@@ -146,17 +146,17 @@ export function PostCard({
 
       <View style={styles.actions}>
         <View style={styles.primaryActions}>
-          <ActionButton active={isLiked} icon={isLiked ? "heart" : "heart-outline"} onPress={onLike} />
-          <ActionButton icon="chatbubble-outline" onPress={onComment} />
-          <ActionButton icon="paper-plane-outline" onPress={handleShare} />
+          <ActionButton
+            active={isLiked}
+            count={formatCount(post.likedBy.length)}
+            icon={isLiked ? "heart" : "heart-outline"}
+            label={copy.like}
+            onPress={onLike}
+          />
+          <ActionButton count={formatCount(post.commentCount)} icon="chatbubble-outline" label={copy.commentsTitle} onPress={onComment} />
+          <ActionButton icon="paper-plane-outline" label={copy.nlRepost} onPress={handleShare} />
         </View>
-        <ActionButton active={saved} icon={saved ? "bookmark" : "bookmark-outline"} onPress={onSave} />
-      </View>
-
-      <View style={styles.statsRow}>
-        <Text style={styles.statsText}>{formatCount(post.likedBy.length)} likes</Text>
-        <Text style={styles.statsDivider}>/</Text>
-        <Text style={styles.statsText}>{formatCount(post.commentCount)} comments</Text>
+        <ActionButton active={saved} icon={saved ? "bookmark" : "bookmark-outline"} label={copy.saveAction} onPress={onSave} tone="primary" />
       </View>
 
       {post.caption.trim() ? (
@@ -319,18 +319,39 @@ function LoadedInlineVideo({
   );
 }
 
+/** Daylight action pill: a soft rounded shape; likes turn rose, saves turn cobalt. */
 function ActionButton({
   icon,
   onPress,
   active = false,
+  count,
+  label,
+  tone = "accent",
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   onPress: () => void | Promise<void>;
   active?: boolean;
+  count?: string;
+  label: string;
+  tone?: "accent" | "primary";
 }) {
+  const activeColor = tone === "primary" ? palette.primary : palette.accent;
   return (
-    <Pressable onPress={onPress} style={styles.actionButton}>
-      <Ionicons color={active ? palette.accent : palette.text} name={icon} size={22} />
+    <Pressable
+      accessibilityLabel={count ? `${label} ${count}` : label}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      hitSlop={4}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.actionButton,
+        count ? styles.actionPill : null,
+        active ? (tone === "primary" ? styles.actionActivePrimary : styles.actionActiveAccent) : null,
+        pressed ? styles.actionPressed : null,
+      ]}
+    >
+      <Ionicons color={active ? activeColor : palette.text} name={icon} size={20} />
+      {count ? <Text style={[styles.actionCount, active ? { color: activeColor } : null]}>{count}</Text> : null}
     </Pressable>
   );
 }
@@ -378,20 +399,16 @@ function formatRelativeDate(iso: string) {
 
 const styles = createThemedStyles({
   card: {
-    backgroundColor: "#0b1219",
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: 28,
-    borderWidth: 1,
+    backgroundColor: palette.background,
     overflow: "hidden",
-    ...shadows.card,
   },
   header: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
     paddingBottom: spacing.sm,
+    paddingHorizontal: 4,
+    paddingTop: spacing.xs,
   },
   authorRow: {
     alignItems: "center",
@@ -448,6 +465,9 @@ const styles = createThemedStyles({
   },
   mediaViewport: {
     aspectRatio: 4 / 5,
+    backgroundColor: palette.surface,
+    borderRadius: 22,
+    overflow: "hidden",
     position: "relative",
     width: "100%",
   },
@@ -512,19 +532,40 @@ const styles = createThemedStyles({
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
+  },
+  actionPill: {
+    paddingLeft: 10,
+    paddingRight: 14,
+  },
+  actionActiveAccent: {
+    backgroundColor: "rgba(229,41,79,0.10)",
+  },
+  actionActivePrimary: {
+    backgroundColor: "rgba(31,91,255,0.10)",
+  },
+  actionPressed: {
+    opacity: 0.7,
+  },
+  actionCount: {
+    color: palette.text,
+    fontSize: 13,
+    fontWeight: "700",
   },
   primaryActions: {
     alignItems: "center",
     flexDirection: "row",
-    gap: spacing.sm,
+    gap: 6,
   },
   actionButton: {
     alignItems: "center",
-    height: 34,
+    backgroundColor: palette.surfaceMuted,
+    borderRadius: 19,
+    flexDirection: "row",
+    gap: 6,
+    height: 38,
     justifyContent: "center",
-    width: 34,
+    minWidth: 38,
   },
   statsRow: {
     alignItems: "center",
@@ -547,20 +588,20 @@ const styles = createThemedStyles({
     color: palette.textSoft,
     fontSize: 14,
     lineHeight: 21,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 4,
     paddingTop: spacing.sm,
   },
   captionUsername: {
     color: palette.text,
-    fontWeight: "800",
+    fontWeight: "700",
   },
   hashtags: {
     color: palette.primary,
     fontSize: 13,
     fontWeight: "700",
     lineHeight: 20,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 4,
     paddingTop: 6,
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.sm,
   },
 });

@@ -130,7 +130,7 @@ const styles = createThemedStyles({
     justifyContent: "space-between",
   },
   badge: {
-    backgroundColor: "rgba(54,224,161,0.14)",
+    backgroundColor: "rgba(31,91,255,0.14)",
     borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: 7,

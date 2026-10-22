@@ -149,12 +149,8 @@ function ChoiceChip({
 
 const styles = createThemedStyles({
   heroCard: {
-    backgroundColor: palette.card,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.xl,
-    borderWidth: 1,
     gap: spacing.md,
-    padding: spacing.xl,
+    paddingTop: spacing.sm,
   },
   formCard: {
     backgroundColor: palette.surface,
@@ -194,7 +190,7 @@ const styles = createThemedStyles({
     textTransform: "capitalize",
   },
   choiceLabelActive: {
-    color: "#071118",
+    color: "#ffffff",
   },
   coverPreview: {
     width: "100%",

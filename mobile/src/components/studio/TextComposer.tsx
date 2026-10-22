@@ -154,7 +154,7 @@ export function TextComposer({
                 onChangeText={setText}
                 placeholder={copy.edTextPlaceholder}
                 placeholderTextColor="rgba(255,255,255,0.5)"
-                selectionColor="#36e0a1"
+                selectionColor="#1f5bff"
                 style={[textStyleFor(style, textColor, previewSize), styles.input, { textAlign: align }]}
                 value={text}
               />
@@ -217,13 +217,13 @@ const styles = StyleSheet.create({
     color: "#000000",
   },
   doneButton: {
-    backgroundColor: "#36e0a1",
+    backgroundColor: "#1f5bff",
     borderRadius: 20,
     paddingHorizontal: 18,
     paddingVertical: 9,
   },
   doneLabel: {
-    color: "#04110b",
+    color: "#ffffff",
     fontSize: 15,
     fontWeight: "800",
   },
@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
     width: 28,
   },
   colorDotActive: {
-    borderColor: "#36e0a1",
+    borderColor: "#1f5bff",
     borderWidth: 3,
     transform: [{ scale: 1.15 }],
   },

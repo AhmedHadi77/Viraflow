@@ -106,21 +106,17 @@ function formatKindLabel(kind: CommunityKind) {
 
 const styles = createThemedStyles({
   heroCard: {
-    backgroundColor: palette.card,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.xl,
-    borderWidth: 1,
     gap: spacing.lg,
-    padding: spacing.xl,
+    paddingTop: spacing.sm,
   },
   heroStats: {
     flexDirection: "row",
     gap: spacing.sm,
   },
   heroStat: {
-    backgroundColor: palette.glass,
+    backgroundColor: palette.surface,
     borderColor: palette.border,
-    borderRadius: radii.lg,
+    borderRadius: radii.md,
     borderWidth: 1,
     flex: 1,
     gap: 4,
@@ -164,7 +160,7 @@ const styles = createThemedStyles({
     justifyContent: "space-between",
   },
   kindBadge: {
-    backgroundColor: "rgba(54,224,161,0.14)",
+    backgroundColor: "rgba(31,91,255,0.14)",
     borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
@@ -203,8 +199,8 @@ const styles = createThemedStyles({
   },
   emptyCard: {
     backgroundColor: palette.surface,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.xl,
+    borderColor: palette.border,
+    borderRadius: radii.lg,
     borderWidth: 1,
     gap: spacing.sm,
     padding: spacing.xl,

@@ -291,7 +291,7 @@ const styles = createThemedStyles({
     lineHeight: 21,
   },
   messageTextOwn: {
-    color: "#071118",
+    color: "#ffffff",
   },
   messageTime: {
     color: palette.muted,

@@ -207,7 +207,7 @@ export function ReelsScreen({ navigation }: { navigation: any }) {
         <Text style={styles.emptyTitle}>{copy.reelsEmptyTitle}</Text>
         <Text style={styles.emptyBody}>{copy.reelsEmptyBody}</Text>
         <Pressable onPress={() => navigation.navigate("Create", { initialMode: "reel" })} style={styles.emptyButton}>
-          <Ionicons color="#04070b" name="add" size={18} />
+          <Ionicons color="#ffffff" name="add" size={18} />
           <Text style={styles.emptyButtonLabel}>{copy.uploadReel}</Text>
         </Pressable>
       </View>
@@ -436,7 +436,7 @@ function getTrendingScore(reel: Reel, commentCounts: Map<string, number>, localC
 
 const styles = createDarkStyles({
   container: {
-    backgroundColor: "#020406",
+    backgroundColor: "#ffffff",
     flex: 1,
   },
   headerSafeArea: {
@@ -545,7 +545,7 @@ const styles = createDarkStyles({
   },
   emptyState: {
     alignItems: "center",
-    backgroundColor: "#020406",
+    backgroundColor: "#ffffff",
     flex: 1,
     justifyContent: "center",
     paddingHorizontal: spacing.xl,
@@ -565,16 +565,16 @@ const styles = createDarkStyles({
   },
   emptyButton: {
     alignItems: "center",
-    backgroundColor: palette.accent,
-    borderRadius: radii.pill,
+    backgroundColor: palette.primary,
+    borderRadius: radii.md,
     flexDirection: "row",
     gap: spacing.xs,
     paddingHorizontal: spacing.lg,
     paddingVertical: 14,
   },
   emptyButtonLabel: {
-    color: "#04070b",
-    fontSize: 14,
-    fontWeight: "900",
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "600",
   },
 });

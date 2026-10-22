@@ -3,10 +3,10 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Pressable, StyleProp, Text, View, ViewStyle } from "react-native";
 import { createThemedStyles, palette } from "../theme";
 
-/** The Sohba brand gradient: the app's two colours, green and orange. Used everywhere a gradient appears. */
-export const BRAND_GRADIENT = ["#36e0a1", "#ff7a2f"] as const;
-/** Same two colours the other way round, for other people's unseen stories. */
-export const STORY_GRADIENT = ["#ff7a2f", "#36e0a1"] as const;
+/** Daylight: the brand "gradient" is solid cobalt (unseen story rings, the Create key). */
+export const BRAND_GRADIENT = ["#1f5bff", "#1f5bff"] as const;
+/** Unseen stories use the same cobalt ring. */
+export const STORY_GRADIENT = ["#1f5bff", "#1f5bff"] as const;
 
 /** Icons use one of the two brand colours: green (primary) for most, orange (accent) to draw attention. */
 export type BrandTint = "primary" | "accent";
@@ -16,15 +16,15 @@ export function brandColor(tint: BrandTint = "primary") {
 }
 
 /**
- * Round icon button with a gradient ring, matching the story ring. Used for the header actions
- * (search, messages, notifications) and other quick actions.
+ * Quiet 44 px icon button used in top bars (search, activity, messages). The icon is plain text colour;
+ * the brand colours are kept for meaning: an ember badge for new activity.
  */
 export function GradientIconButton({
   icon,
-  tint = "primary",
+  tint,
   onPress,
   badge,
-  size = 40,
+  size = 44,
   accessibilityLabel,
   style,
 }: {
@@ -36,28 +36,25 @@ export function GradientIconButton({
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
 }) {
+  // Only the "-outline" icon set is used in bars, for one consistent stroke.
+  const name = (icon.endsWith("-outline") || !(`${icon}-outline` in Ionicons.glyphMap) ? icon : `${icon}-outline`) as keyof typeof Ionicons.glyphMap;
   return (
     <Pressable
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
       hitSlop={4}
       onPress={onPress}
-      style={({ pressed }) => [pressed ? styles.pressed : null, style]}
+      style={({ pressed }) => [styles.plain, { height: size, width: size, borderRadius: size / 2 }, pressed ? styles.pressed : null, style]}
     >
-      <LinearGradient
-        colors={[...BRAND_GRADIENT]}
-        end={{ x: 1, y: 1 }}
-        start={{ x: 0, y: 0 }}
-        style={[styles.ring, { borderRadius: size / 2, height: size, width: size }]}
-      >
-        <View style={[styles.inner, { borderRadius: (size - 4) / 2 }]}>
-          <Ionicons color={brandColor(tint)} name={icon} size={Math.round(size * 0.5)} />
-        </View>
-      </LinearGradient>
+      <Ionicons color={tint === "accent" ? palette.accent : palette.text} name={name} size={20} />
       {badge ? (
-        <View style={styles.badge}>
-          <Text style={styles.badgeLabel}>{badge}</Text>
-        </View>
+        badge === "•" || badge === "" ? (
+          <View style={styles.dot} />
+        ) : (
+          <View style={styles.badge}>
+            <Text style={styles.badgeLabel}>{badge}</Text>
+          </View>
+        )
       ) : null}
     </Pressable>
   );
@@ -88,6 +85,22 @@ export function GradientIconFill({
 }
 
 const styles = createThemedStyles({
+  plain: {
+    alignItems: "center",
+    backgroundColor: palette.surfaceMuted,
+    justifyContent: "center",
+  },
+  dot: {
+    backgroundColor: palette.accent,
+    borderColor: palette.background,
+    borderRadius: 6,
+    borderWidth: 2,
+    height: 12,
+    position: "absolute",
+    right: 1,
+    top: 1,
+    width: 12,
+  },
   ring: {
     alignItems: "center",
     justifyContent: "center",
@@ -105,12 +118,11 @@ const styles = createThemedStyles({
     justifyContent: "center",
   },
   pressed: {
-    opacity: 0.7,
-    transform: [{ scale: 0.96 }],
+    opacity: 0.6,
   },
   badge: {
     alignItems: "center",
-    backgroundColor: palette.accent,
+    backgroundColor: palette.primary,
     borderColor: palette.background,
     borderRadius: 10,
     borderWidth: 2,

@@ -56,7 +56,7 @@ export function BoostReelScreen({ navigation, route }: { navigation: any; route:
 
   return (
     <Screen scrollable>
-      <LinearGradient colors={["rgba(255,122,47,0.18)", "rgba(54,224,161,0.12)", "rgba(255,255,255,0.02)"]} style={styles.hero}>
+      <LinearGradient colors={[palette.surface, palette.surface]} style={styles.hero}>
         <Text style={styles.kicker}>Sohba Ads</Text>
         <SectionTitle
           title="Boost System"
@@ -222,7 +222,7 @@ const styles = createThemedStyles({
   },
   planCardActive: {
     borderColor: palette.primary,
-    backgroundColor: "rgba(54,224,161,0.09)",
+    backgroundColor: "rgba(31,91,255,0.09)",
   },
   planTop: {
     alignItems: "center",
@@ -272,8 +272,8 @@ const styles = createThemedStyles({
     fontWeight: "700",
   },
   activeCard: {
-    backgroundColor: "rgba(54,224,161,0.10)",
-    borderColor: "rgba(54,224,161,0.24)",
+    backgroundColor: "rgba(31,91,255,0.10)",
+    borderColor: "rgba(31,91,255,0.24)",
     borderRadius: radii.xl,
     borderWidth: 1,
     gap: spacing.md,

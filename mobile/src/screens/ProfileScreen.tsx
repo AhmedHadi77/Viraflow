@@ -16,7 +16,7 @@ import { useAppState } from "../providers/AppProvider";
 import { Post, Product, Reel, Story, User } from "../types/models";
 import { palette, radii, spacing, createThemedStyles } from "../theme";
 import { PAYMENTS_ENABLED } from "../data/catalog";
-import { brandColor, GradientIconButton, STORY_GRADIENT } from "../components/GradientIcon";
+import { brandColor, GradientIconButton } from "../components/GradientIcon";
 
 type ProfileSection = "posts" | "reels" | "shop" | "spaces" | "saved";
 
@@ -309,7 +309,7 @@ function ProfileContent({ navigation, profileUser }: { navigation: any; profileU
               <Avatar name={activeProfileUser.name} style={styles.avatar} uri={activeProfileUser.profileImage} />
               {isOwnProfile ? (
                 <View style={styles.avatarEditBadge}>
-                  <Ionicons color="#04070b" name="camera-outline" size={13} />
+                  <Ionicons color="#ffffff" name="camera-outline" size={14} />
                 </View>
               ) : null}
             </Pressable>
@@ -331,7 +331,7 @@ function ProfileContent({ navigation, profileUser }: { navigation: any; profileU
               icon="notifications-outline"
               onPress={() => rootNavigation.navigate("Notifications")}
               size={44}
-              tint="accent"
+              style={styles.notifyButton}
             />
           ) : null}
         </View>
@@ -370,7 +370,7 @@ function ProfileContent({ navigation, profileUser }: { navigation: any; profileU
                   onPress={() => rootNavigation.navigate("StoryViewer", { userId: activeProfileUser.id, storyId: story.id })}
                   style={styles.highlightCard}
                 >
-                  <LinearGradient colors={[...STORY_GRADIENT]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.highlightRing}>
+                  <LinearGradient colors={[palette.borderStrong, palette.borderStrong]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.highlightRing}>
                     <View style={styles.highlightRingInner}>
                       <Image source={{ uri: story.imageUrl }} style={styles.highlightImage} />
                     </View>
@@ -387,8 +387,8 @@ function ProfileContent({ navigation, profileUser }: { navigation: any; profileU
         {isOwnProfile ? (
           <>
             <View style={styles.actionRow}>
-              <PrimaryButton label={copy.editProfile} onPress={() => rootNavigation.navigate("EditProfile")} />
-              <PrimaryButton label={copy.communities} onPress={() => rootNavigation.navigate("Communities")} variant="ghost" />
+              <PrimaryButton label={copy.editProfile} onPress={() => rootNavigation.navigate("EditProfile")} style={styles.actionFlex} variant="contrast" />
+              <PrimaryButton label={copy.communities} onPress={() => rootNavigation.navigate("Communities")} style={styles.actionFlex} variant="outline" />
             </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shortcutRow}>
@@ -564,71 +564,64 @@ const styles = createThemedStyles({
     fontSize: 15,
   },
   hero: {
-    backgroundColor: "#081018",
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: radii.xl,
-    borderWidth: 1,
     gap: spacing.lg,
-    padding: spacing.xl,
+    paddingHorizontal: spacing.xs,
+    paddingTop: spacing.sm,
   },
   heroTopRow: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: spacing.md,
+    alignItems: "center",
+    position: "relative",
   },
   heroIdentity: {
-    flex: 1,
-    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.md,
   },
   avatarWrap: {
     position: "relative",
   },
   avatar: {
-    borderColor: "rgba(255,255,255,0.22)",
-    borderRadius: 44,
-    borderWidth: 2,
-    height: 88,
-    width: 88,
+    borderRadius: 48,
+    height: 96,
+    width: 96,
   },
   avatarEditBadge: {
     alignItems: "center",
-    backgroundColor: palette.text,
-    borderColor: "#081018",
-    borderRadius: 12,
-    borderWidth: 2,
+    backgroundColor: palette.primary,
+    borderColor: palette.background,
+    borderRadius: 14,
+    borderWidth: 3,
     bottom: 0,
-    height: 24,
+    height: 28,
     justifyContent: "center",
     position: "absolute",
     right: 0,
-    width: 24,
+    width: 28,
   },
   nameBlock: {
-    flex: 1,
+    alignItems: "center",
     gap: 4,
-    paddingTop: 6,
   },
   name: {
     color: palette.text,
-    fontSize: 24,
-    fontWeight: "900",
+    fontSize: 22,
+    fontWeight: "800",
     letterSpacing: -0.3,
+    textAlign: "center",
   },
   handle: {
-    color: palette.textSoft,
+    color: palette.muted,
     fontSize: 14,
-    fontWeight: "700",
+    textAlign: "center",
   },
   headline: {
-    color: palette.accentSoft,
-    fontSize: 13,
-    fontWeight: "700",
+    color: palette.textSoft,
+    fontSize: 14,
+    fontWeight: "500",
+    textAlign: "center",
   },
   heroIcon: {
     alignItems: "center",
-    backgroundColor: "#101820",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: 20,
     borderWidth: 1,
@@ -637,15 +630,16 @@ const styles = createThemedStyles({
     width: 40,
   },
   bio: {
-    color: palette.text,
+    color: palette.textSoft,
     fontSize: 14,
-    lineHeight: 22,
+    lineHeight: 21,
+    textAlign: "center",
   },
   websiteChip: {
     alignItems: "center",
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(54,224,161,0.08)",
-    borderColor: "rgba(54,224,161,0.2)",
+    alignSelf: "center",
+    backgroundColor: "rgba(31,91,255,0.08)",
+    borderColor: "rgba(31,91,255,0.2)",
     borderRadius: radii.pill,
     borderWidth: 1,
     flexDirection: "row",
@@ -661,8 +655,10 @@ const styles = createThemedStyles({
     fontWeight: "700",
   },
   statsRow: {
+    backgroundColor: palette.surface,
+    borderRadius: 18,
     flexDirection: "row",
-    gap: spacing.sm,
+    paddingVertical: spacing.sm,
   },
   highlightBlock: {
     gap: spacing.sm,
@@ -686,7 +682,7 @@ const styles = createThemedStyles({
     padding: 2.5,
   },
   highlightRingInner: {
-    backgroundColor: "#081018",
+    backgroundColor: "#151922",
     borderRadius: 30,
     padding: 2.5,
   },
@@ -724,13 +720,18 @@ const styles = createThemedStyles({
     gap: spacing.sm,
     justifyContent: "space-between",
   },
+  notifyButton: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+  },
   shortcutRow: {
     gap: spacing.sm,
     paddingRight: spacing.sm,
   },
   shortcutChip: {
     alignItems: "center",
-    backgroundColor: "#101820",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: radii.pill,
     borderWidth: 1,
@@ -767,7 +768,7 @@ const styles = createThemedStyles({
     flexGrow: 0,
   },
   sectionChip: {
-    backgroundColor: "#0c151d",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: radii.pill,
     borderWidth: 1,
@@ -784,7 +785,7 @@ const styles = createThemedStyles({
     fontWeight: "800",
   },
   sectionChipLabelActive: {
-    color: "#04070b",
+    color: "#ffffff",
   },
   grid: {
     flexDirection: "row",
@@ -792,7 +793,7 @@ const styles = createThemedStyles({
     gap: spacing.md,
   },
   tile: {
-    backgroundColor: "#081018",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: radii.xl,
     borderWidth: 1,
@@ -836,7 +837,7 @@ const styles = createThemedStyles({
   },
   emptySection: {
     alignItems: "center",
-    backgroundColor: "#09131b",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: radii.xl,
     borderWidth: 1,

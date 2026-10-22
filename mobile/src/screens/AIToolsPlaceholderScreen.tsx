@@ -945,7 +945,7 @@ export function AIToolsPlaceholderScreen({ navigation }: { navigation: any }) {
 
   return (
     <Screen scrollable>
-      <LinearGradient colors={["rgba(255,122,47,0.18)", "rgba(54,224,161,0.14)", "rgba(255,255,255,0.02)"]} style={styles.hero}>
+      <LinearGradient colors={[palette.surface, palette.surface]} style={styles.hero}>
             <Text style={styles.kicker}>{aiCopy.heroKicker}</Text>
         <SectionTitle
           title={aiCopy.heroTitle}
@@ -1779,7 +1779,7 @@ const styles = createThemedStyles({
     gap: spacing.xs,
     padding: spacing.lg,
   },
-  demoNoticeTitle: { color: "#ff7a2f", fontSize: 16, fontWeight: "900", textTransform: "uppercase" },
+  demoNoticeTitle: { color: "#e5294f", fontSize: 16, fontWeight: "900", textTransform: "uppercase" },
   demoNoticeBody: { color: palette.text, fontSize: 14, lineHeight: 22 },
   tabs: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   panel: { backgroundColor: palette.surface, borderColor: palette.borderStrong, borderRadius: radii.xl, borderWidth: 1, gap: spacing.md, padding: spacing.xl },
@@ -1794,13 +1794,13 @@ const styles = createThemedStyles({
   },
   trendScopeBadgeLocal: { backgroundColor: palette.primary },
   trendScopeLabel: { color: palette.muted, fontSize: 11, fontWeight: "800" },
-  trendScopeLabelLocal: { color: "#04110b" },
+  trendScopeLabelLocal: { color: "#ffffff" },
   priceCard: { backgroundColor: palette.cardAlt, borderColor: palette.borderStrong, borderRadius: radii.lg, borderWidth: 1, minWidth: 108, padding: spacing.md },
   priceValue: { color: palette.accentSoft, fontSize: 16, fontWeight: "900" },
   priceLabel: { color: palette.textSoft, fontSize: 12, fontWeight: "700", marginTop: 2, textTransform: "uppercase" },
   row: { gap: spacing.sm },
   inlineLabel: { color: palette.textSoft, fontSize: 13, fontWeight: "800", letterSpacing: 0.4, textTransform: "uppercase" },
-  lockCard: { backgroundColor: "rgba(255,122,47,0.12)", borderColor: "rgba(255,122,47,0.28)", borderRadius: radii.xl, borderWidth: 1, gap: spacing.md, padding: spacing.lg },
+  lockCard: { backgroundColor: "rgba(229,41,79,0.12)", borderColor: "rgba(229,41,79,0.28)", borderRadius: radii.xl, borderWidth: 1, gap: spacing.md, padding: spacing.lg },
   lockTitle: { color: palette.accentSoft, fontSize: 20, fontWeight: "900" },
   trendList: { gap: spacing.md },
   trendCard: { backgroundColor: palette.cardAlt, borderColor: palette.borderStrong, borderRadius: radii.xl, borderWidth: 1, overflow: "hidden" },
@@ -1830,7 +1830,7 @@ const styles = createThemedStyles({
   title: { color: palette.text, fontSize: 22, fontWeight: "900" },
   sectionMini: { color: palette.text, fontSize: 18, fontWeight: "900" },
   scoreRow: { alignItems: "center", flexDirection: "row", gap: spacing.md },
-  scoreBadge: { alignItems: "center", backgroundColor: "rgba(54,224,161,0.14)", borderColor: "rgba(54,224,161,0.24)", borderRadius: radii.xl, borderWidth: 1, justifyContent: "center", minHeight: 108, minWidth: 108, padding: spacing.md },
+  scoreBadge: { alignItems: "center", backgroundColor: "rgba(31,91,255,0.14)", borderColor: "rgba(31,91,255,0.24)", borderRadius: radii.xl, borderWidth: 1, justifyContent: "center", minHeight: 108, minWidth: 108, padding: spacing.md },
   scoreValue: { color: palette.primary, fontSize: 28, fontWeight: "900" },
   scoreLabel: { color: palette.textSoft, fontSize: 12, fontWeight: "800", marginTop: 4, textTransform: "uppercase" },
   scoreBody: { flex: 1, gap: spacing.xs },
@@ -1850,7 +1850,7 @@ const styles = createThemedStyles({
   chip: { alignItems: "center", backgroundColor: palette.surface, borderColor: palette.borderStrong, borderRadius: radii.pill, borderWidth: 1, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   chipActive: { backgroundColor: palette.primary, borderColor: palette.primary },
   chipLabel: { color: palette.text, fontSize: 13, fontWeight: "800" },
-  chipLabelActive: { color: "#071118" },
+  chipLabelActive: { color: "#ffffff" },
   metaRow: { flexDirection: "row", gap: spacing.sm, justifyContent: "space-between" },
   meta: { color: palette.muted, flex: 1, fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
   metric: { backgroundColor: "rgba(255,255,255,0.06)", borderColor: palette.borderStrong, borderRadius: radii.lg, borderWidth: 1, flexGrow: 1, gap: 4, minWidth: "47%", padding: spacing.md },

@@ -296,7 +296,7 @@ async function ensureAndroidNotificationChannel() {
     name: "Activity",
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 120, 250],
-    lightColor: "#36E0A1",
+    lightColor: "#1f5bff",
     sound: "default",
   });
   // Incoming calls get their own channel so they can ring loudly and show over the lock screen.
@@ -304,7 +304,7 @@ async function ensureAndroidNotificationChannel() {
     name: "Calls",
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 600, 400, 600, 400, 600],
-    lightColor: "#36E0A1",
+    lightColor: "#1f5bff",
     sound: "default",
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     bypassDnd: false,

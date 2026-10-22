@@ -338,7 +338,7 @@ export function StoryViewerScreen({
       <View style={[styles.bottomOverlay, { paddingBottom: Math.max(insets.bottom, 20) + 8 }]}>
         {activeStory.highlightedAt ? (
           <View style={styles.highlightPill}>
-            <Ionicons color="#081018" name="sparkles" size={12} />
+            <Ionicons color="#151922" name="sparkles" size={12} />
             <Text style={styles.highlightPillLabel}>{activeStory.highlightLabel || copy.highlights}</Text>
           </View>
         ) : null}
@@ -646,7 +646,7 @@ const styles = createDarkStyles({
     paddingVertical: 6,
   },
   highlightPillLabel: {
-    color: "#081018",
+    color: "#151922",
     fontSize: 11,
     fontWeight: "900",
     textTransform: "uppercase",
@@ -666,7 +666,7 @@ const styles = createDarkStyles({
     flex: 1,
   },
   sheet: {
-    backgroundColor: "#081018",
+    backgroundColor: "#151922",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     maxHeight: "62%",

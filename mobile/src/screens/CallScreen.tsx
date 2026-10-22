@@ -123,6 +123,10 @@ export function CallScreen({ navigation, route }: { navigation: any; route: { pa
       <View style={styles.scrim} />
 
       <SafeAreaView style={styles.safe}>
+        <View style={styles.privatePill}>
+          <Ionicons color="#7aa2ff" name="lock-closed" size={12} />
+          <Text style={styles.privateText}>{copy.callPrivate}</Text>
+        </View>
         <View style={styles.header}>
           {!showRemoteVideo ? (
             peer?.profileImage ? <Avatar name={peer.name} style={styles.avatar} uri={peer.profileImage} /> : <View style={styles.avatar} />
@@ -141,12 +145,12 @@ export function CallScreen({ navigation, route }: { navigation: any; route: { pa
         <View style={styles.controls}>
           {isThisCall && call.phase === "incoming" ? (
             <View style={styles.incomingRow}>
-              <CallButton color="#ef4444" icon="call" label={copy.callDecline} onPress={() => void declineCall()} rotate />
+              <CallButton color="#ff5c5c" icon="call" label={copy.callDecline} onPress={() => void declineCall()} rotate />
               {isVideo ? (
-                <CallButton color="#334155" icon="mic" label={copy.callAnswerAsVoice} onPress={() => void acceptCall({ asAudio: true })} />
+                <CallButton color="#1e2330" icon="mic" label={copy.callAnswerAsVoice} onPress={() => void acceptCall({ asAudio: true })} />
               ) : null}
               <CallButton
-                color="#36e0a1"
+                color="#12a26b"
                 icon={isVideo ? "videocam" : "call"}
                 label={copy.callAccept}
                 onPress={() => void acceptCall()}
@@ -156,14 +160,14 @@ export function CallScreen({ navigation, route }: { navigation: any; route: { pa
             <View style={styles.activeRow}>
               <CallButton
                 active={call.micMuted}
-                color="rgba(255,255,255,0.18)"
+                color="#1e2330"
                 icon={call.micMuted ? "mic-off" : "mic"}
                 label={call.micMuted ? copy.callUnmute : copy.callMute}
                 onPress={toggleMute}
               />
               <CallButton
                 active={call.speakerOn}
-                color="rgba(255,255,255,0.18)"
+                color="#1e2330"
                 icon={call.speakerOn ? "volume-high" : "volume-medium"}
                 label={copy.callSpeaker}
                 onPress={toggleSpeaker}
@@ -172,16 +176,25 @@ export function CallScreen({ navigation, route }: { navigation: any; route: { pa
                 <>
                   <CallButton
                     active={call.cameraOff}
-                    color="rgba(255,255,255,0.18)"
+                    color="#1e2330"
                     icon={call.cameraOff ? "videocam-off" : "videocam"}
                     label={call.cameraOff ? copy.callCameraOn : copy.callCameraOff}
                     onPress={toggleCamera}
                   />
-                  <CallButton color="rgba(255,255,255,0.18)" icon="camera-reverse" label={copy.callFlip} onPress={switchCamera} />
+                  <CallButton color="#1e2330" icon="camera-reverse" label={copy.callFlip} onPress={switchCamera} />
                 </>
               ) : null}
-              <CallButton color="#ef4444" icon="call" label={copy.callEnd} onPress={() => void hangUp()} rotate />
             </View>
+          ) : null}
+          {isThisCall && call.phase !== "ended" && call.phase !== "incoming" ? (
+            <Pressable
+              accessibilityLabel={copy.callEnd}
+              accessibilityRole="button"
+              onPress={() => void hangUp()}
+              style={({ pressed }) => [styles.endButton, pressed ? styles.buttonPressed : null]}
+            >
+              <Ionicons color="#FFFFFF" name="call" size={32} style={{ transform: [{ rotate: "135deg" }] }} />
+            </Pressable>
           ) : null}
         </View>
       </SafeAreaView>
@@ -217,7 +230,7 @@ function CallButton({
         ]}
       >
         <Ionicons
-          color={active ? "#0b1220" : "#FFFFFF"}
+          color={active ? "#151922" : "#FFFFFF"}
           name={icon}
           size={28}
           style={rotate ? { transform: [{ rotate: "135deg" }] } : undefined}
@@ -232,7 +245,7 @@ function CallButton({
 
 const styles = createDarkStyles({
   container: {
-    backgroundColor: "#0b1220",
+    backgroundColor: "#0b0d12",
     flex: 1,
   },
   remoteVideo: {
@@ -269,13 +282,13 @@ const styles = createDarkStyles({
     paddingTop: 48,
   },
   avatar: {
-    backgroundColor: "#1e293b",
-    borderColor: "rgba(255,255,255,0.3)",
-    borderRadius: 64,
-    borderWidth: 2,
-    height: 128,
-    marginBottom: 12,
-    width: 128,
+    backgroundColor: "#1e2330",
+    borderColor: "rgba(122,162,255,0.55)",
+    borderRadius: 70,
+    borderWidth: 3,
+    height: 140,
+    marginBottom: 14,
+    width: 140,
   },
   name: {
     color: "#FFFFFF",
@@ -284,9 +297,9 @@ const styles = createDarkStyles({
     textAlign: "center",
   },
   status: {
-    color: "rgba(255,255,255,0.8)",
-    fontSize: 16,
-    fontWeight: "600",
+    color: "#7aa2ff",
+    fontSize: 17,
+    fontWeight: "500",
   },
   error: {
     color: "#fca5a5",
@@ -311,20 +324,53 @@ const styles = createDarkStyles({
     justifyContent: "space-around",
   },
   activeRow: {
+    backgroundColor: "#151922",
+    borderColor: "#262c39",
+    borderRadius: 28,
+    borderWidth: 1,
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-evenly",
+    paddingVertical: 16,
+    rowGap: 14,
+  },
+  privatePill: {
+    alignItems: "center",
+    alignSelf: "center",
+    backgroundColor: "rgba(17,27,35,0.9)",
+    borderRadius: 999,
+    flexDirection: "row",
+    gap: 6,
+    height: 28,
+    marginTop: 8,
+    paddingHorizontal: 12,
+  },
+  privateText: {
+    color: "#a0a6b2",
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  endButton: {
+    alignItems: "center",
+    alignSelf: "center",
+    backgroundColor: "#ff5c5c",
+    borderRadius: 38,
+    height: 76,
+    justifyContent: "center",
+    marginTop: 22,
+    width: 76,
   },
   buttonWrap: {
     alignItems: "center",
     gap: 8,
-    width: 84,
+    width: 76,
   },
   button: {
     alignItems: "center",
-    borderRadius: 36,
-    height: 68,
+    borderRadius: 32,
+    height: 62,
     justifyContent: "center",
-    width: 68,
+    width: 62,
   },
   buttonPressed: {
     opacity: 0.75,

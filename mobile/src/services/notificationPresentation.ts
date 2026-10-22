@@ -190,39 +190,39 @@ export function formatNotificationTime(value: string, copy: Copy) {
 export function getNotificationMeta(type: AppNotification["type"], copy: Copy) {
   switch (type) {
     case "follow":
-      return { icon: "person-add-outline", label: copy.nlFollow, color: "#36e0a1", tint: "rgba(54,224,161,0.14)" } as const;
+      return { icon: "person-add-outline", label: copy.nlFollow, color: "#1f5bff", tint: "rgba(31,91,255,0.14)" } as const;
     case "post_like":
     case "reel_like":
     case "like":
-      return { icon: "heart-outline", label: copy.nlLike, color: "#ff7a2f", tint: "rgba(255,122,47,0.14)" } as const;
+      return { icon: "heart-outline", label: copy.nlLike, color: "#e5294f", tint: "rgba(229,41,79,0.14)" } as const;
     case "post_comment":
     case "reel_comment":
     case "comment":
-      return { icon: "chatbubble-ellipses-outline", label: copy.nlComment, color: "#ff7a2f", tint: "rgba(255,122,47,0.14)" } as const;
+      return { icon: "chatbubble-ellipses-outline", label: copy.nlComment, color: "#e5294f", tint: "rgba(229,41,79,0.14)" } as const;
     case "story_view":
-      return { icon: "eye-outline", label: copy.nlStory, color: "#ff7a2f", tint: "rgba(255,122,47,0.14)" } as const;
+      return { icon: "eye-outline", label: copy.nlStory, color: "#e5294f", tint: "rgba(229,41,79,0.14)" } as const;
     case "mention":
-      return { icon: "at-outline", label: copy.nlMention, color: "#ff7a2f", tint: "rgba(255,122,47,0.14)" } as const;
+      return { icon: "at-outline", label: copy.nlMention, color: "#e5294f", tint: "rgba(229,41,79,0.14)" } as const;
     case "message":
-      return { icon: "paper-plane-outline", label: copy.nlMessage, color: "#36e0a1", tint: "rgba(54,224,161,0.14)" } as const;
+      return { icon: "paper-plane-outline", label: copy.nlMessage, color: "#1f5bff", tint: "rgba(31,91,255,0.14)" } as const;
     case "order":
-      return { icon: "bag-handle-outline", label: copy.nlOrder, color: "#36e0a1", tint: "rgba(54,224,161,0.14)" } as const;
+      return { icon: "bag-handle-outline", label: copy.nlOrder, color: "#1f5bff", tint: "rgba(31,91,255,0.14)" } as const;
     case "boost":
-      return { icon: "flash-outline", label: copy.nlBoost, color: "#ff7a2f", tint: "rgba(255,122,47,0.14)" } as const;
+      return { icon: "flash-outline", label: copy.nlBoost, color: "#e5294f", tint: "rgba(229,41,79,0.14)" } as const;
     case "repost":
-      return { icon: "repeat-outline", label: copy.nlRepost, color: "#36e0a1", tint: "rgba(54,224,161,0.14)" } as const;
+      return { icon: "repeat-outline", label: copy.nlRepost, color: "#1f5bff", tint: "rgba(31,91,255,0.14)" } as const;
     case "save":
-      return { icon: "bookmark-outline", label: copy.nlSave, color: "#36e0a1", tint: "rgba(54,224,161,0.14)" } as const;
+      return { icon: "bookmark-outline", label: copy.nlSave, color: "#1f5bff", tint: "rgba(31,91,255,0.14)" } as const;
     case "call":
-      return { icon: "call-outline", label: copy.nlCall, color: "#36e0a1", tint: "rgba(54,224,161,0.14)" } as const;
+      return { icon: "call-outline", label: copy.nlCall, color: "#1f5bff", tint: "rgba(31,91,255,0.14)" } as const;
     case "new_post":
     case "new_reel":
     case "new_story":
-      return { icon: "sparkles-outline", label: copy.nlNewContent, color: "#ff7a2f", tint: "rgba(255,122,47,0.14)" } as const;
+      return { icon: "sparkles-outline", label: copy.nlNewContent, color: "#e5294f", tint: "rgba(229,41,79,0.14)" } as const;
     case "system":
-      return { icon: "megaphone-outline", label: copy.nlAnnouncement, color: "#36e0a1", tint: "rgba(54,224,161,0.14)" } as const;
+      return { icon: "megaphone-outline", label: copy.nlAnnouncement, color: "#1f5bff", tint: "rgba(31,91,255,0.14)" } as const;
     default:
-      return { icon: "notifications-outline", label: copy.nlUpdate, color: "#36e0a1", tint: "rgba(54,224,161,0.14)" } as const;
+      return { icon: "notifications-outline", label: copy.nlUpdate, color: "#1f5bff", tint: "rgba(31,91,255,0.14)" } as const;
   }
 }
 

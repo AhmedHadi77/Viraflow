@@ -71,7 +71,7 @@ export function StickerSheet({
                 }}
                 style={[styles.specialChip, asking === item.kind ? styles.specialChipActive : null]}
               >
-                <Ionicons color="#ff7a2f" name={item.icon} size={16} />
+                <Ionicons color="#e5294f" name={item.icon} size={16} />
                 <Text style={styles.specialLabel}>{copy[item.labelKey] as string}</Text>
               </Pressable>
             ))}
@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sheet: {
-    backgroundColor: "#121a22",
+    backgroundColor: "#151922",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: "62%",
@@ -152,11 +152,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   specialChipActive: {
-    borderColor: "#36e0a1",
+    borderColor: "#1f5bff",
     borderWidth: 2,
   },
   specialLabel: {
-    color: "#0e1720",
+    color: "#151922",
     fontSize: 13,
     fontWeight: "800",
   },
@@ -176,13 +176,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   addButton: {
-    backgroundColor: "#36e0a1",
+    backgroundColor: "#1f5bff",
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 11,
   },
   addLabel: {
-    color: "#04110b",
+    color: "#ffffff",
     fontSize: 14,
     fontWeight: "800",
   },

@@ -300,7 +300,7 @@ export function ReelViewerScreen({
 
 const styles = createDarkStyles({
   container: {
-    backgroundColor: "#020406",
+    backgroundColor: "#ffffff",
     flex: 1,
   },
   overlayHeader: {
@@ -342,7 +342,7 @@ const styles = createDarkStyles({
   },
   emptyState: {
     alignItems: "center",
-    backgroundColor: "#020406",
+    backgroundColor: "#ffffff",
     flex: 1,
     justifyContent: "center",
   },

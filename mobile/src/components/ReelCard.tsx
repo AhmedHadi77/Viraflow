@@ -657,7 +657,7 @@ const styles = createThemedStyles(
     backgroundColor: palette.surfaceRaised,
   },
   feedFollowButtonLabel: {
-    color: "#04110b",
+    color: "#ffffff",
     fontSize: 12,
     fontWeight: "800",
   },
@@ -665,7 +665,7 @@ const styles = createThemedStyles(
     color: palette.text,
   },
   feedCard: {
-    backgroundColor: "#05080d",
+    backgroundColor: "#ffffff",
     borderColor: "rgba(255,255,255,0.06)",
     borderRadius: radii.xl,
     borderWidth: 1,
@@ -876,7 +876,7 @@ const styles = createThemedStyles(
     gap: spacing.xs,
   },
   avatar: {
-    backgroundColor: "#1a2b3d",
+    backgroundColor: "#1e2330",
     borderColor: "rgba(255,255,255,0.6)",
     borderRadius: 16,
     borderWidth: 1,

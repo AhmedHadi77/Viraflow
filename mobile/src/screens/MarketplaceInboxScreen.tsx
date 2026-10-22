@@ -154,21 +154,17 @@ function EmptyCard({ title, body }: { title: string; body: string }) {
 
 const styles = createThemedStyles({
   heroCard: {
-    backgroundColor: palette.card,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.xl,
-    borderWidth: 1,
     gap: spacing.lg,
-    padding: spacing.xl,
+    paddingTop: spacing.sm,
   },
   heroStats: {
     flexDirection: "row",
     gap: spacing.sm,
   },
   heroStat: {
-    backgroundColor: palette.glass,
+    backgroundColor: palette.surface,
     borderColor: palette.border,
-    borderRadius: radii.lg,
+    borderRadius: radii.md,
     borderWidth: 1,
     flex: 1,
     gap: 4,
@@ -253,7 +249,7 @@ const styles = createThemedStyles({
     paddingVertical: 3,
   },
   unreadBadgeLabel: {
-    color: "#071118",
+    color: "#ffffff",
     fontSize: 11,
     fontWeight: "900",
   },
@@ -295,8 +291,8 @@ const styles = createThemedStyles({
   },
   emptyCard: {
     backgroundColor: palette.surface,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.xl,
+    borderColor: palette.border,
+    borderRadius: radii.lg,
     borderWidth: 1,
     gap: spacing.sm,
     padding: spacing.xl,

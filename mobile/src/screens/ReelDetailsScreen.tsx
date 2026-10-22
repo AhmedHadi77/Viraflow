@@ -291,8 +291,8 @@ const styles = createThemedStyles({
     fontWeight: "700",
   },
   boostStatus: {
-    backgroundColor: "rgba(54,224,161,0.10)",
-    borderColor: "rgba(54,224,161,0.24)",
+    backgroundColor: "rgba(31,91,255,0.10)",
+    borderColor: "rgba(31,91,255,0.24)",
     borderRadius: radii.lg,
     borderWidth: 1,
     gap: spacing.sm,

@@ -1,13 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabBarProps, createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { Pressable, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { GradientIconFill } from "../components/GradientIcon";
+import { LinearGradient } from "expo-linear-gradient";
+import { Avatar } from "../components/Avatar";
+import { BRAND_GRADIENT } from "../components/GradientIcon";
 import { PAYMENTS_ENABLED } from "../data/catalog";
 import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
-import { palette, createThemedStyles } from "../theme";
+import { fonts, palette, createThemedStyles } from "../theme";
 import { LanguageScreen } from "../screens/LanguageScreen";
 import { LoginScreen } from "../screens/LoginScreen";
 import { RegisterScreen } from "../screens/RegisterScreen";
@@ -88,10 +90,11 @@ export function AppNavigator() {
       screenOptions={{
         contentStyle: { backgroundColor: palette.background },
         headerShadowVisible: false,
-        headerStyle: { backgroundColor: palette.backgroundSoft },
+        headerStyle: { backgroundColor: palette.background },
         headerTintColor: palette.text,
         headerTitleStyle: {
-          fontWeight: "800",
+          fontFamily: fonts.bold,
+          fontSize: 17,
         },
       }}
     >
@@ -300,17 +303,18 @@ function MainTabs() {
 
 function SohbaTabBar({ descriptors, navigation, state }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  // Reels is a full-screen video feed, so the bar stays dark there in both themes.
+  const { currentUser } = useAppState();
+  // Reels is a full-screen video feed, so the bar stays black there in both themes.
   const onReels = state.routes[state.index]?.name === "Reels";
-  // Tabs use the brand green; the open tab becomes a filled green-to-orange gradient circle.
-  const idleTint = onReels ? "#36e0a1" : palette.primary;
+  const activeColor = onReels ? "#ffffff" : palette.text;
+  const idleColor = onReels ? "#9aa0ab" : palette.muted;
 
   return (
     <View
       style={[
         styles.tabBarOuter,
-        onReels ? { backgroundColor: "#000000", borderTopColor: "rgba(255,255,255,0.08)" } : null,
-        { paddingBottom: Math.max(insets.bottom, 6) },
+        onReels ? { backgroundColor: "#000000", borderTopColor: "#000000" } : null,
+        { paddingBottom: Math.max(insets.bottom, 8) },
       ]}
     >
       <View style={styles.tabBarShell}>
@@ -323,14 +327,15 @@ function SohbaTabBar({ descriptors, navigation, state }: BottomTabBarProps) {
           > = {
             Home: { active: "home", idle: "home-outline" },
             Reels: { active: "play-circle", idle: "play-circle-outline" },
-            Create: { active: "add-circle", idle: "add-circle-outline" },
+            Create: { active: "add", idle: "add" },
             Marketplace: { active: "storefront", idle: "storefront-outline" },
-            Profile: { active: "person", idle: "person-outline" },
+            Profile: { active: "person-circle", idle: "person-circle-outline" },
           };
           const icon = focused
             ? iconByRoute[route.name as keyof AppTabParamList].active
             : iconByRoute[route.name as keyof AppTabParamList].idle;
           const isCreate = route.name === "Create";
+          const isProfile = route.name === "Profile";
 
           const onPress = () => {
             const event = navigation.emit({
@@ -353,27 +358,39 @@ function SohbaTabBar({ descriptors, navigation, state }: BottomTabBarProps) {
 
           return (
             <Pressable
-              accessibilityLabel={options?.tabBarAccessibilityLabel}
+              accessibilityLabel={options?.tabBarAccessibilityLabel ?? options?.title}
               accessibilityRole="button"
               accessibilityState={focused ? { selected: true } : {}}
               key={route.key}
               onLongPress={onLongPress}
               onPress={onPress}
-              style={({ pressed }) => [
-                styles.tabButton,
-                isCreate ? styles.createTabButton : null,
-                focused ? styles.tabButtonActive : null,
-                focused && isCreate ? styles.createTabButtonActive : null,
-                pressed && !focused ? styles.tabButtonPressed : null,
-              ]}
+              style={({ pressed }) => [styles.tabButton, pressed ? styles.tabButtonPressed : null]}
               testID={options?.tabBarButtonTestID}
             >
-              {focused || isCreate ? (
-                <GradientIconFill icon={isCreate ? "add" : icon} iconSize={isCreate ? 26 : 21} size={isCreate ? 42 : 38} />
+              {isCreate ? (
+                <LinearGradient
+                  colors={[...BRAND_GRADIENT]}
+                  end={{ x: 1, y: 1 }}
+                  start={{ x: 0, y: 0 }}
+                  style={styles.createKey}
+                >
+                  <Ionicons color="#ffffff" name="add" size={26} />
+                </LinearGradient>
+              ) : isProfile && currentUser ? (
+                <View style={[styles.avatarRing, focused ? { borderColor: activeColor } : null]}>
+                  <Avatar name={currentUser.name} style={styles.avatar} uri={currentUser.profileImage} />
+                </View>
               ) : (
-                <Ionicons color={idleTint} name={icon} size={25} />
+                <Ionicons color={focused ? activeColor : idleColor} name={icon} size={24} />
               )}
-              <View accessible={false} style={styles.screenReaderOnly} />
+              {!isCreate ? (
+                <Text
+                  numberOfLines={1}
+                  style={[styles.tabLabel, { color: focused ? activeColor : idleColor }, focused ? styles.tabLabelActive : null]}
+                >
+                  {options?.title ?? route.name}
+                </Text>
+              ) : null}
             </Pressable>
           );
         })}
@@ -384,33 +401,60 @@ function SohbaTabBar({ descriptors, navigation, state }: BottomTabBarProps) {
 
 const styles = createThemedStyles({
   tabBarOuter: {
-    backgroundColor: palette.backgroundDeep,
+    backgroundColor: palette.background,
     borderTopColor: palette.border,
     borderTopWidth: 1,
-    paddingTop: 2,
+    paddingTop: 8,
   },
   tabBarShell: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-around",
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
   },
   tabButton: {
     alignItems: "center",
     flex: 1,
-    height: 54,
+    gap: 3,
+    height: 50,
     justifyContent: "center",
   },
-  tabButtonActive: {},
-  createTabButton: {},
-  createTabButtonActive: {},
+  tabLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    maxWidth: 72,
+  },
+  tabLabelActive: {
+    fontWeight: "700",
+  },
   tabButtonPressed: {
     opacity: 0.6,
   },
-  screenReaderOnly: {
-    height: 0,
-    opacity: 0,
-    position: "absolute",
-    width: 0,
+  createKey: {
+    alignItems: "center",
+    borderRadius: 16,
+    height: 46,
+    justifyContent: "center",
+    width: 56,
+  },
+  avatarRing: {
+    borderColor: "transparent",
+    borderRadius: 14,
+    borderWidth: 2,
+    padding: 1,
+  },
+  avatar: {
+    borderRadius: 10,
+    height: 20,
+    width: 20,
+  },
+  activeDot: {
+    backgroundColor: palette.primary,
+    borderRadius: 2,
+    height: 4,
+    width: 4,
+  },
+  activeDotHidden: {
+    backgroundColor: "transparent",
   },
 });

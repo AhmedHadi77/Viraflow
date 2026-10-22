@@ -175,7 +175,7 @@ export function CommentsSheet({
               onPress={onSubmit}
               style={[styles.sendButton, !canSend ? styles.sendButtonDisabled : null]}
             >
-              {isPosting ? <ActivityIndicator color="#04110b" size="small" /> : <Ionicons color="#04110b" name="arrow-up" size={20} />}
+              {isPosting ? <ActivityIndicator color="#ffffff" size="small" /> : <Ionicons color="#ffffff" name="arrow-up" size={20} />}
             </Pressable>
           </View>
         </View>

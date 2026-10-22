@@ -5,6 +5,7 @@ import {
 } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
+import { useFonts } from "expo-font";
 import React from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import { AppNavigator, RootStackParamList } from "./src/navigation/AppNavigator";
@@ -38,7 +39,7 @@ function buildNavigationTheme(mode: ThemeMode) {
     colors: {
       ...DefaultTheme.colors,
       background: palette.background,
-      card: palette.card,
+      card: palette.background,
       text: palette.text,
       primary: palette.primary,
       border: palette.border,
@@ -128,12 +129,28 @@ export default function App() {
 
 // Switching theme remounts the navigation tree (so every screen picks up the new colours) and
 // restores the exact screen stack the user was on.
+// The Sohba typefaces ship inside the app; only the weights in use are bundled.
+const SOHBA_FONTS = {
+  Manrope_400Regular: require("@expo-google-fonts/manrope/400Regular/Manrope_400Regular.ttf"),
+  Manrope_500Medium: require("@expo-google-fonts/manrope/500Medium/Manrope_500Medium.ttf"),
+  Manrope_600SemiBold: require("@expo-google-fonts/manrope/600SemiBold/Manrope_600SemiBold.ttf"),
+  Manrope_700Bold: require("@expo-google-fonts/manrope/700Bold/Manrope_700Bold.ttf"),
+  Manrope_800ExtraBold: require("@expo-google-fonts/manrope/800ExtraBold/Manrope_800ExtraBold.ttf"),
+};
+
 function ThemedNavigation() {
   const { mode, ready } = useThemeMode();
   const navigationStateRef = React.useRef<any>(undefined);
   const navigationTheme = React.useMemo(() => buildNavigationTheme(mode), [mode]);
+  const [fontsLoaded, fontError] = useFonts(SOHBA_FONTS);
+  // Never hold the app back for more than a moment: if the fonts are slow, start with system fonts.
+  const [fontWaitOver, setFontWaitOver] = React.useState(false);
+  React.useEffect(() => {
+    const timer = setTimeout(() => setFontWaitOver(true), 2500);
+    return () => clearTimeout(timer);
+  }, []);
 
-  if (!ready) {
+  if (!ready || !(fontsLoaded || fontError || fontWaitOver)) {
     return <View style={styles.themeLoading} />;
   }
 

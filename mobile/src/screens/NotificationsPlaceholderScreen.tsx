@@ -9,9 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
-import { SectionTitle } from "../components/SectionTitle";
 import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
 import { triggerFeedback } from "../services/feedback";
@@ -99,43 +97,26 @@ export function NotificationsPlaceholderScreen({ navigation }: { navigation: any
 
   return (
     <Screen scrollable>
-      <View style={styles.heroCard}>
-        <View style={styles.heroBadgeRow}>
-          <View style={styles.heroBadge}>
-            <Ionicons color={palette.primary} name="sparkles-outline" size={14} />
-            <Text style={styles.heroBadgeLabel}>{copy.realtimeInbox}</Text>
-          </View>
-        </View>
-        <SectionTitle
-          title={copy.notifications}
-          subtitle={
-            unreadNotifications.length > 0
+      <View style={styles.headerRow}>
+        <View style={styles.headerText}>
+          <Text style={styles.headerSubtitle}>
+            {unreadNotifications.length > 0
               ? `${unreadNotifications.length} ${copy.notificationsUnreadUpdatesBody}`
-              : copy.notificationsCaughtUpBody
-          }
-        />
-        <View style={styles.heroStats}>
-          <View style={styles.heroStat}>
-            <Text style={styles.heroValue}>{myNotifications.length}</Text>
-            <Text style={styles.heroLabel}>{copy.total}</Text>
-          </View>
-          <View style={styles.heroStat}>
-            <Text style={styles.heroValue}>{unreadNotifications.length}</Text>
-            <Text style={styles.heroLabel}>{copy.unread}</Text>
-          </View>
-          <View style={styles.heroStat}>
-            <Text style={styles.heroValue}>{copy.live}</Text>
-            <Text style={styles.heroLabel}>{copy.realtime}</Text>
-          </View>
+              : copy.notificationsCaughtUpBody}
+          </Text>
         </View>
-        <PrimaryButton
-          label={unreadNotifications.length > 0 ? copy.markAllAsRead : copy.allCaughtUp}
-          onPress={() => {
-            void handleMarkAllRead();
-          }}
-          variant="ghost"
-          disabled={unreadNotifications.length === 0}
-        />
+        {unreadNotifications.length > 0 ? (
+          <Pressable
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={() => {
+              void handleMarkAllRead();
+            }}
+            style={styles.markAllButton}
+          >
+            <Text style={styles.markAllLabel}>{copy.markAllAsRead}</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <View style={styles.filterRow}>
@@ -159,17 +140,17 @@ export function NotificationsPlaceholderScreen({ navigation }: { navigation: any
         />
       </View>
 
-      <View style={styles.pushCard}>
-        <Text style={styles.pushLabel}>{pushNotificationsStatus.mode === "remote" ? copy.remotePushConnected : copy.notificationMode}</Text>
-        <Text style={styles.pushTitle}>
-          {pushNotificationsStatus.mode === "remote"
-            ? copy.remotePushBody
-            : pushNotificationsStatus.mode === "local"
-              ? copy.localPushBody
-              : copy.pushSetupBody}
-        </Text>
-        <Text style={styles.pushBody}>{pushNotificationsStatus.message}</Text>
-      </View>
+      {pushNotificationsStatus.mode !== "remote" ? (
+        <View style={styles.pushCard}>
+          <Ionicons color={palette.accentSoft} name="notifications-off-outline" size={18} />
+          <View style={styles.pushTextWrap}>
+            <Text style={styles.pushTitle}>
+              {pushNotificationsStatus.mode === "local" ? copy.localPushBody : copy.pushSetupBody}
+            </Text>
+            {pushNotificationsStatus.message ? <Text style={styles.pushBody}>{pushNotificationsStatus.message}</Text> : null}
+          </View>
+        </View>
+      ) : null}
 
       {myNotifications.length === 0 ? (
         <View style={styles.emptyCard}>
@@ -222,7 +203,7 @@ function NotificationFilterChip({
 }) {
   return (
     <Pressable onPress={onPress} style={[styles.filterChip, active ? styles.filterChipActive : null]}>
-      <Ionicons color={active ? "#031018" : palette.textSoft} name={icon} size={14} />
+      <Ionicons color={active ? "#ffffff" : palette.textSoft} name={icon} size={14} />
       <Text style={[styles.filterChipLabel, active ? styles.filterChipLabelActive : null]}>{label}</Text>
     </Pressable>
   );
@@ -384,7 +365,7 @@ function NotificationStackRow({
       <View style={styles.swipeRow}>
         {hasUnread ? (
           <Pressable onPress={() => void handleMarkReadPress()} style={styles.swipeAction}>
-            <Ionicons color="#031018" name="checkmark-done-outline" size={18} />
+            <Ionicons color="#ffffff" name="checkmark-done-outline" size={18} />
             <Text style={styles.swipeActionLabel}>{stack.unreadCount > 1 ? copy.readAll : copy.readOne}</Text>
           </Pressable>
         ) : null}
@@ -414,7 +395,7 @@ function NotificationStackRow({
                 await onOpen(stack.primary);
               })();
             }}
-            style={styles.cardPressable}
+            style={[styles.cardPressable, hasUnread ? styles.cardPressableUnread : null]}
           >
             <View style={[styles.iconWrap, { backgroundColor: meta.tint }]}>
               <Ionicons color={meta.color} name={meta.icon} size={18} />
@@ -530,83 +511,59 @@ function getNotificationTimeGroup(value: string, copy: ReturnType<typeof getCopy
 }
 
 const styles = createThemedStyles({
-  heroCard: {
-    backgroundColor: palette.card,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.xl,
-    borderWidth: 1,
-    gap: spacing.lg,
-    padding: spacing.xl,
-  },
-  heroBadgeRow: {
-    flexDirection: "row",
-  },
-  heroBadge: {
+  headerRow: {
     alignItems: "center",
-    backgroundColor: "rgba(54,224,161,0.12)",
-    borderColor: "rgba(54,224,161,0.24)",
-    borderRadius: 999,
-    borderWidth: 1,
     flexDirection: "row",
-    gap: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
+    gap: spacing.md,
+    justifyContent: "space-between",
+    paddingTop: spacing.sm,
   },
-  heroBadgeLabel: {
-    color: palette.primary,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.35,
-    textTransform: "uppercase",
-  },
-  heroStats: {
-    flexDirection: "row",
-    gap: spacing.sm,
-  },
-  heroStat: {
-    backgroundColor: palette.glass,
-    borderColor: palette.border,
-    borderRadius: radii.lg,
-    borderWidth: 1,
+  headerText: {
     flex: 1,
     gap: 4,
-    padding: spacing.md,
   },
-  heroValue: {
+  headerTitle: {
     color: palette.text,
-    fontSize: 20,
-    fontWeight: "900",
-  },
-  heroLabel: {
-    color: palette.muted,
-    fontSize: 11,
+    fontSize: 26,
     fontWeight: "700",
-    textTransform: "uppercase",
+  },
+  headerSubtitle: {
+    color: palette.muted,
+    fontSize: 15,
+  },
+  markAllButton: {
+    justifyContent: "center",
+    minHeight: 40,
+    paddingHorizontal: spacing.xs,
+  },
+  markAllLabel: {
+    color: palette.primary,
+    fontSize: 14,
+    fontWeight: "600",
   },
   pushCard: {
+    alignItems: "flex-start",
     backgroundColor: palette.surface,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.xl,
+    borderColor: palette.border,
+    borderRadius: radii.md,
     borderWidth: 1,
-    gap: spacing.sm,
-    padding: spacing.xl,
+    flexDirection: "row",
+    gap: spacing.md,
+    padding: spacing.md,
   },
-  pushLabel: {
-    color: palette.accentSoft,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
+  pushTextWrap: {
+    flex: 1,
+    gap: 2,
   },
   pushTitle: {
     color: palette.text,
-    fontSize: 18,
-    fontWeight: "900",
+    fontSize: 14,
+    fontWeight: "600",
   },
   pushBody: {
-    color: palette.textSoft,
-    fontSize: 14,
-    lineHeight: 22,
+    color: palette.muted,
+    fontSize: 13,
+    lineHeight: 19,
   },
   filterRow: {
     flexDirection: "row",
@@ -614,31 +571,29 @@ const styles = createThemedStyles({
   },
   filterChip: {
     alignItems: "center",
-    backgroundColor: palette.surface,
-    borderColor: palette.border,
+    backgroundColor: palette.surfaceRaised,
     borderRadius: 999,
-    borderWidth: 1,
     flexDirection: "row",
     gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    height: 34,
+    paddingHorizontal: 14,
   },
   filterChipActive: {
-    backgroundColor: palette.primary,
-    borderColor: palette.primary,
+    backgroundColor: palette.text,
   },
   filterChipLabel: {
-    color: palette.textSoft,
-    fontSize: 12,
-    fontWeight: "800",
+    color: palette.text,
+    fontSize: 13,
+    fontWeight: "500",
   },
   filterChipLabelActive: {
-    color: "#031018",
+    color: palette.background,
+    fontWeight: "600",
   },
   emptyCard: {
     backgroundColor: palette.surface,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.xl,
+    borderColor: palette.border,
+    borderRadius: radii.lg,
     borderWidth: 1,
     gap: spacing.md,
     padding: spacing.xl,
@@ -654,18 +609,21 @@ const styles = createThemedStyles({
     lineHeight: 22,
   },
   sectionStack: {
-    gap: spacing.lg,
+    gap: spacing.md,
+    marginHorizontal: -spacing.lg,
   },
   sectionCard: {
-    gap: spacing.md,
+    gap: 2,
   },
   sectionHeading: {
-    color: palette.text,
-    fontSize: 16,
-    fontWeight: "900",
+    color: palette.muted,
+    fontSize: 13,
+    fontWeight: "600",
+    paddingBottom: 4,
+    paddingHorizontal: spacing.lg,
   },
   list: {
-    gap: spacing.md,
+    gap: 0,
   },
   swipeRow: {
     position: "relative",
@@ -673,7 +631,6 @@ const styles = createThemedStyles({
   swipeAction: {
     alignItems: "center",
     backgroundColor: palette.primary,
-    borderRadius: radii.xl,
     bottom: 0,
     gap: 6,
     justifyContent: "center",
@@ -683,26 +640,25 @@ const styles = createThemedStyles({
     width: 88,
   },
   swipeActionLabel: {
-    color: "#031018",
-    fontSize: 11,
-    fontWeight: "900",
-    textTransform: "uppercase",
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "600",
   },
   card: {
-    backgroundColor: palette.surface,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.xl,
-    borderWidth: 1,
+    backgroundColor: palette.background,
     overflow: "hidden",
   },
-  cardUnread: {
-    backgroundColor: palette.cardAlt,
+  cardUnread: {},
+  cardPressableUnread: {
+    backgroundColor: "rgba(31,91,255,0.07)",
   },
   cardPressable: {
-    alignItems: "flex-start",
+    alignItems: "center",
     flexDirection: "row",
     gap: spacing.md,
-    padding: spacing.lg,
+    minHeight: 68,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
   },
   iconWrap: {
     alignItems: "center",
@@ -723,12 +679,12 @@ const styles = createThemedStyles({
     minWidth: 44,
   },
   stackAvatar: {
-    borderColor: "#081018",
+    borderColor: "#151922",
     borderWidth: 2,
   },
   avatarFallback: {
     alignItems: "center",
-    backgroundColor: "rgba(54,224,161,0.15)",
+    backgroundColor: "rgba(31,91,255,0.15)",
     borderRadius: 22,
     height: 44,
     justifyContent: "center",
@@ -755,8 +711,8 @@ const styles = createThemedStyles({
   cardTitle: {
     color: palette.text,
     flex: 1,
-    fontSize: 15,
-    fontWeight: "900",
+    fontSize: 14,
+    fontWeight: "600",
   },
   cardTime: {
     color: palette.muted,
@@ -766,7 +722,7 @@ const styles = createThemedStyles({
   cardText: {
     color: palette.textSoft,
     fontSize: 14,
-    lineHeight: 21,
+    lineHeight: 20,
   },
   stackHintRow: {
     marginTop: 2,
@@ -814,9 +770,9 @@ const styles = createThemedStyles({
     fontWeight: "800",
   },
   mediaPreview: {
-    borderRadius: 16,
-    height: 58,
+    borderRadius: 10,
+    height: 46,
     marginLeft: spacing.xs,
-    width: 58,
+    width: 46,
   },
 });

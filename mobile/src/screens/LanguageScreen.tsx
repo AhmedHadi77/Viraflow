@@ -29,7 +29,7 @@ export function LanguageScreen() {
 
   return (
     <Screen scrollable contentContainerStyle={styles.content}>
-      <SafeLinearGradient colors={["rgba(255,122,47,0.16)", "rgba(54,224,161,0.10)", "rgba(255,255,255,0.02)"]} style={styles.hero}>
+      <SafeLinearGradient colors={[palette.background, palette.background]} style={styles.hero}>
         <Text style={styles.brand}>{copy.appName}</Text>
         <Text style={styles.kicker}>{copy.languageKicker}</Text>
         <SectionTitle title={copy.chooseLanguage} subtitle={copy.chooseLanguageBody} />
@@ -74,10 +74,7 @@ const styles = createThemedStyles({
   },
   hero: {
     gap: spacing.lg,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.xl,
-    borderWidth: 1,
-    padding: spacing.xl,
+    paddingTop: spacing.sm,
   },
   brand: {
     color: palette.text,

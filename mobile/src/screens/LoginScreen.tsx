@@ -49,7 +49,7 @@ export function LoginScreen({ navigation }: { navigation: any }) {
 
   return (
     <Screen scrollable contentContainerStyle={styles.content}>
-      <SafeLinearGradient colors={["rgba(255,122,47,0.16)", "rgba(54,224,161,0.10)", "rgba(255,255,255,0.02)"]} style={styles.heroCard}>
+      <SafeLinearGradient colors={[palette.surface, palette.surface]} style={styles.heroCard}>
         <Text style={styles.eyebrow}>{copy.appName}</Text>
         <SectionTitle title={copy.welcomeBack} subtitle={copy.signInBody} />
         <View style={styles.chips}>
@@ -216,7 +216,7 @@ const socialStyles = createThemedStyles({
   },
   googleButton: {
     alignItems: "center",
-    backgroundColor: "#0b1118",
+    backgroundColor: "#151922",
     borderColor: palette.borderStrong,
     borderRadius: radii.lg,
     borderWidth: 1,

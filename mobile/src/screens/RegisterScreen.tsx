@@ -76,7 +76,7 @@ export function RegisterScreen({ navigation }: { navigation: any }) {
 
   return (
     <Screen scrollable contentContainerStyle={styles.content}>
-      <SafeLinearGradient colors={["rgba(54,224,161,0.12)", "rgba(255,122,47,0.10)", "rgba(255,255,255,0.02)"]} style={styles.heroCard}>
+      <SafeLinearGradient colors={[palette.surface, palette.surface]} style={styles.heroCard}>
         <SectionTitle title={copy.createAccount} subtitle={copy.registerBody} />
         <View style={styles.points}>
           <Point text={copy.registerPointProfile} />
@@ -261,7 +261,7 @@ const socialStyles = createThemedStyles({
   },
   googleButton: {
     alignItems: "center",
-    backgroundColor: "#0b1118",
+    backgroundColor: "#151922",
     borderColor: palette.borderStrong,
     borderRadius: radii.lg,
     borderWidth: 1,

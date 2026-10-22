@@ -2,7 +2,6 @@ import { BottomTabBarHeightContext } from "@react-navigation/bottom-tabs";
 import React from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleProp, View, ViewStyle } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { SafeLinearGradient } from "./SafeLinearGradient";
 import { palette, radii, spacing, createThemedStyles } from "../theme";
 
 interface ScreenProps {
@@ -33,21 +32,20 @@ export function Screen({ children, scrollable = false, contentContainerStyle }: 
   );
 
   return (
-    <SafeLinearGradient colors={[palette.backgroundDeep, palette.background, palette.backgroundSoft]} style={styles.gradient}>
-      <View pointerEvents="none" style={[styles.glow, styles.glowTop]} />
-      <View pointerEvents="none" style={[styles.glow, styles.glowBottom]} />
+    <View style={styles.gradient}>
       <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
         {/* Android draws edge-to-edge, so the window no longer resizes for the keyboard on its own. */}
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.safeArea}>
           {inner}
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </SafeLinearGradient>
+    </View>
   );
 }
 
 const styles = createThemedStyles({
   gradient: {
+    backgroundColor: palette.background,
     flex: 1,
   },
   glow: {
@@ -56,14 +54,14 @@ const styles = createThemedStyles({
     opacity: 0.75,
   },
   glowTop: {
-    backgroundColor: "rgba(54,224,161,0.12)",
+    backgroundColor: "rgba(31,91,255,0.12)",
     height: 260,
     width: 260,
     right: -90,
     top: -20,
   },
   glowBottom: {
-    backgroundColor: "rgba(255,122,47,0.10)",
+    backgroundColor: "rgba(229,41,79,0.10)",
     height: 300,
     width: 300,
     left: -130,

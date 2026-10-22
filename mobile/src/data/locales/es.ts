@@ -883,6 +883,7 @@ const es: Partial<CopyStrings> = {
   fsNewReel: "{name} publicó un nuevo reel",
   fsNewStory: "{name} añadió una historia",
   nlNewContent: "Nuevo",
+  callPrivate: "Llamada privada",
 };
 
 export default es;

@@ -614,7 +614,7 @@ export function CreateScreen({
   return (
     <Screen contentContainerStyle={styles.screenContent} scrollable>
       <LinearGradient
-        colors={["rgba(54,224,161,0.16)", "rgba(255,122,47,0.12)", "rgba(255,255,255,0.02)"]}
+        colors={[palette.background, palette.background]}
         style={styles.hero}
       >
         <SectionTitle title={copy.create} subtitle={copy.csUploadStudio} />
@@ -1032,7 +1032,7 @@ function ModeButton({
 }) {
   return (
     <Pressable onPress={onPress} style={[styles.modeButton, active ? styles.modeButtonActive : null]}>
-      <Ionicons color={active ? "#071118" : palette.text} name={icon} size={18} />
+      <Ionicons color={active ? "#ffffff" : palette.text} name={icon} size={18} />
       <Text style={[styles.modeLabel, active ? styles.modeLabelActive : null]}>{label}</Text>
     </Pressable>
   );
@@ -1051,7 +1051,7 @@ function ToolChip({
 }) {
   return (
     <Pressable onPress={onPress} style={[styles.toolChip, active ? styles.toolChipActive : null]}>
-      <Ionicons color={active ? "#071118" : palette.text} name={icon} size={16} />
+      <Ionicons color={active ? "#ffffff" : palette.text} name={icon} size={16} />
       <Text style={[styles.toolChipLabel, active ? styles.toolChipLabelActive : null]}>{label}</Text>
     </Pressable>
   );
@@ -1368,7 +1368,7 @@ function renderFilterOverlays(filters: StudioFilterSettings) {
           {
             backgroundColor:
               filters.saturation > 0
-                ? `rgba(255,122,47,${filters.saturation * 0.04})`
+                ? `rgba(229,41,79,${filters.saturation * 0.04})`
                 : `rgba(92,112,128,${Math.abs(filters.saturation) * 0.05})`,
           },
         ]}
@@ -1743,14 +1743,11 @@ const styles = createThemedStyles({
     gap: spacing.lg,
   },
   hero: {
-    borderColor: palette.borderStrong,
-    borderRadius: radii.xl,
-    borderWidth: 1,
-    gap: spacing.md,
-    padding: spacing.xl,
+    gap: spacing.sm,
+    paddingTop: spacing.sm,
   },
   heroBody: {
-    color: palette.textSoft,
+    color: palette.muted,
     fontSize: 14,
     lineHeight: 22,
   },
@@ -1790,7 +1787,7 @@ const styles = createThemedStyles({
     fontWeight: "700",
   },
   modeLabelActive: {
-    color: "#071118",
+    color: "#ffffff",
   },
   previewCard: {
     backgroundColor: palette.surface,
@@ -2036,7 +2033,7 @@ const styles = createThemedStyles({
     fontWeight: "700",
   },
   toolChipLabelActive: {
-    color: "#071118",
+    color: "#ffffff",
   },
   inlineInput: {
     backgroundColor: palette.input,
@@ -2131,7 +2128,7 @@ const styles = createThemedStyles({
     height: 12,
   },
   trimSegmentActive: {
-    backgroundColor: "rgba(54,224,161,0.36)",
+    backgroundColor: "rgba(31,91,255,0.36)",
   },
   trimSegmentHandle: {
     backgroundColor: palette.accent,

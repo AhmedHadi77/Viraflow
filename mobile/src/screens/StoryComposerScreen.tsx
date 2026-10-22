@@ -127,7 +127,7 @@ export function StoryComposerScreen({
           }}
           style={[styles.topButton, styles.publishButton, isPublishing ? styles.disabledButton : null]}
         >
-          <Ionicons color="#05080d" name="arrow-up" size={18} />
+          <Ionicons color="#ffffff" name="arrow-up" size={18} />
         </Pressable>
       </View>
 
@@ -291,7 +291,7 @@ function ToolChip({
 }) {
   return (
     <Pressable onPress={onPress} style={[styles.toolChip, active ? styles.toolChipActive : null]}>
-      <Ionicons color={active ? "#05080d" : palette.text} name={icon} size={16} />
+      <Ionicons color={active ? "#ffffff" : palette.text} name={icon} size={16} />
       <Text style={[styles.toolChipLabel, active ? styles.toolChipLabelActive : null]}>{label}</Text>
     </Pressable>
   );
@@ -313,7 +313,7 @@ function getExpoVideoModule() {
 
 const styles = createDarkStyles({
   container: {
-    backgroundColor: "#020406",
+    backgroundColor: "#ffffff",
     flex: 1,
   },
   topBar: {
@@ -370,7 +370,7 @@ const styles = createDarkStyles({
     ...StyleSheet.absoluteFillObject,
   },
   previewToneWarm: {
-    backgroundColor: "rgba(255,122,47,0.14)",
+    backgroundColor: "rgba(229,41,79,0.14)",
   },
   previewToneNoir: {
     backgroundColor: "rgba(8,12,16,0.28)",
@@ -413,7 +413,7 @@ const styles = createDarkStyles({
   },
   toolChip: {
     alignItems: "center",
-    backgroundColor: "#0b1218",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: radii.pill,
     borderWidth: 1,
@@ -432,10 +432,10 @@ const styles = createDarkStyles({
     fontWeight: "700",
   },
   toolChipLabelActive: {
-    color: "#05080d",
+    color: "#ffffff",
   },
   captionInput: {
-    backgroundColor: "#0b1218",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: radii.xl,
     borderWidth: 1,
@@ -446,7 +446,7 @@ const styles = createDarkStyles({
     textAlignVertical: "top",
   },
   highlightInput: {
-    backgroundColor: "#0b1218",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: radii.lg,
     borderWidth: 1,
@@ -464,7 +464,7 @@ const styles = createDarkStyles({
     paddingVertical: 16,
   },
   publishCtaLabel: {
-    color: "#061019",
+    color: "#151922",
     fontSize: 16,
     fontWeight: "900",
   },

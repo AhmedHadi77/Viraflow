@@ -883,6 +883,7 @@ const ja: Partial<CopyStrings> = {
   fsNewReel: "{name}さんが新しいリールを投稿しました",
   fsNewStory: "{name}さんがストーリーを追加しました",
   nlNewContent: "新着",
+  callPrivate: "プライベート通話",
 };
 
 export default ja;

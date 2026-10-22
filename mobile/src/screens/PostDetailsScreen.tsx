@@ -217,9 +217,9 @@ const styles = createThemedStyles({
   },
   emptyCard: {
     alignItems: "center",
-    backgroundColor: "#0b1219",
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: radii.xl,
+    backgroundColor: "#151922",
+    borderColor: palette.border,
+    borderRadius: radii.lg,
     borderWidth: 1,
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
@@ -238,7 +238,7 @@ const styles = createThemedStyles({
   },
   headerCard: {
     alignItems: "center",
-    backgroundColor: "#0b1219",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: radii.xl,
     borderWidth: 1,
@@ -286,7 +286,7 @@ const styles = createThemedStyles({
     fontWeight: "800",
   },
   summaryCard: {
-    backgroundColor: "#0b1219",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: radii.xl,
     borderWidth: 1,
@@ -336,7 +336,7 @@ const styles = createThemedStyles({
     flex: 1,
   },
   commentSheet: {
-    backgroundColor: "#081018",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
@@ -437,7 +437,7 @@ const styles = createThemedStyles({
     paddingVertical: spacing.sm,
   },
   commentSendLabel: {
-    color: "#031018",
+    color: "#ffffff",
     fontSize: 13,
     fontWeight: "900",
   },

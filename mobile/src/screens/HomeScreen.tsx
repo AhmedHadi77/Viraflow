@@ -1,9 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Avatar } from "../components/Avatar";
 import type { CopyStrings } from "../data/locales/en";
-import { BRAND_GRADIENT, BrandTint, brandColor, GradientIconButton, STORY_GRADIENT } from "../components/GradientIcon";
+import { BRAND_GRADIENT, BrandTint, GradientIconButton } from "../components/GradientIcon";
 import { openReportSheet } from "../components/ReportSheet";
-import { rtlFlipStyle } from "../utils/layoutDirection";
 import { useIsFocused } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
@@ -257,7 +256,7 @@ export function HomeScreen({ navigation }: { navigation: any }) {
   }
 
   return (
-    <SafeLinearGradient colors={[palette.backgroundDeep, palette.background, palette.backgroundSoft]} style={styles.gradient}>
+    <SafeLinearGradient colors={[palette.background, palette.background]} style={styles.gradient}>
       <SafeAreaView style={styles.safeArea}>
         <FlatList<FeedRowItem>
           contentContainerStyle={styles.listContent}
@@ -268,31 +267,21 @@ export function HomeScreen({ navigation }: { navigation: any }) {
               <View style={styles.topBar}>
                 <Text style={styles.brand}>{copy.appName}</Text>
                 <View style={styles.topActions}>
-                  <IconBubble icon="search-outline" onPress={() => rootNavigation.navigate("Explore")} />
+                  <IconBubble label={copy.search} icon="search-outline" onPress={() => rootNavigation.navigate("Explore")} />
                   <IconBubble
                     badge={totalDirectUnreadCount > 0 ? String(totalDirectUnreadCount) : undefined}
                     icon="paper-plane-outline"
+                    label={copy.messages}
                     onPress={() => rootNavigation.navigate("DirectInbox")}
                   />
                   <IconBubble
                     badge={unreadNotifications > 0 ? String(unreadNotifications) : undefined}
                     icon="heart-outline"
+                    label={copy.notifications}
                     onPress={() => setShowNotificationsTray(true)}
-                    tint="accent"
                   />
                 </View>
               </View>
-
-              <Pressable onPress={() => rootNavigation.navigate("Explore")} style={styles.discoverSearchBar}>
-                <View style={styles.discoverSearchIcon}>
-                  <Ionicons color={brandColor()} name="search" size={16} />
-                </View>
-                <View style={styles.discoverSearchCopy}>
-                  <Text style={styles.discoverSearchTitle}>{copy.homeSearchTitle}</Text>
-                  <Text style={styles.discoverSearchHint}>{copy.homeSearchHint}</Text>
-                </View>
-                <Ionicons color={palette.muted} name="arrow-forward" size={18} style={rtlFlipStyle} />
-              </Pressable>
 
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storyRow}>
                 {currentUser ? (
@@ -311,9 +300,9 @@ export function HomeScreen({ navigation }: { navigation: any }) {
                     style={styles.storyCard}
                   >
                     <View style={styles.storyAvatarWrap}>
-                      <StoryRing imageUrl={currentUserStory?.imageUrl || currentUser.profileImage} ownStory />
+                      <StoryRing imageUrl={currentUserStory?.imageUrl || currentUser.profileImage} name={currentUser.name} ownStory={!currentUserStory} />
                       <View style={styles.storyAddBadge}>
-                        <Ionicons color="#05080d" name={currentUserStory ? "play" : "add"} size={14} />
+                        <Ionicons color="#ffffff" name={currentUserStory ? "play" : "add"} size={14} />
                       </View>
                     </View>
                     <Text numberOfLines={1} style={styles.storyLabel}>
@@ -335,7 +324,7 @@ export function HomeScreen({ navigation }: { navigation: any }) {
                       onPress={() => rootNavigation.navigate("StoryViewer", { userId: creator.id, storyId: story.id })}
                       style={styles.storyCard}
                     >
-                      <StoryRing imageUrl={story.imageUrl} viewed={viewedByCurrentUser} />
+                      <StoryRing imageUrl={story.imageUrl} name={creator.name} viewed={viewedByCurrentUser} />
                       <Text numberOfLines={1} style={styles.storyLabel}>
                         {creator.username}
                       </Text>
@@ -539,7 +528,7 @@ export function HomeScreen({ navigation }: { navigation: any }) {
                             </View>
                           )}
                           <View style={styles.notificationTrayMiniIcon}>
-                            <Ionicons color="#031018" name={meta.icon} size={10} />
+                            <Ionicons color="#ffffff" name={meta.icon} size={10} />
                           </View>
                         </View>
                         <View style={styles.notificationTrayCopy}>
@@ -653,34 +642,36 @@ function IconBubble({
   icon,
   badge,
   tint,
+  label,
   onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   badge?: string;
   tint?: BrandTint;
+  label?: string;
   onPress: () => void;
 }) {
-  return <GradientIconButton badge={badge} icon={icon} onPress={onPress} tint={tint} />;
+  return <GradientIconButton accessibilityLabel={label} badge={badge} icon={icon} onPress={onPress} tint={tint} />;
 }
 
 function StoryRing({
   imageUrl,
+  name,
   viewed,
   ownStory,
 }: {
   imageUrl: string;
+  name?: string;
   viewed?: boolean;
   ownStory?: boolean;
 }) {
-  const colors: readonly [string, string, ...string[]] = viewed
-    ? ["rgba(255,255,255,0.20)", "rgba(255,255,255,0.12)", "rgba(255,255,255,0.08)"]
-    : ownStory
-      ? [...BRAND_GRADIENT]
-      : [...STORY_GRADIENT];
+  // Only unseen stories get the brand gradient; seen ones and "add your story" stay quiet grey.
+  const colors: readonly [string, string, ...string[]] =
+    viewed || ownStory ? [palette.borderStrong, palette.borderStrong] : [...BRAND_GRADIENT];
   return (
     <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.storyRing}>
       <View style={styles.storyRingInner}>
-        <Image source={{ uri: imageUrl }} style={styles.storyAvatar} />
+        <Avatar name={name} style={styles.storyAvatar} uri={imageUrl} />
       </View>
     </LinearGradient>
   );
@@ -745,13 +736,13 @@ const styles = createThemedStyles({
   brand: {
     color: palette.text,
     fontSize: 28,
-    fontWeight: "900",
-    letterSpacing: -0.7,
+    fontWeight: "800",
+    letterSpacing: -0.6,
   },
   topActions: {
     alignItems: "center",
     flexDirection: "row",
-    gap: spacing.sm,
+    gap: 2,
   },
   discoverSearchBar: {
     alignItems: "center",
@@ -766,7 +757,7 @@ const styles = createThemedStyles({
   },
   discoverSearchIcon: {
     alignItems: "center",
-    backgroundColor: "rgba(54,224,161,0.12)",
+    backgroundColor: "rgba(31,91,255,0.12)",
     borderRadius: radii.pill,
     height: 38,
     justifyContent: "center",
@@ -787,7 +778,7 @@ const styles = createThemedStyles({
   },
   iconBubble: {
     alignItems: "center",
-    backgroundColor: "#0b1218",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: 20,
     borderWidth: 1,
@@ -799,7 +790,7 @@ const styles = createThemedStyles({
   iconBadge: {
     alignItems: "center",
     backgroundColor: palette.accent,
-    borderColor: "#05080d",
+    borderColor: "#ffffff",
     borderRadius: 10,
     borderWidth: 2,
     justifyContent: "center",
@@ -831,20 +822,20 @@ const styles = createThemedStyles({
     padding: 2.5,
   },
   storyRingInner: {
-    backgroundColor: "#05080d",
+    backgroundColor: palette.background,
     borderRadius: 36,
     padding: 2.5,
   },
   storyAvatar: {
-    backgroundColor: "#111820",
+    backgroundColor: "#151922",
     borderRadius: 34,
     height: 68,
     width: 68,
   },
   storyAddBadge: {
     alignItems: "center",
-    backgroundColor: palette.text,
-    borderColor: "#05080d",
+    backgroundColor: palette.primary,
+    borderColor: palette.background,
     borderRadius: 11,
     borderWidth: 2,
     bottom: -2,
@@ -857,12 +848,12 @@ const styles = createThemedStyles({
   storyLabel: {
     color: palette.text,
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "500",
     textAlign: "center",
   },
   quickComposer: {
     alignItems: "center",
-    backgroundColor: "#0a1117",
+    backgroundColor: "#0b0d12",
     borderColor: "rgba(255,255,255,0.07)",
     borderRadius: 24,
     borderWidth: 1,
@@ -876,7 +867,7 @@ const styles = createThemedStyles({
     width: 40,
   },
   quickComposerInput: {
-    backgroundColor: "#101820",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.06)",
     borderRadius: radii.pill,
     borderWidth: 1,
@@ -891,7 +882,7 @@ const styles = createThemedStyles({
   },
   quickComposerAction: {
     alignItems: "center",
-    backgroundColor: "#101820",
+    backgroundColor: "#151922",
     borderRadius: 18,
     height: 36,
     justifyContent: "center",
@@ -919,7 +910,7 @@ const styles = createThemedStyles({
   },
   creatorChip: {
     alignItems: "center",
-    backgroundColor: "#0a1117",
+    backgroundColor: "#0b0d12",
     borderColor: "rgba(255,255,255,0.07)",
     borderRadius: 22,
     borderWidth: 1,
@@ -957,7 +948,7 @@ const styles = createThemedStyles({
     ...StyleSheet.absoluteFillObject,
   },
   notificationTray: {
-    backgroundColor: "#071019",
+    backgroundColor: "#0b0d12",
     borderColor: palette.borderStrong,
     borderRadius: 24,
     borderWidth: 1,
@@ -986,8 +977,8 @@ const styles = createThemedStyles({
   },
   notificationTrayBadge: {
     alignItems: "center",
-    backgroundColor: "rgba(54,224,161,0.12)",
-    borderColor: "rgba(54,224,161,0.24)",
+    backgroundColor: "rgba(31,91,255,0.12)",
+    borderColor: "rgba(31,91,255,0.24)",
     borderRadius: 999,
     borderWidth: 1,
     flexDirection: "row",
@@ -1030,7 +1021,7 @@ const styles = createThemedStyles({
     paddingHorizontal: spacing.md,
   },
   notificationTrayPrimaryLabel: {
-    color: "#031018",
+    color: "#ffffff",
     fontSize: 12,
     fontWeight: "900",
   },
@@ -1083,12 +1074,12 @@ const styles = createThemedStyles({
     width: 40,
   },
   notificationTrayStackAvatar: {
-    borderColor: "#081018",
+    borderColor: "#151922",
     borderWidth: 2,
   },
   notificationTrayAvatarFallback: {
     alignItems: "center",
-    backgroundColor: "rgba(54,224,161,0.12)",
+    backgroundColor: "rgba(31,91,255,0.12)",
     borderRadius: 20,
     height: 40,
     justifyContent: "center",
@@ -1097,7 +1088,7 @@ const styles = createThemedStyles({
   notificationTrayMiniIcon: {
     alignItems: "center",
     backgroundColor: palette.primary,
-    borderColor: "#071019",
+    borderColor: "#0b0d12",
     borderRadius: 9,
     borderWidth: 2,
     bottom: -3,
@@ -1159,7 +1150,7 @@ const styles = createThemedStyles({
     flex: 1,
   },
   commentSheet: {
-    backgroundColor: "#081018",
+    backgroundColor: "#151922",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     maxHeight: "72%",
@@ -1210,7 +1201,7 @@ const styles = createThemedStyles({
     width: 32,
   },
   commentBubble: {
-    backgroundColor: "#0f1821",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.06)",
     borderRadius: 18,
     borderWidth: 1,
@@ -1236,7 +1227,7 @@ const styles = createThemedStyles({
     paddingTop: spacing.sm,
   },
   commentInput: {
-    backgroundColor: "#101820",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: radii.pill,
     borderWidth: 1,
@@ -1256,12 +1247,12 @@ const styles = createThemedStyles({
     paddingVertical: 12,
   },
   commentSendLabel: {
-    color: "#071118",
+    color: "#ffffff",
     fontSize: 13,
     fontWeight: "900",
   },
   skeletonCard: {
-    backgroundColor: "#0b1219",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: 28,
     borderWidth: 1,
@@ -1275,7 +1266,7 @@ const styles = createThemedStyles({
     gap: spacing.sm,
   },
   skeletonAvatar: {
-    backgroundColor: "#152433",
+    backgroundColor: "#1e2330",
     borderRadius: 20,
     height: 40,
     width: 40,
@@ -1285,19 +1276,19 @@ const styles = createThemedStyles({
     gap: 8,
   },
   skeletonLinePrimary: {
-    backgroundColor: "#152433",
+    backgroundColor: "#1e2330",
     borderRadius: radii.pill,
     height: 12,
     width: "72%",
   },
   skeletonLineSecondary: {
-    backgroundColor: "#152433",
+    backgroundColor: "#1e2330",
     borderRadius: radii.pill,
     height: 10,
     width: "42%",
   },
   skeletonMedia: {
-    backgroundColor: "#152433",
+    backgroundColor: "#1e2330",
     borderRadius: radii.lg,
     height: 360,
   },
@@ -1306,15 +1297,15 @@ const styles = createThemedStyles({
     gap: spacing.sm,
   },
   skeletonIcon: {
-    backgroundColor: "#152433",
+    backgroundColor: "#1e2330",
     borderRadius: radii.pill,
     height: 28,
     width: 28,
   },
   emptyState: {
     alignItems: "center",
-    backgroundColor: "#0b1219",
-    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "#151922",
+    borderColor: palette.border,
     borderRadius: 28,
     borderWidth: 1,
     gap: spacing.md,
@@ -1341,7 +1332,7 @@ const styles = createThemedStyles({
     paddingVertical: spacing.md,
   },
   emptyStateActionLabel: {
-    color: "#071118",
+    color: "#ffffff",
     fontSize: 14,
     fontWeight: "900",
   },

@@ -563,8 +563,8 @@ export function AdminDashboardScreen({ navigation }: { navigation: any }) {
         <View style={styles.analyticsGrid}>
           <AnalyticsCard accent={palette.primary} icon="people-outline" label={`${copy.total} ${copy.usersTitle.toLowerCase()}`} value={users.length} />
           <AnalyticsCard accent={palette.accent} icon="images-outline" label={`${copy.total} ${copy.posts.toLowerCase()}`} value={posts.length} />
-          <AnalyticsCard accent="#ff7a2f" icon="play-circle-outline" label={`${copy.total} ${copy.reels.toLowerCase()}`} value={reels.length} />
-          <AnalyticsCard accent="#36e0a1" icon="timer-outline" label={`${copy.total} ${adminCopy.storiesTitle.toLowerCase()}`} value={stories.length} />
+          <AnalyticsCard accent="#e5294f" icon="play-circle-outline" label={`${copy.total} ${copy.reels.toLowerCase()}`} value={reels.length} />
+          <AnalyticsCard accent="#1f5bff" icon="timer-outline" label={`${copy.total} ${adminCopy.storiesTitle.toLowerCase()}`} value={stories.length} />
           <AnalyticsCard accent={palette.success} icon="pulse-outline" label={adminCopy.activeUsers} value={activeUsersCount} />
           <AnalyticsCard
             accent={palette.danger}
@@ -937,8 +937,8 @@ function ActionButton({
             : tone === "danger"
               ? "#1e0407"
               : tone === "success"
-                ? "#042010"
-                : "#071018"
+                ? "#ffffff"
+                : "#0b0d12"
         }
         name={icon}
         size={15}
@@ -1123,7 +1123,7 @@ const styles = createThemedStyles({
   },
   deniedCard: {
     alignItems: "center",
-    backgroundColor: "#0b1219",
+    backgroundColor: "#151922",
     borderColor: palette.border,
     borderRadius: radii.xl,
     borderWidth: 1,
@@ -1164,18 +1164,14 @@ const styles = createThemedStyles({
     paddingVertical: spacing.md,
   },
   primaryActionLabel: {
-    color: "#031018",
+    color: "#ffffff",
     fontSize: 14,
     fontWeight: "900",
   },
   heroCard: {
-    backgroundColor: "#0b1219",
-    borderColor: palette.border,
-    borderRadius: radii.xl,
-    borderWidth: 1,
     gap: spacing.lg,
-    padding: spacing.xl,
     ...shadows.card,
+    paddingTop: spacing.sm,
   },
   heroHeader: {
     alignItems: "flex-start",
@@ -1227,7 +1223,7 @@ const styles = createThemedStyles({
     gap: spacing.md,
   },
   analyticsCard: {
-    backgroundColor: "#101820",
+    backgroundColor: "#151922",
     borderColor: palette.border,
     borderRadius: radii.lg,
     borderWidth: 1,
@@ -1259,7 +1255,7 @@ const styles = createThemedStyles({
     paddingRight: spacing.sm,
   },
   sectionChip: {
-    backgroundColor: "#0b1219",
+    backgroundColor: "#151922",
     borderColor: palette.border,
     borderRadius: radii.pill,
     borderWidth: 1,
@@ -1276,13 +1272,13 @@ const styles = createThemedStyles({
     fontWeight: "800",
   },
   sectionChipLabelActive: {
-    color: "#04070b",
+    color: "#ffffff",
   },
   stack: {
     gap: spacing.md,
   },
   panelCard: {
-    backgroundColor: "#0b1219",
+    backgroundColor: "#151922",
     borderColor: palette.border,
     borderRadius: radii.xl,
     borderWidth: 1,
@@ -1376,10 +1372,10 @@ const styles = createThemedStyles({
     color: "#1e0407",
   },
   actionButtonLabelSuccess: {
-    color: "#042010",
+    color: "#ffffff",
   },
   actionButtonLabelAccent: {
-    color: "#071018",
+    color: "#0b0d12",
   },
   badge: {
     backgroundColor: "rgba(255,255,255,0.06)",

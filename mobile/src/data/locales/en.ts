@@ -882,6 +882,7 @@ const en = {
   fsNewReel: "{name} posted a new reel",
   fsNewStory: "{name} added to their story",
   nlNewContent: "New",
+  callPrivate: "Private call",
 };
 
 export type CopyStrings = typeof en;

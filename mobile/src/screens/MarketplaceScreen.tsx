@@ -284,12 +284,8 @@ const styles = createThemedStyles({
     paddingBottom: 96,
   },
   hero: {
-    backgroundColor: "#081018",
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: radii.xl,
-    borderWidth: 1,
     gap: spacing.md,
-    padding: spacing.xl,
+    paddingTop: spacing.sm,
   },
   heroHeader: {
     alignItems: "flex-start",
@@ -314,7 +310,7 @@ const styles = createThemedStyles({
   },
   inboxBubble: {
     alignItems: "center",
-    backgroundColor: "#101820",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: 20,
     borderWidth: 1,
@@ -326,7 +322,7 @@ const styles = createThemedStyles({
   inboxBadge: {
     alignItems: "center",
     backgroundColor: palette.accent,
-    borderColor: "#081018",
+    borderColor: "#151922",
     borderRadius: 10,
     borderWidth: 2,
     justifyContent: "center",
@@ -351,9 +347,9 @@ const styles = createThemedStyles({
     gap: spacing.sm,
   },
   metricCard: {
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderColor: "rgba(255,255,255,0.06)",
-    borderRadius: radii.lg,
+    backgroundColor: palette.surface,
+    borderColor: palette.border,
+    borderRadius: radii.md,
     borderWidth: 1,
     flex: 1,
     gap: 4,
@@ -374,9 +370,9 @@ const styles = createThemedStyles({
     gap: spacing.sm,
   },
   searchShell: {
-    backgroundColor: "#09131b",
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: radii.xl,
+    backgroundColor: palette.surface,
+    borderColor: palette.border,
+    borderRadius: radii.lg,
     borderWidth: 1,
     gap: spacing.md,
     padding: spacing.lg,
@@ -416,7 +412,7 @@ const styles = createThemedStyles({
     paddingRight: spacing.md,
   },
   filterChip: {
-    backgroundColor: "#0c151d",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: radii.pill,
     borderWidth: 1,
@@ -433,10 +429,10 @@ const styles = createThemedStyles({
     fontWeight: "700",
   },
   filterChipLabelActive: {
-    color: "#04070b",
+    color: "#ffffff",
   },
   statusChip: {
-    backgroundColor: "#0f1a24",
+    backgroundColor: "#151922",
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: radii.pill,
     borderWidth: 1,
@@ -453,7 +449,7 @@ const styles = createThemedStyles({
     fontWeight: "700",
   },
   statusChipLabelActive: {
-    color: "#04070b",
+    color: "#ffffff",
   },
   featuredRow: {
     gap: spacing.md,
@@ -467,9 +463,9 @@ const styles = createThemedStyles({
   },
   emptyCard: {
     alignItems: "center",
-    backgroundColor: "#09131b",
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: radii.xl,
+    backgroundColor: "#151922",
+    borderColor: palette.border,
+    borderRadius: radii.lg,
     borderWidth: 1,
     gap: spacing.sm,
     padding: spacing.xl,
