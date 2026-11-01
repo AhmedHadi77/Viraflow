@@ -1,4 +1,5 @@
 import { Image, Pressable, Text, View } from "react-native";
+import { sizedImageUrl } from "../services/mediaUpload";
 import { Avatar } from "./Avatar";
 import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
@@ -23,7 +24,7 @@ export function ProductCard({ product, seller, onPress, onSellerPress, nearbyLab
   const priceParts = getPriceParts(product);
   return (
     <Pressable onPress={onPress} style={styles.card}>
-      <Image source={{ uri: product.imageUrl }} style={styles.image} />
+      <Image source={{ uri: sizedImageUrl(product.imageUrl, 600) }} style={styles.image} />
       <View style={styles.imageBadge}>
         <Text style={styles.imageBadgeLabel}>{listingStatusLabel(product.listingStatus, copy)}</Text>
       </View>

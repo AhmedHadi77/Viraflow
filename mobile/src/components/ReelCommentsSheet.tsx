@@ -12,6 +12,8 @@ interface ReelCommentsSheetProps {
   onSubmit: () => void;
   isPosting?: boolean;
   bottomInset?: number;
+  /** The creator turned comments off (and the viewer isn't the creator). */
+  commentsOff?: boolean;
 }
 
 export function ReelCommentsSheet({
@@ -22,12 +24,14 @@ export function ReelCommentsSheet({
   onClose,
   onSubmit,
   isPosting = false,
+  commentsOff = false,
 }: ReelCommentsSheetProps) {
   const { language, currentUser } = useAppState();
   const copy = getCopy(language);
 
   return (
     <CommentsSheet
+      closedMessage={commentsOff ? copy.commentsOffNotice : undefined}
       comments={comments}
       currentUserAvatar={currentUser?.profileImage}
       draft={draft}

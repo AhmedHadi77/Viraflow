@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { sizedImageUrl } from "../services/mediaUpload";
 import { Avatar } from "../components/Avatar";
 import { useMemo, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
@@ -142,7 +143,7 @@ export function HashtagFeedScreen({
                     }}
                     style={styles.tile}
                   >
-                    <Image source={{ uri: item.imageUrl }} style={[styles.tileImage, { aspectRatio: item.aspectRatio }]} />
+                    <Image source={{ uri: sizedImageUrl(item.imageUrl, 600) }} style={[styles.tileImage, { aspectRatio: item.aspectRatio }]} />
                     <View style={styles.tileShade} />
                     <View style={styles.tileFooter}>
                       <Text style={styles.tileBadge}>{item.badge}</Text>

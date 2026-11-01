@@ -204,13 +204,17 @@ export function ReelDetailsScreen({ navigation, route }: { navigation: any; rout
         </View>
       ) : null}
 
-      <SectionTitle title={copy.reelDetails} subtitle={copy.commentPlaceholder} />
-      <InputField label={copy.comment} onChangeText={setCommentText} placeholder={copy.commentPlaceholder} value={commentText} multiline />
-      <PrimaryButton
-        disabled={isSubmittingComment || !commentText.trim()}
-        label={isSubmittingComment ? "Posting..." : copy.postComment}
-        onPress={submitComment}
-      />
+      <SectionTitle title={copy.reelDetails} subtitle={activeReel.commentsOff && !isOwnReel ? copy.commentsOffNotice : copy.commentPlaceholder} />
+      {activeReel.commentsOff && !isOwnReel ? null : (
+        <>
+          <InputField label={copy.comment} onChangeText={setCommentText} placeholder={copy.commentPlaceholder} value={commentText} multiline />
+          <PrimaryButton
+            disabled={isSubmittingComment || !commentText.trim()}
+            label={isSubmittingComment ? copy.posting : copy.postComment}
+            onPress={submitComment}
+          />
+        </>
+      )}
 
       <View style={styles.commentList}>
         {comments.map((comment) => (

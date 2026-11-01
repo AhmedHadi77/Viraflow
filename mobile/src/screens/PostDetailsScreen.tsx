@@ -55,8 +55,9 @@ export function PostDetailsScreen({
       return null;
     }
 
-    return `${post.likedBy.length} likes · ${post.commentCount} comments`;
-  }, [post]);
+    const likes = post.hideLikes && post.userId !== currentUser?.id ? "" : `${post.likedBy.length} likes · `;
+    return `${likes}${post.commentCount} comments`;
+  }, [currentUser?.id, post]);
 
   async function handleLike() {
     if (!post) {
@@ -189,6 +190,7 @@ export function PostDetailsScreen({
       </View>
 
       <CommentsSheet
+        closedMessage={post.commentsOff && post.userId !== currentUser?.id ? copy.commentsOffNotice : undefined}
         comments={comments}
         currentUserAvatar={currentUser?.profileImage}
         draft={commentDraft}

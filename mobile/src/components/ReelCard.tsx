@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Avatar } from "./Avatar";
+import { HeartBurst, PopOnActive, useDoubleTap } from "./Motion";
 import { useCopy } from "../utils/useCopy";
 import { fill } from "../utils/labels";
-import { StudioLayersOverlay } from "./studio/StudioLayers";
+import { hasTimedStudioContent, StudioLayersOverlay } from "./studio/StudioLayers";
 import { useStudioMusic } from "../services/studioMusic";
 import { useEventListener } from "expo";
 import { useEffect, useState } from "react";
@@ -84,6 +85,20 @@ export function ReelCard({
   const [localMuted, setLocalMuted] = useState(false);
   const isMuted = muted ?? localMuted;
   const [layerSize, setLayerSize] = useState({ width: 0, height: 0 });
+  // Timed text and captions follow the video's playback time.
+  const timedLayers = hasTimedStudioContent(reel.studio);
+  const [videoTime, setVideoTime] = useState(0);
+  const layerTime = timedLayers && playVideo ? videoTime : undefined;
+  // The creator can hide the like count from everyone else.
+  const likesHidden = Boolean(reel.hideLikes) && reel.userId !== currentUserId;
+  const [heartBurst, setHeartBurst] = useState(0);
+  // Double-tap the video to like it, with a heart burst (never unlikes).
+  function likeFromDoubleTap() {
+    setHeartBurst((value) => value + 1);
+    if (!isLiked) {
+      onLike();
+    }
+  }
   // A reel's soundtrack plays while the reel is playing and sound is on.
   useStudioMusic(reel.studio?.music, Boolean(playVideo) && !isMuted);
   const measureLayers = (event: LayoutChangeEvent) => {
@@ -117,6 +132,8 @@ export function ReelCard({
             <ReelMedia
               controlsBottomOffset={Math.max(0, bottomInset - 16)}
               muted={isMuted}
+              onDoubleTap={likeFromDoubleTap}
+              onTime={timedLayers ? setVideoTime : undefined}
               playVideo={playVideo}
               reel={reel}
               rounded={false}
@@ -127,7 +144,14 @@ export function ReelCard({
               pointerEvents="none"
               style={StyleSheet.absoluteFillObject}
             />
-            <StudioLayersOverlay height={layerSize.height} studio={reel.studio} width={layerSize.width} />
+            <StudioLayersOverlay
+              captionBottom={layerSize.height * 0.24}
+              currentTime={layerTime}
+              height={layerSize.height}
+              studio={reel.studio}
+              width={layerSize.width}
+            />
+            <HeartBurst size={110} trigger={heartBurst} />
           </View>
 
           {boostLabel ? (
@@ -184,7 +208,7 @@ export function ReelCard({
               <RailAction
                 active={isLiked}
                 icon={isLiked ? "heart" : "heart-outline"}
-                label={formatCompact(reel.likedBy.length)}
+                label={likesHidden ? "" : formatCompact(reel.likedBy.length)}
                 onPress={onLike}
               />
               <RailAction icon="chatbubble-ellipses-outline" label={formatCompact(commentCount)} onPress={onComment} />
@@ -239,8 +263,8 @@ export function ReelCard({
       </View>
 
       <View onLayout={measureLayers} style={styles.feedMediaShell}>
-        <ReelMedia muted={isMuted} playVideo={playVideo} reel={reel} rounded viewerMode={false} />
-        <StudioLayersOverlay height={layerSize.height} studio={reel.studio} width={layerSize.width} />
+        <ReelMedia muted={isMuted} onTime={timedLayers ? setVideoTime : undefined} playVideo={playVideo} reel={reel} rounded viewerMode={false} />
+        <StudioLayersOverlay currentTime={layerTime} height={layerSize.height} studio={reel.studio} width={layerSize.width} />
         <Pressable hitSlop={12} onPress={handleToggleMuted} style={styles.feedAudioToggle}>
           <Ionicons color="#ffffff" name={isMuted ? "volume-mute" : "volume-high"} size={16} />
         </Pressable>
@@ -255,7 +279,10 @@ export function ReelCard({
         {onSave ? <FeedAction active={saved} icon={saved ? "bookmark" : "bookmark-outline"} onPress={onSave} /> : null}
       </View>
 
-      <Text style={styles.feedMetrics}>{formatCompact(reel.likedBy.length)} likes | {formatCompact(reel.viewCount)} views</Text>
+      <Text style={styles.feedMetrics}>
+        {likesHidden ? "" : `${formatCompact(reel.likedBy.length)} likes | `}
+        {formatCompact(reel.viewCount)} views
+      </Text>
       <Text numberOfLines={2} style={styles.feedCaption}>
         <Text style={styles.feedCaptionHandle}>@{creator.username}</Text> {reel.caption}
       </Text>
@@ -275,6 +302,8 @@ function ReelMedia({
   muted,
   viewerMode,
   controlsBottomOffset = 24,
+  onTime,
+  onDoubleTap,
 }: {
   reel: Reel;
   playVideo: boolean;
@@ -282,6 +311,8 @@ function ReelMedia({
   muted: boolean;
   viewerMode?: boolean;
   controlsBottomOffset?: number;
+  onTime?: (seconds: number) => void;
+  onDoubleTap?: () => void;
 }) {
   const canPlayVideo = playVideo && isPlayableVideoSource(reel.videoUrl);
   const playableVideoUri = canPlayVideo ? normalizePlayableVideoUri(reel.videoUrl) : "";
@@ -293,6 +324,8 @@ function ReelMedia({
         fallbackUri={reel.thumbnailUrl}
         hasSoundtrack={Boolean(reel.studio?.music)}
         muted={muted}
+        onDoubleTap={onDoubleTap}
+        onTime={onTime}
         originalVolume={reel.studio?.originalVolume ?? 1}
         rounded={rounded}
         uri={playableVideoUri}
@@ -322,6 +355,8 @@ function PlayableReelMedia({
   hasSoundtrack = false,
   viewerMode = false,
   controlsBottomOffset = 24,
+  onTime,
+  onDoubleTap,
 }: {
   uri: string;
   fallbackUri: string;
@@ -331,6 +366,8 @@ function PlayableReelMedia({
   hasSoundtrack?: boolean;
   viewerMode?: boolean;
   controlsBottomOffset?: number;
+  onTime?: (seconds: number) => void;
+  onDoubleTap?: () => void;
 }) {
   const expoVideo = getExpoVideoModule();
 
@@ -353,6 +390,8 @@ function PlayableReelMedia({
       expoVideo={expoVideo}
       hasSoundtrack={hasSoundtrack}
       muted={muted}
+      onDoubleTap={onDoubleTap}
+      onTime={onTime}
       originalVolume={originalVolume}
       rounded={rounded}
       uri={uri}
@@ -370,6 +409,8 @@ function LoadedPlayableReelMedia({
   hasSoundtrack,
   viewerMode,
   controlsBottomOffset,
+  onTime,
+  onDoubleTap,
 }: {
   expoVideo: ExpoVideoModule;
   uri: string;
@@ -379,6 +420,8 @@ function LoadedPlayableReelMedia({
   hasSoundtrack: boolean;
   viewerMode: boolean;
   controlsBottomOffset: number;
+  onTime?: (seconds: number) => void;
+  onDoubleTap?: () => void;
 }) {
   const { VideoView, useVideoPlayer } = expoVideo;
   const player = useVideoPlayer(uri, (videoPlayer) => {
@@ -407,6 +450,7 @@ function LoadedPlayableReelMedia({
 
   useEventListener(player, "timeUpdate", ({ currentTime }) => {
     setCurrentTimeSeconds(currentTime);
+    onTime?.(currentTime);
   });
 
   useEffect(() => {
@@ -486,6 +530,8 @@ function LoadedPlayableReelMedia({
     }
   }
 
+  const handleCenterTap = useDoubleTap(togglePlayback, onDoubleTap);
+
   function handleProgressTrackLayout(event: LayoutChangeEvent) {
     setProgressTrackWidth(event.nativeEvent.layout.width);
   }
@@ -517,7 +563,7 @@ function LoadedPlayableReelMedia({
 
       {viewerMode ? (
         <>
-          <Pressable onPress={togglePlayback} style={styles.centerPlaybackHotspot}>
+          <Pressable onPress={handleCenterTap} style={styles.centerPlaybackHotspot}>
             {showControls || !isPlaying ? (
               <View style={styles.centerPlaybackButton}>
                 <Ionicons color="#ffffff" name={isPlaying ? "pause" : "play"} size={24} />
@@ -590,7 +636,9 @@ function RailAction({
 }) {
   return (
     <Pressable hitSlop={6} onPress={onPress} style={styles.railAction}>
-      <Ionicons color={active ? activeColor : "#ffffff"} name={icon} size={28} style={styles.railIcon} />
+      <PopOnActive active={active}>
+        <Ionicons color={active ? activeColor : "#ffffff"} name={icon} size={28} style={styles.railIcon} />
+      </PopOnActive>
       <Text numberOfLines={1} style={styles.railActionLabel}>
         {label}
       </Text>

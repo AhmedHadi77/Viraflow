@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import { StudioLayersOverlay } from "./studio/StudioLayers";
+import { hasTimedStudioContent, StudioLayersOverlay } from "./studio/StudioLayers";
 import { Avatar } from "./Avatar";
+import { HeartBurst, PopOnActive, useDoubleTap } from "./Motion";
 import { useCopy } from "../utils/useCopy";
 import { formatDate } from "../utils/timeFormatting";
 import { useEventListener } from "expo";
@@ -16,7 +17,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { buildCloudinaryPlayableVideoUrl } from "../services/mediaUpload";
+import { buildCloudinaryPlayableVideoUrl, sizedImageUrl } from "../services/mediaUpload";
 import { Post, PostMediaItem, User } from "../types/models";
 import { palette, radii, spacing, createThemedStyles } from "../theme";
 
@@ -54,7 +55,18 @@ export function PostCard({
   const [activeIndex, setActiveIndex] = useState(0);
   const [carouselWidth, setCarouselWidth] = useState(0);
   const isLiked = currentUserId ? post.likedBy.includes(currentUserId) : false;
+  // The creator can hide the like count from everyone else.
+  const likesHidden = Boolean(post.hideLikes) && post.userId !== currentUserId;
   const activeMedia = post.media[activeIndex] ?? post.media[0];
+  const [heartBurst, setHeartBurst] = useState(0);
+
+  // Double-tap the photo or video to like it, with a heart burst (never unlikes, like Instagram).
+  function likeFromDoubleTap() {
+    setHeartBurst((value) => value + 1);
+    if (!isLiked) {
+      onLike();
+    }
+  }
 
   function handleCarouselLayout(event: LayoutChangeEvent) {
     setCarouselWidth(event.nativeEvent.layout.width);
@@ -127,10 +139,12 @@ export function PostCard({
               key={media.id}
               style={[styles.mediaPage, carouselWidth ? { width: carouselWidth } : null]}
             >
-              <PostMediaFrame active={mediaPlaybackEnabled && activeMedia?.id === media.id} media={media} />
+              <PostMediaFrame active={mediaPlaybackEnabled && activeMedia?.id === media.id} media={media} onDoubleTap={likeFromDoubleTap} />
             </View>
           ))}
         </ScrollView>
+
+        <HeartBurst trigger={heartBurst} />
 
         {post.media.length > 1 ? (
           <View style={styles.dotRow}>
@@ -148,7 +162,7 @@ export function PostCard({
         <View style={styles.primaryActions}>
           <ActionButton
             active={isLiked}
-            count={formatCount(post.likedBy.length)}
+            count={likesHidden ? undefined : formatCount(post.likedBy.length)}
             icon={isLiked ? "heart" : "heart-outline"}
             label={copy.like}
             onPress={onLike}
@@ -174,8 +188,11 @@ export function PostCard({
   );
 }
 
-function PostMediaFrame({ media, active }: { media: PostMediaItem; active: boolean }) {
+function PostMediaFrame({ media, active, onDoubleTap }: { media: PostMediaItem; active: boolean; onDoubleTap?: () => void }) {
+  const handlePhotoTap = useDoubleTap(undefined, onDoubleTap);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const timedLayers = media.type === "video" && hasTimedStudioContent(media.studio);
+  const [videoTime, setVideoTime] = useState(0);
   return (
     <View
       onLayout={(event) => {
@@ -185,24 +202,53 @@ function PostMediaFrame({ media, active }: { media: PostMediaItem; active: boole
       style={styles.mediaImage}
     >
       {media.type === "video" ? (
-        <InlineVideo media={media} playing={active} />
+        <InlineVideo media={media} onDoubleTap={onDoubleTap} onTime={timedLayers ? setVideoTime : undefined} playing={active} />
       ) : (
-        <Image resizeMode="cover" source={{ uri: media.url }} style={styles.mediaImage} />
+        <Pressable accessible={false} onPress={handlePhotoTap} style={styles.mediaImage}>
+          <Image
+            accessibilityIgnoresInvertColors
+            accessibilityLabel={media.altText}
+            accessible={Boolean(media.altText)}
+            resizeMode="cover"
+            source={{ uri: sizedImageUrl(media.url, 1080) }}
+            style={styles.mediaImage}
+          />
+        </Pressable>
       )}
-      <StudioLayersOverlay height={size.height} studio={media.studio} width={size.width} />
+      <StudioLayersOverlay currentTime={timedLayers && active ? videoTime : undefined} height={size.height} studio={media.studio} width={size.width} />
     </View>
   );
 }
 
-function InlineVideo({ media, playing }: { media: PostMediaItem; playing: boolean }) {
+function InlineVideo({
+  media,
+  playing,
+  onTime,
+  onDoubleTap,
+}: {
+  media: PostMediaItem;
+  playing: boolean;
+  onTime?: (seconds: number) => void;
+  onDoubleTap?: () => void;
+}) {
   const expoVideo = getExpoVideoModule();
   const [muted, setMuted] = useState(true);
 
   if (!expoVideo) {
-    return <Image resizeMode="cover" source={{ uri: media.thumbnailUrl || media.url }} style={styles.mediaImage} />;
+    return <Image resizeMode="cover" source={{ uri: sizedImageUrl(media.thumbnailUrl || media.url, 1080) }} style={styles.mediaImage} />;
   }
 
-  return <LoadedInlineVideo expoVideo={expoVideo} media={media} muted={muted} onToggleMuted={() => setMuted((current) => !current)} playing={playing} />;
+  return (
+    <LoadedInlineVideo
+      expoVideo={expoVideo}
+      media={media}
+      muted={muted}
+      onDoubleTap={onDoubleTap}
+      onTime={onTime}
+      onToggleMuted={() => setMuted((current) => !current)}
+      playing={playing}
+    />
+  );
 }
 
 function LoadedInlineVideo({
@@ -211,12 +257,16 @@ function LoadedInlineVideo({
   playing,
   muted,
   onToggleMuted,
+  onTime,
+  onDoubleTap,
 }: {
   expoVideo: ExpoVideoModule;
   media: PostMediaItem;
   playing: boolean;
   muted: boolean;
   onToggleMuted: () => void;
+  onTime?: (seconds: number) => void;
+  onDoubleTap?: () => void;
 }) {
   const source = useMemo(
     () => (media.url.includes("res.cloudinary.com") ? buildCloudinaryPlayableVideoUrl(media.url) : media.url),
@@ -239,6 +289,10 @@ function LoadedInlineVideo({
 
   useEventListener(player, "playingChange", ({ isPlaying: nextIsPlaying }) => {
     setIsPlaying(nextIsPlaying);
+  });
+
+  useEventListener(player, "timeUpdate", ({ currentTime }) => {
+    onTime?.(currentTime);
   });
 
   useEffect(() => {
@@ -284,21 +338,20 @@ function LoadedInlineVideo({
     };
   }, [muted, player, playing]);
 
+  const handleTap = useDoubleTap(() => {
+    try {
+      if (player.playing) {
+        player.pause();
+      } else {
+        player.play();
+      }
+    } catch {
+      // Ignore playback toggle failures on unstable native state.
+    }
+  }, onDoubleTap);
+
   return (
-    <Pressable
-      onPress={() => {
-        try {
-          if (player.playing) {
-            player.pause();
-          } else {
-            player.play();
-          }
-        } catch {
-          // Ignore playback toggle failures on unstable native state.
-        }
-      }}
-      style={styles.videoShell}
-    >
+    <Pressable onPress={handleTap} style={styles.videoShell}>
       <VideoView
         allowsPictureInPicture={false}
         contentFit="cover"
@@ -350,7 +403,9 @@ function ActionButton({
         pressed ? styles.actionPressed : null,
       ]}
     >
-      <Ionicons color={active ? activeColor : palette.text} name={icon} size={20} />
+      <PopOnActive active={active}>
+        <Ionicons color={active ? activeColor : palette.text} name={icon} size={20} />
+      </PopOnActive>
       {count ? <Text style={[styles.actionCount, active ? { color: activeColor } : null]}>{count}</Text> : null}
     </Pressable>
   );

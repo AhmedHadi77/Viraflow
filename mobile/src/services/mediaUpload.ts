@@ -1,6 +1,16 @@
 import { Platform } from "react-native";
 import { getPublicApiBaseUrl } from "./publicEnv";
 import type { MediaEditConfig, MediaEditFilters } from "../types/models";
+import {
+  cloudinaryPublicIdFromUrl,
+  imageCanvasSteps,
+  joinedClips,
+  orientationSteps,
+  photoEffectStep,
+  videoEffectSteps,
+  videoStructureSteps,
+  voiceoverSteps,
+} from "./studioRender";
 
 const API_BASE_URL = getPublicApiBaseUrl();
 
@@ -130,6 +140,140 @@ export async function uploadDataUrlToCloudinary(input: UploadDataUrlInput): Prom
   return uploadSignedFormData(signature, formData, input.resourceType);
 }
 
+/**
+ * Copies a file the media service can already reach (for example a photo it turned into a short video)
+ * into a new upload, so it can be edited like any uploaded video.
+ */
+export async function uploadRemoteUrlToCloudinary(input: CloudinarySignaturePayload & { token: string; url: string }): Promise<UploadMediaResult> {
+  const signature = await createCloudinaryUploadSignature(input.token, {
+    folder: input.folder,
+    publicIdPrefix: input.publicIdPrefix,
+    resourceType: input.resourceType,
+  });
+  const formData = new FormData();
+  formData.append("file", input.url);
+  formData.append("api_key", signature.apiKey);
+  formData.append("folder", signature.folder);
+  formData.append("timestamp", String(signature.timestamp));
+  formData.append("signature", signature.signature);
+  if (signature.publicId) {
+    formData.append("public_id", signature.publicId);
+  }
+  return uploadSignedFormData(signature, formData, input.resourceType);
+}
+
+export interface RenderCheckResult {
+  ready: boolean;
+  /** The media service refused the edits (bad combination) or made an empty file. */
+  failed: boolean;
+  status: number;
+  error?: string;
+}
+
+/**
+ * Asks the media service for an edited video or photo and waits while it is being made (it answers 423
+ * until the file is ready). Used before publishing so viewers never get a link that isn't ready, and so a
+ * refused edit can fall back to a simpler version.
+ */
+export async function waitForCloudinaryRender(
+  url: string,
+  options?: { timeoutMs?: number; onWaiting?: (elapsedMs: number) => void; minimumBytes?: number }
+): Promise<RenderCheckResult> {
+  const started = Date.now();
+  const timeoutMs = options?.timeoutMs ?? 90_000;
+  let networkFailures = 0;
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const response = await fetch(url, { headers: { Range: "bytes=0-1023" } });
+      const status = response.status;
+      const error = response.headers.get("x-cld-error") ?? undefined;
+      const range = response.headers.get("content-range") ?? "";
+      const lengthHeader = response.headers.get("content-length") ?? "";
+      try {
+        await response.arrayBuffer();
+      } catch {
+        // Only the headers matter.
+      }
+      if (status === 423 || status === 420) {
+        options?.onWaiting?.(Date.now() - started);
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+        continue;
+      }
+      if (status === 200 || status === 206) {
+        const total = Number(range.split("/")[1] || (status === 200 ? lengthHeader : "") || 0);
+        if (options?.minimumBytes && total > 0 && total < options.minimumBytes) {
+          return { ready: false, failed: true, status, error: "empty result" };
+        }
+        return { ready: true, failed: false, status };
+      }
+      if (status >= 400 && status < 500) {
+        return { ready: false, failed: true, status, error };
+      }
+      networkFailures += 1;
+    } catch {
+      networkFailures += 1;
+    }
+    if (networkFailures >= 4) {
+      return { ready: false, failed: false, status: 0, error: "network" };
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+  }
+  return { ready: false, failed: false, status: 423, error: "still processing" };
+}
+
+/**
+ * A short video made from an uploaded photo: it shows for `seconds` with a gentle zoom (the media
+ * service's zoom-and-pan effect), sized to the video frame. Uploading this link as a video lets the photo
+ * start a video or join one like any clip.
+ */
+export function buildPhotoVideoSourceUrl(imageUrl: string, options: { seconds: number; width: number; height: number }) {
+  if (!imageUrl.includes("/image/upload/")) {
+    return null;
+  }
+  const seconds = Math.min(10, Math.max(1, Math.round(options.seconds)));
+  const withMp4 = imageUrl.split("?")[0].replace(/\.[a-zA-Z0-9]+$/, ".mp4");
+  return injectCloudinaryTransformations(withMp4, "image", [
+    `e_zoompan:du_${seconds}`,
+    `w_${options.width},h_${options.height},c_fill,g_center`,
+    "q_auto:good",
+  ]);
+}
+
+/**
+ * The sound of an edited video for automatic captions: the same edits with the picture dropped
+ * (vc_none), as a small audio-only mp4. (An mp3 can't be made from joined clips or effects.)
+ */
+export function buildCloudinaryEditedAudioUrl(
+  url: string,
+  editConfig?: MediaEditConfig,
+  options?: { durationSeconds?: number; mode?: "story" | "reel" | "post" }
+) {
+  const videoUrl = buildCloudinaryEditedVideoUrl(url, editConfig, { ...options, quality: "good" });
+  return videoUrl.replace("/q_auto:good,f_mp4,vc_auto,ac_aac/", "/vc_none,ac_aac/");
+}
+
+/** Automatic captions: the server turns the speech in a finished video's sound into timed lines. */
+export async function requestStudioCaptions(token: string, audioUrl: string, language?: string) {
+  const response = await fetch(`${API_BASE_URL}/media/captions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ url: audioUrl, ...(language && /^[a-z]{2}$/.test(language) ? { language } : {}) }),
+  });
+  const payload = (await response.json().catch(() => ({}))) as {
+    captions?: Array<{ start: number; end: number; text: string }>;
+    message?: string;
+  };
+  if (!response.ok) {
+    const error = new Error(payload.message || "Captions could not be made right now.") as Error & { status?: number };
+    error.status = response.status;
+    throw error;
+  }
+  return Array.isArray(payload.captions) ? payload.captions : [];
+}
+
 export async function checkUploadedMediaSafety(input: MediaModerationCheckInput) {
   const response = await fetch(`${API_BASE_URL}/media/moderation/check`, {
     method: "POST",
@@ -207,6 +351,14 @@ export function buildCloudinaryPlayableVideoUrl(url: string, quality: "eco" | "g
   if (!url.includes("/video/upload/")) {
     return url;
   }
+  // Edited videos already end with a playable format; keep their exact link (the one prepared when it
+  // was shared) instead of asking the media service for yet another version.
+  const path = url.split("/video/upload/")[1]?.split("?")[0] ?? "";
+  const versionIndex = path.split("/").findIndex((segment) => /^v\d+$/.test(segment));
+  const transforms = versionIndex > 0 ? path.split("/").slice(0, versionIndex).join("/") : "";
+  if (/(^|[,/])f_mp4([,/]|$)/.test(transforms)) {
+    return url;
+  }
 
   const transform =
     quality === "best"
@@ -219,6 +371,8 @@ export function buildCloudinaryPlayableVideoUrl(url: string, quality: "eco" | "g
 
 export function buildCloudinaryEditedImageUrl(url: string, editConfig?: MediaEditConfig, quality: "auto" | "eco" | "good" = "good") {
   const transformationComponents = [
+    ...imageCanvasSteps(editConfig?.canvas, cloudinaryPublicIdFromUrl(url)),
+    photoEffectStep(editConfig?.photoEffect),
     ...buildFilterComponents(editConfig?.filters),
     ...buildOverlayComponents(editConfig),
     `${cloudinaryQuality(quality)},f_auto`,
@@ -229,10 +383,21 @@ export function buildCloudinaryEditedImageUrl(url: string, editConfig?: MediaEdi
 export function buildCloudinaryEditedVideoUrl(
   url: string,
   editConfig?: MediaEditConfig,
-  options?: { durationSeconds?: number; quality?: "eco" | "good" | "best" }
+  options?: {
+    durationSeconds?: number;
+    quality?: "eco" | "good" | "best";
+    mode?: "story" | "reel" | "post";
+    /** Fallbacks when the media service can't make the full version: "basic" keeps joined clips and the
+     * frame but drops effects and the voiceover; "simple" keeps only trim, speed and filters. */
+    level?: "full" | "basic" | "simple";
+  }
 ) {
+  const level = options?.level ?? "full";
   const trimComponent = buildVideoTrimComponent(editConfig, options?.durationSeconds);
   const playbackComponent = buildVideoPlaybackComponent(editConfig);
+  const structure = level === "simple" ? [] : videoStructureSteps(editConfig, options?.mode);
+  const effects = level === "full" ? videoEffectSteps(editConfig?.effects, joinedClips(editConfig).length > 0) : { middle: [], fades: [] };
+  const voiceover = level === "full" ? voiceoverSteps(editConfig) : [];
   const qualityComponent =
     options?.quality === "best"
       ? "q_auto:best,f_mp4,vc_auto,ac_aac"
@@ -241,9 +406,13 @@ export function buildCloudinaryEditedVideoUrl(
         : "q_auto:good,f_mp4,vc_auto,ac_aac";
   const transformationComponents = [
     trimComponent,
+    ...structure,
     playbackComponent,
+    ...effects.middle,
     ...buildFilterComponents(editConfig?.filters, "video"),
     ...buildOverlayComponents(editConfig),
+    ...voiceover,
+    ...effects.fades,
     qualityComponent,
   ];
   return injectCloudinaryTransformations(url, "video", transformationComponents);
@@ -263,6 +432,7 @@ export function buildCloudinaryVideoThumbnailUrl(
   const startOffset = typeof options?.startOffsetSeconds === "number" ? options.startOffsetSeconds : trimStart;
   return injectCloudinaryTransformations(thumbnailUrl, "video", [
     `so_${roundCloudinaryTime(startOffset)}`,
+    ...orientationSteps(options?.editConfig?.canvas),
     ...buildFilterComponents(options?.editConfig?.filters, "video"),
     ...buildOverlayComponents(options?.editConfig),
     "w_900,h_1600,c_fill,q_auto,f_jpg",
@@ -480,4 +650,42 @@ export function repairMediaUrl<T extends string | undefined | null>(url: T): T {
     return url;
   }
   return url.replace(/q_auto:auto/g, "q_auto") as T;
+}
+
+const CLOUDINARY_TRANSFORM_SEGMENT = /^[a-z]{1,4}_[^/]*$/;
+
+/**
+ * Asks Cloudinary for a copy of a photo no wider than `width` pixels. Photos are stored at full camera
+ * resolution; showing a screen-sized copy makes feeds, grids and avatars load several times faster
+ * and use far less data. Non-Cloudinary links are returned unchanged.
+ */
+export function sizedImageUrl<T extends string | undefined | null>(url: T, width: number): T {
+  const repaired = repairMediaUrl(url);
+  if (typeof repaired !== "string") {
+    return repaired;
+  }
+  const marker = "/image/upload/";
+  const markerIndex = repaired.indexOf(marker);
+  if (markerIndex < 0) {
+    return repaired;
+  }
+  const prefix = repaired.slice(0, markerIndex + marker.length);
+  const [pathPart, queryPart] = repaired.slice(markerIndex + marker.length).split("?");
+  const segments = pathPart.split("/").filter(Boolean);
+  // Upload links always carry a version segment (v123...). Everything before it is the existing
+  // transformation chain; without one, leave the link alone rather than guess.
+  const transformCount = segments.findIndex((segment) => /^v\d+$/.test(segment));
+  if (
+    transformCount < 0 ||
+    !segments.slice(0, transformCount).every((segment) => segment.split(",").every((part) => CLOUDINARY_TRANSFORM_SEGMENT.test(part)))
+  ) {
+    return repaired;
+  }
+  const transforms = segments.slice(0, transformCount);
+  if (transforms.some((segment) => /(^|,)w_\d+/.test(segment) && /(^|,)c_/.test(segment))) {
+    return repaired;
+  }
+  const safeWidth = Math.max(64, Math.min(1600, Math.round(width)));
+  const rebuilt = `${prefix}${[...transforms, `c_limit,w_${safeWidth}`, ...segments.slice(transformCount)].join("/")}`;
+  return (queryPart ? `${rebuilt}?${queryPart}` : rebuilt) as T;
 }

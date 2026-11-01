@@ -1,0 +1,106 @@
+[
+ {
+  "label": "A vc_none mp4",
+  "url": "__VIDEO_BASE__/so_0.5,eo_3.5/a_hflip/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_wipeleft;du_1),l_video:__VIDL__/so_5,eo_7/a_hflip/w_720,h_1280,c_fill,g_center/fl_layer_apply/fl_splice:transition_(name_radial;du_1),du_3,l___IMGL__/a_hflip/w_720,h_1280,c_fill,g_center/fl_layer_apply/e_accelerate:-25/e_saturation:-18/e_noise:10/e_volume:-50/l_audio:__VIDL__/fl_layer_apply/e_fade:600/e_fade:-600/vc_none,ac_aac/v1/__VID__.mp4"
+ },
+ {
+  "label": "B vc_none m4a",
+  "url": "__VIDEO_BASE__/so_0.5,eo_3.5/a_hflip/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_wipeleft;du_1),l_video:__VIDL__/so_5,eo_7/a_hflip/w_720,h_1280,c_fill,g_center/fl_layer_apply/fl_splice:transition_(name_radial;du_1),du_3,l___IMGL__/a_hflip/w_720,h_1280,c_fill,g_center/fl_layer_apply/e_accelerate:-25/e_saturation:-18/e_noise:10/e_volume:-50/l_audio:__VIDL__/fl_layer_apply/e_fade:600/e_fade:-600/vc_none/v1/__VID__.m4a"
+ },
+ {
+  "label": "C small mp4",
+  "url": "__VIDEO_BASE__/so_0.5,eo_3.5/a_hflip/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_wipeleft;du_1),l_video:__VIDL__/so_5,eo_7/a_hflip/w_720,h_1280,c_fill,g_center/fl_layer_apply/fl_splice:transition_(name_radial;du_1),du_3,l___IMGL__/a_hflip/w_720,h_1280,c_fill,g_center/fl_layer_apply/e_accelerate:-25/e_saturation:-18/e_noise:10/e_volume:-50/l_audio:__VIDL__/fl_layer_apply/e_fade:600/e_fade:-600/w_360,c_scale/q_auto:eco,f_mp4,vc_auto,ac_aac/v1/__VID__.mp4"
+ },
+ {
+  "label": "D clips only mp3",
+  "url": "__VIDEO_BASE__/so_0.5,eo_3.5/w_720,h_1280,c_fill,g_center/fl_splice,l_video:__VIDL__/so_5,eo_7/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp3"
+ },
+ {
+  "label": "E effects only mp3",
+  "url": "__VIDEO_BASE__/so_0.5,eo_3.5/e_accelerate:-25/e_fade:600/v1/__VID__.mp3"
+ },
+ {
+  "label": "F voice only mp3",
+  "url": "__VIDEO_BASE__/so_0,eo_4/e_volume:-50/l_audio:__VIDL__/fl_layer_apply/v1/__VID__.mp3"
+ },
+ {
+  "label": "tr fadegrays",
+  "url": "__VIDEO_BASE__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_fadegrays;du_1),l_video:__VIDL__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp4"
+ },
+ {
+  "label": "tr hblur",
+  "url": "__VIDEO_BASE__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_hblur;du_1),l_video:__VIDL__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp4"
+ },
+ {
+  "label": "tr distance",
+  "url": "__VIDEO_BASE__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_distance;du_1),l_video:__VIDL__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp4"
+ },
+ {
+  "label": "tr wiperight",
+  "url": "__VIDEO_BASE__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_wiperight;du_1),l_video:__VIDL__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp4"
+ },
+ {
+  "label": "tr wipeup",
+  "url": "__VIDEO_BASE__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_wipeup;du_1),l_video:__VIDL__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp4"
+ },
+ {
+  "label": "tr wipedown",
+  "url": "__VIDEO_BASE__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_wipedown;du_1),l_video:__VIDL__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp4"
+ },
+ {
+  "label": "tr slideright",
+  "url": "__VIDEO_BASE__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_slideright;du_1),l_video:__VIDL__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp4"
+ },
+ {
+  "label": "tr slidedown",
+  "url": "__VIDEO_BASE__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_slidedown;du_1),l_video:__VIDL__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp4"
+ },
+ {
+  "label": "tr smoothup",
+  "url": "__VIDEO_BASE__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_smoothup;du_1),l_video:__VIDL__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp4"
+ },
+ {
+  "label": "tr smoothright",
+  "url": "__VIDEO_BASE__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_smoothright;du_1),l_video:__VIDL__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp4"
+ },
+ {
+  "label": "tr circleclose",
+  "url": "__VIDEO_BASE__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_circleclose;du_1),l_video:__VIDL__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp4"
+ },
+ {
+  "label": "tr circlecrop",
+  "url": "__VIDEO_BASE__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_circlecrop;du_1),l_video:__VIDL__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp4"
+ },
+ {
+  "label": "tr rectcrop",
+  "url": "__VIDEO_BASE__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_rectcrop;du_1),l_video:__VIDL__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp4"
+ },
+ {
+  "label": "tr horzopen",
+  "url": "__VIDEO_BASE__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_horzopen;du_1),l_video:__VIDL__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp4"
+ },
+ {
+  "label": "tr vertopen",
+  "url": "__VIDEO_BASE__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_vertopen;du_1),l_video:__VIDL__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp4"
+ },
+ {
+  "label": "tr diagtl",
+  "url": "__VIDEO_BASE__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_diagtl;du_1),l_video:__VIDL__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp4"
+ },
+ {
+  "label": "tr squeezeh",
+  "url": "__VIDEO_BASE__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_squeezeh;du_1),l_video:__VIDL__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp4"
+ },
+ {
+  "label": "tr squeezev",
+  "url": "__VIDEO_BASE__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_squeezev;du_1),l_video:__VIDL__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp4"
+ },
+ {
+  "label": "tr hlslice",
+  "url": "__VIDEO_BASE__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_hlslice;du_1),l_video:__VIDL__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp4"
+ },
+ {
+  "label": "tr zoomout",
+  "url": "__VIDEO_BASE__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_splice:transition_(name_zoomout;du_1),l_video:__VIDL__/so_0,eo_3/w_720,h_1280,c_fill,g_center/fl_layer_apply/v1/__VID__.mp4"
+ }
+]

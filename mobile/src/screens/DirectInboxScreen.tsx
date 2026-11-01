@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Avatar } from "../components/Avatar";
-import { Alert, Image, Pressable, Text, View } from "react-native";
-import { InputField } from "../components/InputField";
+import { Ionicons } from "@expo/vector-icons";
+import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import { Screen } from "../components/Screen";
-import { SectionTitle } from "../components/SectionTitle";
 import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
 import { palette, radii, spacing, createThemedStyles } from "../theme";
-import { formatRelativeTime, formatLocaleDate } from "../utils/timeFormatting";
-import { DEFAULT_PROFILE_IMAGE } from "../data/defaultMedia";
+import { formatRelativeTime } from "../utils/timeFormatting";
 
 export function DirectInboxScreen({ navigation }: { navigation: any }) {
   const {
@@ -76,349 +74,343 @@ export function DirectInboxScreen({ navigation }: { navigation: any }) {
     }
   }
 
-  return (
-    <Screen scrollable>
-      <View style={styles.heroCard}>
-        <SectionTitle
-          title={copy.directInboxTitle}
-          subtitle={
-            userThreads.length > 0
-              ? `${userThreads.length} ${copy.directInboxSubtitleActive} ${totalUnreadCount} ${copy.unreadMessages.toLowerCase()}.`
-              : copy.directInboxSubtitleEmpty
-          }
-        />
-        <View style={styles.heroStats}>
-          <View style={styles.heroStat}>
-            <Text style={styles.heroValue}>{userThreads.length}</Text>
-            <Text style={styles.heroLabel}>{copy.unlockedChats}</Text>
-          </View>
-          <View style={styles.heroStat}>
-            <Text style={styles.heroValue}>{totalUnreadCount}</Text>
-            <Text style={styles.heroLabel}>{copy.unreadMessages}</Text>
-          </View>
-        </View>
-      </View>
+  const [filter, setFilter] = useState<"all" | "unread">("all");
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const visibleThreads = userThreads.filter((thread) => {
+    if (filter === "unread" && getDirectUnreadCount(thread.id) === 0) {
+      return false;
+    }
+    if (!normalizedQuery) {
+      return true;
+    }
+    const counterpartId = thread.participantIds.find((participantId) => participantId !== currentUser?.id);
+    const counterpart = counterpartId ? getUserById(counterpartId) : undefined;
+    return Boolean(
+      counterpart &&
+        (counterpart.name.toLowerCase().includes(normalizedQuery) || counterpart.username.toLowerCase().includes(normalizedQuery))
+    );
+  });
+  const threadUserIds = new Set(userThreads.flatMap((thread) => thread.participantIds));
+  const newPeople = searchResults.filter((user) => !threadUserIds.has(user.id));
 
-      <View style={styles.searchCard}>
-        <SectionTitle
-          title={copy.startNewChat}
-          subtitle={copy.directSearchSubtitle}
-        />
-        <InputField
-          label={copy.searchUsersLabel}
+  return (
+    <Screen scrollable contentContainerStyle={styles.content}>
+      <View style={styles.searchField}>
+        <Ionicons color={palette.muted} name="search" size={18} />
+        <TextInput
+          accessibilityLabel={copy.searchUsersLabel}
+          autoCapitalize="none"
+          autoCorrect={false}
           onChangeText={setSearchQuery}
           placeholder={copy.searchUsersPlaceholder}
+          placeholderTextColor={palette.mutedSoft}
+          returnKeyType="search"
+          style={styles.searchInput}
           value={searchQuery}
         />
-        {searchResults.length > 0 ? (
-          <View style={styles.searchResults}>
-            {searchResults.map((user) => {
-              const unlocked = canDirectMessageUser(user.id);
-              return (
-                <Pressable
-                  key={user.id}
-                  onPress={() => {
-                    void handleStartChat(user.id);
-                  }}
-                  style={styles.searchResultCard}
-                >
-                  <Avatar name={user.name} style={styles.searchAvatar} uri={user.profileImage} />
-                  <View style={styles.searchBody}>
-                    <Text style={styles.searchName}>{user.name}</Text>
-                    <Text style={styles.searchMeta}>@{user.username}</Text>
-                    <Text numberOfLines={1} style={styles.searchHeadline}>
-                      {user.headline || copy.creatorStudio}
-                    </Text>
-                  </View>
-                  <View style={[styles.searchActionPill, unlocked ? styles.searchActionPillActive : null]}>
-                    <Text style={[styles.searchActionLabel, unlocked ? styles.searchActionLabelActive : null]}>
-                      {unlocked ? copy.message : copy.locked}
-                    </Text>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
-        ) : searchQuery.trim() ? (
-          <View style={styles.emptySearchCard}>
-            <Text style={styles.emptySearchTitle}>{copy.noUsersMatchedTitle}</Text>
-            <Text style={styles.emptySearchBody}>{copy.noUsersMatchedBody}</Text>
-          </View>
+        {searchQuery ? (
+          <Pressable accessibilityLabel={copy.cancel} hitSlop={8} onPress={() => setSearchQuery("")}>
+            <Ionicons color={palette.muted} name="close-circle" size={18} />
+          </Pressable>
         ) : null}
       </View>
 
-      {userThreads.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>{copy.noDirectChatsTitle}</Text>
-          <Text style={styles.emptyBody}>{copy.noDirectChatsBody}</Text>
-        </View>
-      ) : (
+      <View accessibilityRole="tablist" style={styles.filterRow}>
+        {(["all", "unread"] as const).map((option) => {
+          const selected = filter === option;
+          return (
+            <Pressable
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
+              key={option}
+              onPress={() => setFilter(option)}
+              style={[styles.filterChip, selected ? styles.filterChipActive : null]}
+            >
+              <Text style={[styles.filterChipLabel, selected ? styles.filterChipLabelActive : null]}>
+                {option === "all" ? copy.all : totalUnreadCount > 0 ? `${copy.unread} · ${totalUnreadCount}` : copy.unread}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {visibleThreads.length > 0 ? (
         <View style={styles.list}>
-          {userThreads.map((thread) => {
+          {visibleThreads.map((thread) => {
             const counterpartId = thread.participantIds.find((participantId) => participantId !== currentUser?.id);
             const counterpart = counterpartId ? getUserById(counterpartId) : undefined;
             const unreadCount = getDirectUnreadCount(thread.id);
             const presence = counterpartId ? getUserPresence(counterpartId) : undefined;
+            const hasUnread = unreadCount > 0;
 
             return (
               <Pressable
+                accessibilityRole="button"
                 key={thread.id}
                 onPress={() => navigation.navigate("DirectChat", { threadId: thread.id })}
-                style={styles.threadCard}
+                style={({ pressed }) => [styles.threadRow, pressed ? styles.threadRowPressed : null]}
               >
-                <Image
-                  source={{
-                    uri:
-                      counterpart?.profileImage ||
-                      DEFAULT_PROFILE_IMAGE,
-                  }}
-                  style={styles.avatar}
-                />
+                <View>
+                  <Avatar name={counterpart?.name} style={styles.avatar} uri={counterpart?.profileImage} />
+                  {presence?.isOnline ? <View style={styles.onlineDot} /> : null}
+                </View>
                 <View style={styles.threadBody}>
                   <View style={styles.threadTop}>
-                    <Text numberOfLines={1} style={styles.threadTitle}>
+                    <Text numberOfLines={1} style={[styles.threadTitle, hasUnread ? styles.threadTitleUnread : null]}>
                       {counterpart?.name ?? copy.creatorStudio}
                     </Text>
-                    <View style={styles.threadTopRight}>
-                      {unreadCount > 0 ? (
-                        <View style={styles.unreadBadge}>
-                          <Text style={styles.unreadBadgeLabel}>{unreadCount}</Text>
-                        </View>
-                      ) : null}
-                      <Text style={styles.threadTime}>{formatLocaleDate(thread.lastMessageAt, language)}</Text>
-                    </View>
+                    <Text style={[styles.threadTime, hasUnread ? styles.threadTimeUnread : null]}>
+                      {formatRelativeTime(thread.lastMessageAt, language)}
+                    </Text>
                   </View>
-                  <Text style={styles.threadMeta}>@{counterpart?.username ?? "mutual.follow"}</Text>
-                  <Text style={styles.presenceText}>{formatPresenceLabel(presence, language, copy.onlineNow, copy.offline)}</Text>
-                  <Text numberOfLines={2} style={styles.threadPreview}>
-                    {thread.lastMessagePreview}
-                  </Text>
+                  <View style={styles.threadBottom}>
+                    <Text numberOfLines={1} style={[styles.threadPreview, hasUnread ? styles.threadPreviewUnread : null]}>
+                      {thread.lastMessagePreview}
+                    </Text>
+                    {hasUnread ? (
+                      <View style={styles.unreadBadge}>
+                        <Text style={styles.unreadBadgeLabel}>{unreadCount}</Text>
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
               </Pressable>
             );
           })}
         </View>
-      )}
+      ) : !normalizedQuery ? (
+        <View style={styles.emptyCard}>
+          <Ionicons color={palette.primary} name="chatbubbles-outline" size={28} />
+          <Text style={styles.emptyTitle}>{filter === "unread" ? copy.allCaughtUp : copy.noDirectChatsTitle}</Text>
+          <Text style={styles.emptyBody}>{filter === "unread" ? copy.notificationsCaughtUpBody : copy.noDirectChatsBody}</Text>
+        </View>
+      ) : null}
+
+      {normalizedQuery ? (
+        <View style={styles.peopleSection}>
+          <Text style={styles.sectionLabel}>{copy.startNewChat}</Text>
+          {newPeople.length > 0 ? (
+            newPeople.map((user) => {
+              const unlocked = canDirectMessageUser(user.id);
+              return (
+                <Pressable
+                  accessibilityRole="button"
+                  key={user.id}
+                  onPress={() => {
+                    void handleStartChat(user.id);
+                  }}
+                  style={({ pressed }) => [styles.threadRow, pressed ? styles.threadRowPressed : null]}
+                >
+                  <Avatar name={user.name} style={styles.avatar} uri={user.profileImage} />
+                  <View style={styles.threadBody}>
+                    <Text numberOfLines={1} style={styles.threadTitle}>
+                      {user.name}
+                    </Text>
+                    <Text numberOfLines={1} style={styles.threadPreview}>
+                      @{user.username}
+                    </Text>
+                  </View>
+                  <View style={[styles.actionPill, unlocked ? styles.actionPillActive : null]}>
+                    <Text style={[styles.actionPillLabel, unlocked ? styles.actionPillLabelActive : null]}>
+                      {unlocked ? copy.message : copy.locked}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })
+          ) : (
+            <Text style={styles.emptyBody}>{copy.noUsersMatchedBody}</Text>
+          )}
+          <Text style={styles.hintText}>{copy.directSearchSubtitle}</Text>
+        </View>
+      ) : null}
     </Screen>
   );
 }
 
 const styles = createThemedStyles({
-  heroCard: {
-    gap: spacing.lg,
-    paddingTop: spacing.sm,
-  },
-  heroStats: {
-    flexDirection: "row",
-    gap: spacing.sm,
-  },
-  heroStat: {
-    backgroundColor: palette.surface,
-    borderColor: palette.border,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    flex: 1,
-    gap: 4,
-    padding: spacing.md,
-  },
-  heroValue: {
-    color: palette.text,
-    fontSize: 22,
-    fontWeight: "900",
-  },
-  heroLabel: {
-    color: palette.muted,
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-  },
-  searchCard: {
+  content: {
     gap: spacing.md,
-    paddingTop: spacing.sm,
   },
-  searchResults: {
-    gap: spacing.sm,
-  },
-  searchResultCard: {
+  searchField: {
     alignItems: "center",
-    backgroundColor: palette.surface,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.xl,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: spacing.md,
-    padding: spacing.md,
-  },
-  searchAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: palette.cardAlt,
-  },
-  searchBody: {
-    flex: 1,
-    gap: 2,
-  },
-  searchName: {
-    color: palette.text,
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  searchMeta: {
-    color: palette.accentSoft,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  searchHeadline: {
-    color: palette.textSoft,
-    fontSize: 12,
-  },
-  searchActionPill: {
-    backgroundColor: palette.glass,
-    borderColor: palette.borderStrong,
+    backgroundColor: palette.surfaceMuted,
     borderRadius: radii.pill,
-    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    height: 46,
     paddingHorizontal: spacing.md,
-    paddingVertical: 8,
   },
-  searchActionPillActive: {
-    backgroundColor: palette.primary,
-    borderColor: palette.primary,
-  },
-  searchActionLabel: {
+  searchInput: {
     color: palette.text,
-    fontSize: 12,
-    fontWeight: "900",
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "500",
+    height: 44,
+    paddingVertical: 0,
   },
-  searchActionLabelActive: {
-    color: "#ffffff",
+  filterRow: {
+    flexDirection: "row",
+    gap: spacing.xs,
   },
-  emptySearchCard: {
-    backgroundColor: palette.surface,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    gap: 4,
-    padding: spacing.md,
+  filterChip: {
+    alignItems: "center",
+    backgroundColor: palette.surfaceMuted,
+    borderRadius: radii.pill,
+    height: 36,
+    justifyContent: "center",
+    paddingHorizontal: 16,
   },
-  emptySearchTitle: {
+  filterChipActive: {
+    backgroundColor: palette.text,
+  },
+  filterChipLabel: {
     color: palette.text,
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "600",
   },
-  emptySearchBody: {
-    color: palette.textSoft,
-    fontSize: 12,
+  filterChipLabelActive: {
+    color: palette.background,
+    fontWeight: "700",
   },
   list: {
-    gap: spacing.md,
+    marginHorizontal: -spacing.lg,
   },
-  threadCard: {
-    backgroundColor: palette.surface,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.xl,
-    borderWidth: 1,
+  threadRow: {
+    alignItems: "center",
     flexDirection: "row",
-    gap: spacing.md,
-    padding: spacing.md,
+    gap: 12,
+    minHeight: 76,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+  },
+  threadRowPressed: {
+    backgroundColor: palette.surface,
   },
   avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: palette.cardAlt,
+    borderRadius: 27,
+    height: 54,
+    width: 54,
+  },
+  onlineDot: {
+    backgroundColor: palette.success,
+    borderColor: palette.background,
+    borderRadius: 8,
+    borderWidth: 3,
+    bottom: 0,
+    height: 16,
+    position: "absolute",
+    right: 0,
+    width: 16,
   },
   threadBody: {
     flex: 1,
-    gap: 4,
-    justifyContent: "center",
+    gap: 3,
+    minWidth: 0,
   },
   threadTop: {
-    alignItems: "center",
+    alignItems: "baseline",
     flexDirection: "row",
-    gap: spacing.sm,
-    justifyContent: "space-between",
-  },
-  threadTopRight: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   threadTitle: {
     color: palette.text,
     flex: 1,
-    fontSize: 16,
-    fontWeight: "900",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  threadTitleUnread: {
+    fontWeight: "800",
   },
   threadTime: {
-    color: palette.muted,
-    fontSize: 11,
-  },
-  threadMeta: {
-    color: palette.accentSoft,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  presenceText: {
-    color: palette.primary,
+    color: palette.mutedSoft,
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "600",
+  },
+  threadTimeUnread: {
+    color: palette.primary,
+  },
+  threadBottom: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.xs,
   },
   threadPreview: {
-    color: palette.textSoft,
-    fontSize: 13,
-    lineHeight: 20,
+    color: palette.muted,
+    flex: 1,
+    fontSize: 14,
+  },
+  threadPreviewUnread: {
+    color: palette.text,
+    fontWeight: "700",
   },
   unreadBadge: {
     alignItems: "center",
     backgroundColor: palette.primary,
-    borderRadius: 999,
+    borderRadius: 10,
+    height: 20,
     justifyContent: "center",
-    minWidth: 22,
+    minWidth: 20,
     paddingHorizontal: 6,
-    paddingVertical: 3,
   },
   unreadBadgeLabel: {
     color: "#ffffff",
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: "800",
+  },
+  peopleSection: {
+    gap: 4,
+    marginHorizontal: -spacing.lg,
+  },
+  sectionLabel: {
+    color: palette.muted,
+    fontSize: 13,
+    fontWeight: "700",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+  },
+  actionPill: {
+    backgroundColor: palette.surfaceMuted,
+    borderRadius: radii.pill,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  actionPillActive: {
+    backgroundColor: palette.primary,
+  },
+  actionPillLabel: {
+    color: palette.muted,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  actionPillLabelActive: {
+    color: "#ffffff",
+  },
+  hintText: {
+    color: palette.mutedSoft,
+    fontSize: 12,
+    lineHeight: 18,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
   },
   emptyCard: {
+    alignItems: "center",
     backgroundColor: palette.surface,
-    borderColor: palette.border,
     borderRadius: radii.lg,
-    borderWidth: 1,
-    gap: spacing.sm,
+    gap: spacing.xs,
     padding: spacing.xl,
   },
   emptyTitle: {
     color: palette.text,
-    fontSize: 18,
-    fontWeight: "900",
+    fontSize: 17,
+    fontWeight: "800",
+    textAlign: "center",
   },
   emptyBody: {
-    color: palette.textSoft,
+    color: palette.muted,
     fontSize: 14,
-    lineHeight: 22,
+    lineHeight: 21,
+    paddingHorizontal: spacing.lg,
+    textAlign: "center",
   },
 });
-
-function formatPresenceLabel(
-  presence: { isOnline: boolean; lastSeenAt?: string } | undefined,
-  language: Parameters<typeof getCopy>[0],
-  onlineLabel: string,
-  offlineLabel: string
-) {
-  if (presence?.isOnline) {
-    return onlineLabel;
-  }
-
-  if (!presence?.lastSeenAt) {
-    return offlineLabel;
-  }
-
-  return formatRelativeTime(presence.lastSeenAt, language, {
-    style: "short",
-    fallbackToDateAfterDays: 14,
-  });
-}

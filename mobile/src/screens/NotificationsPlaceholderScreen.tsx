@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { sizedImageUrl } from "../services/mediaUpload";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -453,7 +454,7 @@ function NotificationStackRow({
               </View>
             </View>
 
-            {previewUri ? <Image source={{ uri: previewUri }} style={styles.mediaPreview} /> : null}
+            {previewUri ? <Image source={{ uri: sizedImageUrl(previewUri, 200) }} style={styles.mediaPreview} /> : null}
           </Pressable>
         </Animated.View>
       </View>

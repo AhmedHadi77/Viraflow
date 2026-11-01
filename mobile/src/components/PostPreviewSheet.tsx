@@ -16,7 +16,7 @@ interface PostPreviewSheetProps {
 }
 
 export function PostPreviewSheet({ post, author, visible, onClose, onAuthorPress }: PostPreviewSheetProps) {
-  const { language } = useAppState();
+  const { language, currentUser } = useAppState();
   const copy = getCopy(language);
   const primaryMedia = post?.media[0];
 
@@ -78,7 +78,9 @@ export function PostPreviewSheet({ post, author, visible, onClose, onAuthorPress
 
             {post ? (
               <View style={styles.statsRow}>
-                <StatPill icon="heart-outline" label={`${post.likedBy.length} ${copy.like.toLowerCase()}`} />
+                {post.hideLikes && post.userId !== currentUser?.id ? null : (
+                  <StatPill icon="heart-outline" label={`${post.likedBy.length} ${copy.like.toLowerCase()}`} />
+                )}
                 <StatPill icon="chatbubble-outline" label={`${post.commentCount} ${copy.comment.toLowerCase()}`} />
                 <StatPill icon="time-outline" label={formatRelativeDate(post.createdAt)} />
               </View>

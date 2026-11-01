@@ -284,6 +284,7 @@ export function ReelViewerScreen({
 
       <ReelCommentsSheet
         bottomInset={Math.max(insets.bottom, 16)}
+        commentsOff={Boolean(activeReel?.commentsOff) && activeReel?.userId !== currentUser?.id}
         comments={activeComments}
         draft={commentDraft}
         isPosting={isPostingComment}

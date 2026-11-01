@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { sizedImageUrl } from "../services/mediaUpload";
 import { Avatar } from "../components/Avatar";
 import type { CopyStrings } from "../data/locales/en";
 import { BRAND_GRADIENT, BrandTint, GradientIconButton } from "../components/GradientIcon";
@@ -7,9 +8,11 @@ import { useIsFocused } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { fill } from "../utils/labels";
 import {
   Alert,
   Animated,
+  Easing,
   FlatList,
   Image,
   Modal,
@@ -85,10 +88,12 @@ export function HomeScreen({ navigation }: { navigation: any }) {
   const latestNotificationStacks = useMemo(() => buildNotificationStacks(latestNotifications), [latestNotifications]);
   const totalDirectUnreadCount = getTotalDirectUnreadCount();
 
+  const [feedTab, setFeedTab] = useState<FeedTab | null>(null);
   const { items: feedPosts, mode: feedMode } = useMemo(
-    () => buildHomePostFeed(posts, currentUser),
-    [currentUser, posts]
+    () => buildHomePostFeed(posts, currentUser, feedTab),
+    [currentUser, feedTab, posts]
   );
+  const activeFeedTab: FeedTab = feedTab ?? (feedMode === "following" ? "following" : "forYou");
 
   const visiblePosts = useMemo<FeedRowItem[]>(
     () => (isBootstrapping && feedPosts.length === 0 ? createSkeletonItems() : feedPosts.slice(0, visibleCount)),
@@ -335,23 +340,46 @@ export function HomeScreen({ navigation }: { navigation: any }) {
 
               <View style={styles.quickComposer}>
                 <Avatar name={currentUser?.name} style={styles.quickComposerAvatar} uri={currentUser?.profileImage} />
-                <Pressable onPress={() => navigation.navigate("Create", { initialMode: "post" })} style={styles.quickComposerInput}>
-                  <Text style={styles.quickComposerText}>{copy.quickComposerPrompt}</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => navigation.navigate("Create", { initialMode: "post" })}
+                  style={styles.quickComposerInput}
+                >
+                  <Text numberOfLines={1} style={styles.quickComposerText}>
+                    {fill(copy.homeComposerPrompt, { name: (currentUser?.name ?? "").trim().split(/\s+/)[0] || "" })}
+                  </Text>
                 </Pressable>
-                <GradientIconButton icon="images-outline" onPress={() => navigation.navigate("Create", { initialMode: "post" })} size={38} />
-                <GradientIconButton icon="play-circle-outline" onPress={() => navigation.navigate("Create", { initialMode: "reel" })} size={38} />
+                <Pressable
+                  accessibilityLabel={copy.addPhotos}
+                  accessibilityRole="button"
+                  onPress={() => navigation.navigate("Create", { initialMode: "post" })}
+                  style={({ pressed }) => [styles.quickComposerPhoto, pressed ? { opacity: 0.7 } : null]}
+                >
+                  <Ionicons color={palette.text} name="images-outline" size={19} />
+                </Pressable>
               </View>
 
-              <View style={styles.sectionRow}>
-                <View style={styles.sectionCopy}>
-                  <Text style={styles.sectionTitle}>{feedMode === "following" ? copy.followingFeedTitle : copy.suggestedFeedTitle}</Text>
-                  <Text style={styles.sectionBody}>
-                    {feedMode === "following"
-                      ? copy.followingFeedBody
-                      : copy.suggestedFeedBody}
-                  </Text>
-                </View>
+              <View accessibilityRole="tablist" style={styles.feedTabs}>
+                {(["following", "forYou"] as const).map((tab) => {
+                  const selected = activeFeedTab === tab;
+                  return (
+                    <Pressable
+                      accessibilityRole="tab"
+                      accessibilityState={{ selected }}
+                      key={tab}
+                      onPress={() => setFeedTab(tab)}
+                      style={[styles.feedTab, selected ? styles.feedTabActive : null]}
+                    >
+                      <Text style={[styles.feedTabLabel, selected ? styles.feedTabLabelActive : null]}>
+                        {tab === "following" ? copy.following : copy.forYou}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
+              {activeFeedTab === "following" && feedPosts.length === 0 ? (
+                <Text style={styles.sectionBody}>{copy.followingFeedBody}</Text>
+              ) : null}
 
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.creatorRow}>
                 {creators.map((creator) => (
@@ -548,7 +576,7 @@ export function HomeScreen({ navigation }: { navigation: any }) {
                           ) : null}
                         </View>
                         {previewUri ? (
-                          <Image source={{ uri: previewUri }} style={styles.notificationTrayMediaPreview} />
+                          <Image source={{ uri: sizedImageUrl(previewUri, 200) }} style={styles.notificationTrayMediaPreview} />
                         ) : null}
                         {stack.unreadCount > 0 ? <View style={styles.notificationTrayUnreadDot} /> : null}
                       </Pressable>
@@ -561,6 +589,7 @@ export function HomeScreen({ navigation }: { navigation: any }) {
         </Modal>
 
         <CommentsSheet
+          closedMessage={activeCommentPost?.commentsOff && activeCommentPost.userId !== currentUser?.id ? copy.commentsOffNotice : undefined}
           comments={activeComments}
           currentUserAvatar={currentUser?.profileImage}
           draft={commentDraft}
@@ -581,7 +610,10 @@ export function HomeScreen({ navigation }: { navigation: any }) {
   );
 }
 
-function buildHomePostFeed(posts: Post[], currentUser: User | null) {
+type FeedTab = "following" | "forYou";
+
+/** Following: you and the people you follow. For you: everyone, newest first. No choice yet: Following when it has posts. */
+function buildHomePostFeed(posts: Post[], currentUser: User | null, tab: FeedTab | null) {
   const sorted = [...posts].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   if (!currentUser) {
     return { items: sorted, mode: "suggested" as const };
@@ -590,7 +622,10 @@ function buildHomePostFeed(posts: Post[], currentUser: User | null) {
   const ownPosts = sorted.filter((item) => item.userId === currentUser.id);
   const followedIds = new Set(currentUser.following);
   const followingPosts = sorted.filter((item) => followedIds.has(item.userId));
-  if (currentUser.following.length > 0 && followingPosts.length > 0) {
+  if (tab === "following") {
+    return { items: followingPosts.length > 0 ? mergeFeedPosts([...ownPosts, ...followingPosts]) : [], mode: "following" as const };
+  }
+  if (tab === null && currentUser.following.length > 0 && followingPosts.length > 0) {
     return { items: mergeFeedPosts([...ownPosts, ...followingPosts]), mode: "following" as const };
   }
 
@@ -666,14 +701,32 @@ function StoryRing({
   ownStory?: boolean;
 }) {
   // Only unseen stories get the brand gradient; seen ones and "add your story" stay quiet grey.
-  const colors: readonly [string, string, ...string[]] =
-    viewed || ownStory ? [palette.borderStrong, palette.borderStrong] : [...BRAND_GRADIENT];
+  const unseen = !viewed && !ownStory;
+  const colors: readonly [string, string, ...string[]] = unseen ? [...BRAND_GRADIENT] : [palette.borderStrong, palette.borderStrong];
+  // Unseen stories breathe gently so they catch the eye.
+  const pulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!unseen) {
+      pulse.setValue(0);
+      return;
+    }
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 1100, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 1100, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [pulse, unseen]);
   return (
-    <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.storyRing}>
-      <View style={styles.storyRingInner}>
-        <Avatar name={name} style={styles.storyAvatar} uri={imageUrl} />
-      </View>
-    </LinearGradient>
+    <Animated.View style={{ transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.045] }) }] }}>
+      <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.storyRing}>
+        <View style={styles.storyRingInner}>
+          <Avatar name={name} style={styles.storyAvatar} uri={imageUrl} />
+        </View>
+      </LinearGradient>
+    </Animated.View>
   );
 }
 
@@ -853,13 +906,11 @@ const styles = createThemedStyles({
   },
   quickComposer: {
     alignItems: "center",
-    backgroundColor: "#0b0d12",
-    borderColor: "rgba(255,255,255,0.07)",
-    borderRadius: 24,
-    borderWidth: 1,
+    backgroundColor: palette.surface,
+    borderRadius: 28,
     flexDirection: "row",
-    gap: spacing.sm,
-    padding: spacing.sm,
+    gap: 10,
+    padding: 6,
   },
   quickComposerAvatar: {
     borderRadius: 20,
@@ -867,18 +918,14 @@ const styles = createThemedStyles({
     width: 40,
   },
   quickComposerInput: {
-    backgroundColor: "#151922",
-    borderColor: "rgba(255,255,255,0.06)",
-    borderRadius: radii.pill,
-    borderWidth: 1,
     flex: 1,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
+    justifyContent: "center",
+    minHeight: 40,
   },
   quickComposerText: {
-    color: palette.muted,
-    fontSize: 13,
-    fontWeight: "600",
+    color: palette.mutedSoft,
+    fontSize: 15,
+    fontWeight: "500",
   },
   quickComposerAction: {
     alignItems: "center",
@@ -887,6 +934,40 @@ const styles = createThemedStyles({
     height: 36,
     justifyContent: "center",
     width: 36,
+  },
+  quickComposerPhoto: {
+    alignItems: "center",
+    backgroundColor: palette.background,
+    borderRadius: 20,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+  },
+  feedTabs: {
+    borderBottomColor: palette.border,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: 24,
+    marginHorizontal: -spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  feedTab: {
+    borderBottomColor: "transparent",
+    borderBottomWidth: 2.5,
+    justifyContent: "center",
+    minHeight: 42,
+  },
+  feedTabActive: {
+    borderBottomColor: palette.text,
+  },
+  feedTabLabel: {
+    color: palette.muted,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  feedTabLabelActive: {
+    color: palette.text,
+    fontWeight: "800",
   },
   sectionRow: {
     gap: spacing.xs,

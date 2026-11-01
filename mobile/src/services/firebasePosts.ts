@@ -80,6 +80,8 @@ export async function createFirebasePost(
     hashtags: string[];
     location?: string;
     media: PostMediaItem[];
+    hideLikes?: boolean;
+    commentsOff?: boolean;
   }
 ) {
   const db = getRequiredFirestore();
@@ -95,6 +97,8 @@ export async function createFirebasePost(
     likedBy: [],
     commentCount: 0,
     createdAt: new Date().toISOString(),
+    ...(input.hideLikes ? { hideLikes: true } : {}),
+    ...(input.commentsOff ? { commentsOff: true } : {}),
   };
 
   await setDoc(postRef, post);
@@ -104,6 +108,7 @@ export async function createFirebasePost(
 function normalizePostMediaItemForWrite(item: PostMediaItem, fallbackId: string): PostMediaItem {
   const thumbnailUrl = item.thumbnailUrl?.trim();
   const mimeType = item.mimeType?.trim();
+  const altText = item.altText?.trim().slice(0, 300);
   const durationSeconds =
     typeof item.durationSeconds === "number" && Number.isFinite(item.durationSeconds)
       ? item.durationSeconds
@@ -117,6 +122,7 @@ function normalizePostMediaItemForWrite(item: PostMediaItem, fallbackId: string)
     ...(mimeType ? { mimeType } : {}),
     ...(durationSeconds !== undefined ? { durationSeconds } : {}),
     ...(normalizeStudioData(item.studio) ? { studio: normalizeStudioData(item.studio) } : {}),
+    ...(altText ? { altText } : {}),
   };
 }
 
@@ -262,6 +268,8 @@ function normalizePostDoc(id: string, data: Record<string, unknown>): Post {
     likedBy: readStringArray(data.likedBy),
     commentCount: readNumber(data.commentCount, 0),
     createdAt: readString(data.createdAt, new Date().toISOString()),
+    ...(data.hideLikes === true ? { hideLikes: true } : {}),
+    ...(data.commentsOff === true ? { commentsOff: true } : {}),
   };
 }
 
@@ -308,6 +316,7 @@ function normalizePostMedia(value: unknown): PostMediaItem[] {
         mimeType: readOptionalString(record.mimeType),
         durationSeconds: readOptionalNumber(record.durationSeconds),
         studio: normalizeStudioData(record.studio),
+        altText: readOptionalString(record.altText),
       } satisfies PostMediaItem;
     })
     .filter(Boolean) as PostMediaItem[];

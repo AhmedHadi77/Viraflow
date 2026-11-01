@@ -5,7 +5,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as Linking from "expo-linking";
 import * as VideoThumbnails from "expo-video-thumbnails";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Image, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, View } from "react-native";
 import { ChatComposer } from "../components/ChatComposer";
 import { Screen } from "../components/Screen";
 import { getCopy } from "../data/copy";
@@ -23,16 +23,57 @@ interface PendingDirectAttachment {
   thumbnailUri?: string;
 }
 
-export function DirectChatScreen({ navigation, route }: { navigation: any; route: { params: { threadId: string } } }) {
+type DirectChatRoute = { params: { threadId: string } };
+
+/**
+ * Loads the conversation first, then shows it. Keeping the loading step in its own component means
+ * the conversation view always runs the same hooks in the same order (a chat arriving a moment after
+ * the screen opens used to crash with "Rendered more hooks than during the previous render").
+ */
+export function DirectChatScreen({ navigation, route }: { navigation: any; route: DirectChatRoute }) {
+  const { language, currentUser, directThreads, openDirectThread } = useAppState();
+  const copy = getCopy(language);
+  const [loadFinished, setLoadFinished] = useState(false);
+  const thread = directThreads.find((item) => item.id === route.params.threadId);
+
+  useEffect(() => {
+    let active = true;
+    setLoadFinished(false);
+    void (async () => {
+      const result = await openDirectThread(route.params.threadId);
+      if (!active) {
+        return;
+      }
+      setLoadFinished(true);
+      if (!result.ok && result.message) {
+        Alert.alert(copy.directChatUnavailableTitle, result.message);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [copy.directChatUnavailableTitle, route.params.threadId]);
+
+  if (!thread || !currentUser) {
+    return (
+      <Screen contentContainerStyle={styles.emptyWrap}>
+        {loadFinished ? <Text style={styles.emptyText}>{copy.conversationNotFound}</Text> : <ActivityIndicator color={palette.primary} />}
+      </Screen>
+    );
+  }
+
+  return <DirectChatConversation key={thread.id} navigation={navigation} route={route} />;
+}
+
+function DirectChatConversation({ navigation, route }: { navigation: any; route: DirectChatRoute }) {
   const {
     language,
-    currentUser,
+    currentUser: signedInUser,
     directThreads,
     getUserById,
     getDirectMessagesForThread,
     getDirectTypingUsers,
     getUserPresence,
-    openDirectThread,
     markDirectThreadRead,
     sendDirectMessage,
     setDirectTyping,
@@ -43,26 +84,9 @@ export function DirectChatScreen({ navigation, route }: { navigation: any; route
   const [pendingAttachment, setPendingAttachment] = useState<PendingDirectAttachment | null>(null);
   const [isSending, setIsSending] = useState(false);
   const messagesScrollRef = useRef<ScrollView>(null);
-  const thread = directThreads.find((item) => item.id === route.params.threadId);
-
-  useEffect(() => {
-    void (async () => {
-      const result = await openDirectThread(route.params.threadId);
-      if (!result.ok && result.message) {
-        Alert.alert(copy.directChatUnavailableTitle, result.message);
-      }
-    })();
-  }, [copy.directChatUnavailableTitle, route.params.threadId]);
-
-  if (!thread || !currentUser) {
-    return (
-      <Screen contentContainerStyle={styles.emptyWrap}>
-        <Text style={styles.emptyText}>{copy.conversationNotFound}</Text>
-      </Screen>
-    );
-  }
-
-  const activeThread = thread;
+  // The parent only renders this once the thread and the signed-in user exist.
+  const activeThread = directThreads.find((item) => item.id === route.params.threadId)!;
+  const currentUser = signedInUser!;
   const counterpartId = activeThread.participantIds.find((participantId) => participantId !== currentUser.id);
   const counterpart = counterpartId ? getUserById(counterpartId) : undefined;
   const counterpartPresence = counterpartId ? getUserPresence(counterpartId) : undefined;

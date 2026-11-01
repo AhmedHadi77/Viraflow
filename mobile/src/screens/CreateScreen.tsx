@@ -1,94 +1,100 @@
 import { Ionicons } from "@expo/vector-icons";
-import type { CopyStrings } from "../data/locales/en";
-import { categoryLabel, conditionLabel, fill } from "../utils/labels";
-import { getRegion } from "../data/regions";
-import { useEventListener } from "expo";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
-import { LinearGradient } from "expo-linear-gradient";
 import * as VideoThumbnails from "expo-video-thumbnails";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  AppState,
   Alert,
   Image,
   type LayoutChangeEvent,
-  PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
 } from "react-native";
 import { InputField } from "../components/InputField";
-import { FilterPreview } from "../components/studio/FilterPreview";
-import { StudioLayersOverlay } from "../components/studio/StudioLayers";
-import { EditorMode, EditorResult, hasFilterChanges, openMediaEditor } from "../components/studio/editorSession";
-import { getStudioFilter } from "../data/studioFilters";
 import { PrimaryButton } from "../components/PrimaryButton";
-import { SafeLinearGradient } from "../components/SafeLinearGradient";
 import { Screen } from "../components/Screen";
 import { SectionTitle } from "../components/SectionTitle";
-import { getCopy } from "../data/copy";
+import { EditorMode, EditorResult, openMediaEditor } from "../components/studio/editorSession";
+import { FilterPreview } from "../components/studio/FilterPreview";
+import { StudioLayersOverlay } from "../components/studio/StudioLayers";
+import { buildPublishMedia, mainClipOf, PublishMedia, timelineSeconds } from "../components/studio/studioPlan";
 import { marketplaceCategories } from "../data/catalog";
+import { getCopy } from "../data/copy";
+import type { CopyStrings } from "../data/locales/en";
+import { getRegion } from "../data/regions";
 import { useAppState } from "../providers/AppProvider";
-import {
-  MediaEditConfig,
-  type MediaOverlayPosition,
-  type MediaStickerPlacement,
-  ProductCondition,
-  StoryMediaType,
-} from "../types/models";
-import { palette, radii, spacing, createThemedStyles } from "../theme";
-
-type ExpoVideoModule = typeof import("expo-video");
-let cachedExpoVideoModule: ExpoVideoModule | null | undefined;
+import { createThemedStyles, palette, radii, spacing } from "../theme";
+import { ProductCondition, StoryMediaType } from "../types/models";
+import { categoryLabel, conditionLabel, fill } from "../utils/labels";
+import { formatRelativeTime } from "../utils/timeFormatting";
 
 type CreateMode = "post" | "reel" | "story" | "product";
-type StudioMediaType = "image" | "video";
-type StudioSpeed = 0.5 | 1 | 1.5 | 2;
-type TrimHandle = "start" | "end";
+type StudioMode = Exclude<CreateMode, "product">;
 
 const productConditions: ProductCondition[] = ["New", "Like New", "Good", "Fair"];
-const TRIM_SEGMENTS = 18;
-const MIN_TRIM_GAP_RATIO = 0.08;
-const DEFAULT_TEXT_POSITION: MediaOverlayPosition = { x: 0.14, y: 0.34 };
-const DEFAULT_STICKER_POSITIONS: readonly MediaOverlayPosition[] = [
-  { x: 0.08, y: 0.14 },
-  { x: 0.66, y: 0.14 },
-  { x: 0.08, y: 0.56 },
-  { x: 0.66, y: 0.56 },
-];
+const ITEM_LIMITS: Record<StudioMode, number> = { post: 20, story: 10, reel: 10 };
+// Upload limits of the media host: 100 MB per video and 10 MB per photo.
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const DRAFT_LIMIT = 20;
 
-interface StudioFilterSettings {
-  brightness: -2 | -1 | 0 | 1 | 2;
-  contrast: -2 | -1 | 0 | 1 | 2;
-  saturation: -2 | -1 | 0 | 1 | 2;
-  grayscale: 0 | 25 | 50 | 75 | 100;
-}
-
-interface StudioStickerItem extends MediaStickerPlacement {
-  id: string;
-}
-
-interface StudioMediaItem {
+/** One photo or video being prepared (its edits come from the editor). */
+interface CreateItem {
   id: string;
   uri: string;
-  type: StudioMediaType;
+  type: "image" | "video";
   mimeType?: string;
   fileName?: string;
   durationSeconds?: number;
   posterUri?: string;
-  overlayText: string;
-  overlayTextPosition: MediaOverlayPosition;
-  stickers: StudioStickerItem[];
-  speed: StudioSpeed;
-  trimStartRatio: number;
-  trimEndRatio: number;
-  filters: StudioFilterSettings;
-  /** Result of the full-screen editor (text, stickers, music, filters, trim, speed). */
   editor?: EditorResult;
+  altText?: string;
 }
+
+interface CreateDraft {
+  id: string;
+  mode: StudioMode;
+  savedAt: string;
+  caption: string;
+  hashtags: string;
+  location: string;
+  hideLikes: boolean;
+  commentsOff: boolean;
+  saveToHighlights: boolean;
+  highlightLabel: string;
+  items: CreateItem[];
+}
+
+function draftsKey(userId: string | undefined) {
+  return `sohba.createDrafts.v1.${userId ?? "guest"}`;
+}
+
+async function readDrafts(userId: string | undefined): Promise<CreateDraft[]> {
+  try {
+    const raw = await AsyncStorage.getItem(draftsKey(userId));
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    return Array.isArray(parsed) ? (parsed.filter((item) => item && typeof item === "object" && Array.isArray((item as CreateDraft).items)) as CreateDraft[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeDrafts(userId: string | undefined, drafts: CreateDraft[]) {
+  try {
+    await AsyncStorage.setItem(draftsKey(userId), JSON.stringify(drafts.slice(0, DRAFT_LIMIT)));
+  } catch {
+    // Storage full or unavailable: drafts are a convenience.
+  }
+}
+
+// Drafts keep files picked on the phone; in a web browser those links don't survive a reload.
+const DRAFTS_SUPPORTED = Platform.OS !== "web";
 
 export function CreateScreen({
   navigation,
@@ -100,7 +106,7 @@ export function CreateScreen({
       initialMode?: CreateMode;
       prefillAsset?: {
         uri: string;
-        type: StudioMediaType;
+        type: "image" | "video";
         mimeType?: string;
         fileName?: string;
         durationSeconds?: number;
@@ -108,21 +114,27 @@ export function CreateScreen({
     };
   };
 }) {
-  const { language, region, createPost, createProduct, createReel, createStory } = useAppState();
+  const { language, region, currentUser, createPost, createProduct, createReel, createStory, publishProgress } = useAppState();
   const listingCurrency = getRegion(region).currency;
   const rootNavigation = navigation.getParent?.() ?? navigation;
   const copy = getCopy(language);
   const [mode, setMode] = useState<CreateMode>("post");
-  const [studioCaption, setStudioCaption] = useState("");
-  const [studioHashtags, setStudioHashtags] = useState("");
-  const [studioLocation, setStudioLocation] = useState("");
-  const [studioMediaItems, setStudioMediaItems] = useState<StudioMediaItem[]>([]);
-  const [activeMediaId, setActiveMediaId] = useState<string | null>(null);
-  const [previewSurfaceSize, setPreviewSurfaceSize] = useState({ width: 0, height: 0 });
-  const [previewMuted, setPreviewMuted] = useState(false);
-  const [trimHandle, setTrimHandle] = useState<TrimHandle>("start");
+  const [items, setItems] = useState<CreateItem[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [caption, setCaption] = useState("");
+  const [hashtags, setHashtags] = useState("");
+  const [location, setLocation] = useState("");
+  const [hideLikes, setHideLikes] = useState(false);
+  const [commentsOff, setCommentsOff] = useState(false);
   const [saveToHighlights, setSaveToHighlights] = useState(false);
   const [highlightLabel, setHighlightLabel] = useState("");
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [storyProgress, setStoryProgress] = useState<{ done: number; total: number } | null>(null);
+  const [drafts, setDrafts] = useState<CreateDraft[]>([]);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [previewSize, setPreviewSize] = useState({ width: 0, height: 0 });
+
   const [productTitle, setProductTitle] = useState("");
   const [productDescription, setProductDescription] = useState("");
   const [productPrice, setProductPrice] = useState("");
@@ -130,95 +142,80 @@ export function CreateScreen({
   const [productCondition, setProductCondition] = useState<ProductCondition>("Good");
   const [productLocation, setProductLocation] = useState("");
   const [productImageUrls, setProductImageUrls] = useState<string[]>([]);
-  const [isPublishing, setIsPublishing] = useState(false);
 
-  const activeMedia = useMemo(
-    () => studioMediaItems.find((item) => item.id === activeMediaId) ?? studioMediaItems[0],
-    [activeMediaId, studioMediaItems]
-  );
+  const studioMode: StudioMode = mode === "product" ? "post" : mode;
+  const activeItem = useMemo(() => items.find((item) => item.id === activeId) ?? items[0], [activeId, items]);
+  const hashtagPreview = useMemo(() => collectPublishHashtags(hashtags, caption).map((tag) => `#${tag}`), [caption, hashtags]);
 
-  const studioHashtagPreview = useMemo(
-    () => collectPublishHashtags(studioHashtags, studioCaption).map((tag) => `#${tag}`),
-    [studioCaption, studioHashtags]
-  );
-
-  const studioSummary = useMemo(() => {
-    if (!activeMedia) {
-      return mode === "reel"
-        ? copy.csPickReelHint
-        : mode === "story"
-          ? copy.csPickStoryHint
-          : copy.csPickPostHint;
+  useEffect(() => {
+    let cancelled = false;
+    if (!DRAFTS_SUPPORTED) {
+      return;
     }
+    void readDrafts(currentUser?.id).then((list) => {
+      if (!cancelled) {
+        setDrafts(list);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.id]);
 
-    const mediaCount = studioMediaItems.length;
-    const mediaLabel =
-      mediaCount > 1 ? fill(copy.csMediaSelected, { count: mediaCount }) : activeMedia.type === "video" ? copy.csVideoSelected : copy.csImageSelected;
-    const durationLabel = activeMedia.durationSeconds ? ` · ${formatDuration(activeMedia.durationSeconds)}` : "";
-    return `${mediaLabel}${durationLabel}`;
-  }, [activeMedia, mode, studioMediaItems.length]);
+  useEffect(() => {
+    if (!notice) {
+      return;
+    }
+    const timer = setTimeout(() => setNotice(null), 2600);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   useEffect(() => {
     if (route?.params?.initialMode) {
       switchMode(route.params.initialMode);
       navigation.setParams?.({ initialMode: undefined });
     }
+    // Only when a new starting mode is passed in.
   }, [navigation, route?.params?.initialMode]);
 
+  // Opening Create with a photo or video already chosen (e.g. "Add to story" from Home).
+  const prefillHandled = useRef<string | null>(null);
   useEffect(() => {
-    const prefillAsset = route?.params?.prefillAsset;
-    if (!prefillAsset) {
+    const asset = route?.params?.prefillAsset;
+    if (!asset?.uri || prefillHandled.current === asset.uri) {
       return;
     }
-
-    let cancelled = false;
-
-    async function applyPrefill() {
-      const seededAsset = prefillAsset;
-      if (!seededAsset) {
-        return;
-      }
-
-      const seededItem = await createStudioMediaItem(
-        {
-          uri: seededAsset.uri || "",
-          type: seededAsset.type,
-          mimeType: seededAsset.mimeType,
-          fileName: seededAsset.fileName,
-          duration:
-            typeof seededAsset.durationSeconds === "number"
-              ? seededAsset.durationSeconds * 1000
-              : undefined,
-        } as ImagePicker.ImagePickerAsset,
-        0
-      );
-
-      if (cancelled) {
-        return;
-      }
-
-      const constrained = constrainStudioItems([seededItem], route?.params?.initialMode || mode);
-      setStudioMediaItems(constrained);
-      setActiveMediaId(constrained[0]?.id ?? null);
+    prefillHandled.current = asset.uri;
+    const targetMode: StudioMode = route?.params?.initialMode && route.params.initialMode !== "product" ? route.params.initialMode : studioMode;
+    void (async () => {
+      const item = await itemFromAsset({
+        uri: asset.uri,
+        type: asset.type,
+        mimeType: asset.mimeType,
+        fileName: asset.fileName,
+        duration: typeof asset.durationSeconds === "number" ? asset.durationSeconds * 1000 : undefined,
+      } as ImagePicker.ImagePickerAsset);
+      setItems([item]);
+      setActiveId(item.id);
       navigation.setParams?.({ prefillAsset: undefined });
-      if (constrained[0]) {
-        openEditorFor(constrained[0], route?.params?.initialMode || mode);
-      }
+      openEditorFor(item, targetMode);
+    })();
+  }, [route?.params?.prefillAsset]);
+
+  function switchMode(next: CreateMode) {
+    setMode(next);
+    if (next === "product") {
+      return;
     }
+    setItems((current) => {
+      const limited = next === "reel" ? current.slice(0, 1) : current.slice(0, ITEM_LIMITS[next]);
+      setActiveId(limited[0]?.id ?? null);
+      return limited;
+    });
+  }
 
-    void applyPrefill();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [mode, navigation, route?.params?.initialMode, route?.params?.prefillAsset]);
-
-  useEffect(() => {
-    setPreviewMuted(false);
-  }, [activeMedia?.id]);
-
-  function openEditorFor(item: StudioMediaItem, modeOverride?: CreateMode) {
-    const editorMode: EditorMode = (modeOverride ?? mode) === "story" ? "story" : (modeOverride ?? mode) === "reel" ? "reel" : "post";
+  function openEditorFor(item: CreateItem, modeOverride?: StudioMode) {
+    const editorMode: EditorMode = modeOverride ?? studioMode;
     openMediaEditor(rootNavigation, {
       mode: editorMode,
       media: {
@@ -232,126 +229,338 @@ export function CreateScreen({
       initial: item.editor,
       doneLabel: copy.edDone,
       onDone: (result) => {
-        setStudioMediaItems((current) =>
-          current.map((entry) =>
-            entry.id === item.id ? { ...entry, editor: result, posterUri: result.posterUri ?? entry.posterUri } : entry
-          )
+        setItems((current) =>
+          current.map((entry) => (entry.id === item.id ? { ...entry, editor: result, posterUri: result.posterUri ?? entry.posterUri } : entry))
         );
       },
     });
-  }
-
-  function switchMode(nextMode: CreateMode) {
-    setMode(nextMode);
-    if (nextMode === "product") {
-      return;
-    }
-
-    const constrained = constrainStudioItems(studioMediaItems, nextMode);
-    setStudioMediaItems(constrained);
-    setActiveMediaId(constrained[0]?.id ?? null);
   }
 
   async function requestLibraryAccess(message: string) {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        alert(copy.mediaAccessNeededTitle, message);
+        Alert.alert(copy.mediaAccessNeededTitle, message);
         return false;
       }
-
       return true;
     } catch (error) {
       console.warn("Sohba media permission request failed.", error);
-      alert(copy.csMediaAccessUnavailable, getMediaPickerErrorMessage(error, copy));
+      Alert.alert(copy.csMediaAccessUnavailable, getMediaPickerErrorMessage(error, copy));
       return false;
     }
   }
 
-  async function handlePickStudioMedia() {
+  /** Picks photos and videos. Several picked for a reel become clips of one video (joined in the editor). */
+  async function pickMedia(append: boolean) {
     const allowed = await requestLibraryAccess(copy.csMediaAccessStudio);
     if (!allowed) {
       return;
     }
-
+    const limit = ITEM_LIMITS[studioMode];
+    const room = studioMode === "reel" ? limit : append ? limit - items.length : limit;
+    if (room <= 0) {
+      setNotice(fill(copy.crItemsLimit, { count: limit }));
+      return;
+    }
     let result: ImagePicker.ImagePickerResult;
     try {
       result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes:
-          mode === "reel" ? ["videos"] : mode === "story" ? ["images", "videos"] : ["images", "videos"],
-        allowsMultipleSelection: mode === "post",
-        selectionLimit: mode === "post" ? 6 : 1,
-        quality: 0.8,
-        aspect: mode === "story" ? [9, 16] : undefined,
+        mediaTypes: ["images", "videos"],
+        allowsMultipleSelection: room > 1,
+        selectionLimit: room,
+        quality: 0.85,
       });
     } catch (error) {
       console.warn("Sohba studio media picker failed.", error);
-      alert(copy.csPickerUnavailable, getMediaPickerErrorMessage(error, copy));
+      Alert.alert(copy.csPickerUnavailable, getMediaPickerErrorMessage(error, copy));
       return;
     }
-
     if (result.canceled) {
       return;
     }
-
-    const fittingAssets = result.assets.filter((asset) => !isAssetTooLarge(asset));
-    if (fittingAssets.length < result.assets.length) {
-      alert(copy.csMediaIssue, copy.csFileTooBig);
-      if (fittingAssets.length === 0) {
-        return;
-      }
+    const fitting = result.assets.filter((asset) => !isAssetTooLarge(asset) && Boolean(asset.uri));
+    if (fitting.length < result.assets.length) {
+      Alert.alert(copy.csMediaIssue, copy.csFileTooBig);
     }
-    const nextItems = await Promise.all(fittingAssets.map((asset, index) => createStudioMediaItem(asset, index)));
-    const filteredItems = constrainStudioItems(nextItems.filter((item) => Boolean(item.uri.trim())), mode);
-    if (filteredItems.length === 0) {
-      alert(
-        copy.csMediaIssue,
-        mode === "reel" ? copy.csChooseReelVideo : copy.csMediaIssueBody
-      );
+    if (fitting.length === 0) {
+      return;
+    }
+    const picked = await Promise.all(fitting.map((asset, index) => itemFromAsset(asset, index)));
+
+    if (studioMode === "reel") {
+      // One reel: the first pick is the main clip, the rest join it as clips.
+      const [first, ...rest] = picked;
+      const item: CreateItem =
+        rest.length > 0
+          ? {
+              ...first,
+              editor: {
+                ...emptyResultFor(first),
+                timeline: [
+                  mainClipOf(first),
+                  ...rest.map((entry, index) => ({
+                    ...mainClipOf(entry),
+                    id: `clip-${Date.now().toString(36)}-${index}`,
+                    imageSeconds: entry.type === "image" ? 3 : undefined,
+                  })),
+                ],
+                canvas: { aspect: "9:16", fit: "fill", background: "blur", rotate: 0, mirror: false },
+              },
+            }
+          : first;
+      setItems([item]);
+      setActiveId(item.id);
+      openEditorFor(item, "reel");
       return;
     }
 
-    setStudioMediaItems(filteredItems);
-    setActiveMediaId(filteredItems[0]?.id ?? null);
+    const next = append ? [...items, ...picked].slice(0, limit) : picked.slice(0, limit);
+    setItems(next);
+    setActiveId(picked[0].id);
     // Go straight into the editor, like Instagram.
-    if (filteredItems[0]) {
-      openEditorFor(filteredItems[0]);
+    openEditorFor(picked[0]);
+  }
+
+  function updateItem(id: string, patch: Partial<CreateItem>) {
+    setItems((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  }
+
+  function removeItem(id: string) {
+    setItems((current) => {
+      const next = current.filter((item) => item.id !== id);
+      if (activeId === id) {
+        setActiveId(next[0]?.id ?? null);
+      }
+      return next;
+    });
+  }
+
+  function moveItem(id: string, direction: -1 | 1) {
+    setItems((current) => {
+      const index = current.findIndex((item) => item.id === id);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= current.length) {
+        return current;
+      }
+      const next = [...current];
+      const [moved] = next.splice(index, 1);
+      next.splice(target, 0, moved);
+      return next;
+    });
+  }
+
+  // ---- Drafts -------------------------------------------------------------------------------------
+
+  async function saveDraft(silent = false) {
+    if (!DRAFTS_SUPPORTED || mode === "product" || items.length === 0) {
+      return;
+    }
+    const draft: CreateDraft = {
+      id: draftId ?? `draft-${Date.now().toString(36)}`,
+      mode: studioMode,
+      savedAt: new Date().toISOString(),
+      caption,
+      hashtags,
+      location,
+      hideLikes,
+      commentsOff,
+      saveToHighlights,
+      highlightLabel,
+      items,
+    };
+    const next = [draft, ...drafts.filter((item) => item.id !== draft.id)].slice(0, DRAFT_LIMIT);
+    setDrafts(next);
+    setDraftId(draft.id);
+    await writeDrafts(currentUser?.id, next);
+    if (!silent) {
+      setNotice(copy.crDraftSaved);
     }
   }
 
-  async function handleCropActiveImage() {
-    if (!activeMedia || activeMedia.type !== "image") {
-      alert(copy.csCropUnavailable, copy.csCropNeedImage);
+  function openDraft(draft: CreateDraft) {
+    setMode(draft.mode);
+    setItems(draft.items);
+    setActiveId(draft.items[0]?.id ?? null);
+    setCaption(draft.caption);
+    setHashtags(draft.hashtags);
+    setLocation(draft.location);
+    setHideLikes(draft.hideLikes);
+    setCommentsOff(draft.commentsOff);
+    setSaveToHighlights(draft.saveToHighlights);
+    setHighlightLabel(draft.highlightLabel);
+    setDraftId(draft.id);
+  }
+
+  function deleteDraft(draft: CreateDraft) {
+    Alert.alert(copy.crDeleteDraft, undefined, [
+      { text: copy.cancel, style: "cancel" },
+      {
+        text: copy.delete,
+        style: "destructive",
+        onPress: () => {
+          const next = drafts.filter((item) => item.id !== draft.id);
+          setDrafts(next);
+          void writeDrafts(currentUser?.id, next);
+          if (draftId === draft.id) {
+            setDraftId(null);
+          }
+        },
+      },
+    ]);
+  }
+
+  async function removeCurrentDraft() {
+    if (!draftId) {
       return;
     }
+    const next = drafts.filter((item) => item.id !== draftId);
+    setDrafts(next);
+    setDraftId(null);
+    await writeDrafts(currentUser?.id, next);
+  }
 
-    const allowed = await requestLibraryAccess(copy.csMediaAccessCrop);
-    if (!allowed) {
-      return;
-    }
+  // ---- Publishing ---------------------------------------------------------------------------------
 
-    let result: ImagePicker.ImagePickerResult;
-    try {
-      result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        allowsEditing: true,
-        aspect: mode === "story" ? [9, 16] : [4, 5],
-        quality: 0.9,
-      });
-    } catch (error) {
-      console.warn("Sohba crop media picker failed.", error);
-      alert(copy.csPickerUnavailable, getMediaPickerErrorMessage(error, copy));
-      return;
-    }
-
-    if (result.canceled) {
-      return;
-    }
-
-    const croppedItem = await createStudioMediaItem(result.assets[0], 0, activeMedia);
-    setStudioMediaItems((currentItems) =>
-      currentItems.map((item) => (item.id === activeMedia.id ? { ...croppedItem, id: activeMedia.id } : item))
+  function publishMediaFor(item: CreateItem): PublishMedia {
+    const media = buildPublishMedia(
+      { uri: item.uri, type: item.type, durationSeconds: item.durationSeconds, posterUri: item.posterUri, mimeType: item.mimeType, fileName: item.fileName },
+      item.editor,
+      studioMode
     );
+    // Reels are videos: a photo becomes a short video with a gentle zoom.
+    if (studioMode === "reel" && media.type === "image") {
+      return {
+        ...media,
+        type: "video",
+        durationSeconds: 5,
+        posterUri: media.uri,
+        editConfig: { ...(media.editConfig ?? {}), photoVideo: { seconds: 5, motion: true } },
+      };
+    }
+    return media;
+  }
+
+  async function submit() {
+    if (mode === "product") {
+      await submitProduct();
+      return;
+    }
+    if (items.length === 0) {
+      Alert.alert(copy.csAddMedia, copy.csPickAtLeastOne);
+      return;
+    }
+    setIsPublishing(true);
+    try {
+      if (mode === "post") {
+        const result = await createPost({
+          caption: caption.trim(),
+          hashtags: collectPublishHashtags(hashtags, caption),
+          location: location.trim() || undefined,
+          hideLikes,
+          commentsOff,
+          mediaItems: items.map((item) => {
+            const media = publishMediaFor(item);
+            return {
+              uri: media.uri,
+              type: media.type,
+              mimeType: media.mimeType,
+              fileName: media.fileName,
+              durationSeconds: media.durationSeconds,
+              editConfig: media.editConfig,
+              altText: media.type === "image" ? item.altText?.trim() || undefined : undefined,
+            };
+          }),
+        });
+        if (!result.ok) {
+          await saveDraft(true);
+          Alert.alert(copy.csPostUnavailable, `${result.message ?? copy.csPostFailed}\n\n${copy.crDraftKept}`);
+          return;
+        }
+        await removeCurrentDraft();
+        resetStudio();
+        Alert.alert(copy.csPostPublished, copy.csPostLive);
+        navigation.navigate("Home");
+        return;
+      }
+
+      if (mode === "reel") {
+        const media = publishMediaFor(items[0]);
+        const result = await createReel({
+          caption: composeCaption(caption, studioMode === "reel" ? location : undefined),
+          hashtags: collectPublishHashtags(hashtags, caption),
+          videoUrl: media.uri,
+          thumbnailUrl: media.posterUri || "",
+          videoMimeType: media.mimeType,
+          videoFileName: media.fileName,
+          videoDurationSeconds: media.durationSeconds,
+          editConfig: media.editConfig,
+          hideLikes,
+          commentsOff,
+        });
+        if (!result.ok) {
+          await saveDraft(true);
+          Alert.alert(copy.csReelUnavailable, `${result.message ?? copy.csReelFailed}\n\n${copy.crDraftKept}`);
+          return;
+        }
+        await removeCurrentDraft();
+        resetStudio();
+        if (result.reel) {
+          rootNavigation.navigate("ReelViewer", { reelId: result.reel.id });
+          return;
+        }
+        Alert.alert(copy.reelPublished);
+        navigation.navigate("Reels");
+        return;
+      }
+
+      // Stories: each photo or video becomes its own story, shared in order.
+      const storyCaption = composeCaption(composeCaptionWithHashtags(caption, hashtags), location);
+      let lastStory: { userId: string; id: string } | null = null;
+      const total = items.length;
+      for (let index = 0; index < total; index += 1) {
+        setStoryProgress({ done: index, total });
+        const item = items[index];
+        const media = publishMediaFor(item);
+        const result = await createStory({
+          imageUrl: media.type === "video" ? media.posterUri || media.uri : media.uri,
+          videoUrl: media.type === "video" ? media.uri : undefined,
+          mediaType: media.type as StoryMediaType,
+          videoMimeType: media.type === "video" ? media.mimeType : undefined,
+          videoFileName: media.type === "video" ? media.fileName : undefined,
+          videoDurationSeconds: media.type === "video" ? media.durationSeconds : undefined,
+          caption: storyCaption,
+          saveToHighlights,
+          highlightLabel,
+          editConfig: media.editConfig,
+        });
+        if (!result.ok) {
+          // Keep what wasn't shared so it can be tried again.
+          const remaining = items.slice(index);
+          setItems(remaining);
+          setActiveId(remaining[0]?.id ?? null);
+          Alert.alert(
+            copy.storyUnavailableTitle,
+            `${result.message ?? copy.storyUnavailableBody}${index > 0 ? `\n\n${fill(copy.crStoriesShared, { count: index })}` : ""}`
+          );
+          return;
+        }
+        if (result.story) {
+          lastStory = { userId: result.story.userId, id: result.story.id };
+        }
+      }
+      await removeCurrentDraft();
+      resetStudio();
+      if (lastStory) {
+        rootNavigation.navigate("StoryViewer", { userId: lastStory.userId, storyId: lastStory.id });
+        return;
+      }
+      Alert.alert(copy.storyPostedTitle, copy.storyPostedBody);
+      navigation.navigate("Home");
+    } finally {
+      setIsPublishing(false);
+      setStoryProgress(null);
+    }
   }
 
   async function handlePickListingPhotos() {
@@ -359,7 +568,6 @@ export function CreateScreen({
     if (!allowed) {
       return;
     }
-
     let result: ImagePicker.ImagePickerResult;
     try {
       result = await ImagePicker.launchImageLibraryAsync({
@@ -371,276 +579,131 @@ export function CreateScreen({
       });
     } catch (error) {
       console.warn("Sohba listing media picker failed.", error);
-      alert(copy.csPickerUnavailable, getMediaPickerErrorMessage(error, copy));
+      Alert.alert(copy.csPickerUnavailable, getMediaPickerErrorMessage(error, copy));
       return;
     }
-
     if (result.canceled) {
       return;
     }
-
     const nextImages = result.assets
-      .map((asset) => {
-        if (!asset.base64) {
-          return null;
-        }
-
-        const mimeType = asset.mimeType || "image/jpeg";
-        return `data:${mimeType};base64,${asset.base64}`;
-      })
+      .map((asset) => (asset.base64 ? `data:${asset.mimeType || "image/jpeg"};base64,${asset.base64}` : null))
       .filter((item): item is string => Boolean(item));
-
     if (nextImages.length === 0) {
-      alert(copy.imageIssueTitle, copy.csPhotosIssueBody);
+      Alert.alert(copy.imageIssueTitle, copy.csPhotosIssueBody);
       return;
     }
-
     setProductImageUrls(nextImages.slice(0, 6));
   }
 
-  function updateActiveMedia(update: (item: StudioMediaItem) => StudioMediaItem) {
-    if (!activeMedia) {
+  async function submitProduct() {
+    if (!productTitle.trim() || !productDescription.trim() || !productPrice.trim() || !productLocation.trim()) {
+      Alert.alert(copy.communityMissingDetailsTitle, copy.csMissingListing);
       return;
     }
-
-    setStudioMediaItems((currentItems) =>
-      currentItems.map((item) => (item.id === activeMedia.id ? update(item) : item))
-    );
-  }
-
-  function updateOverlayTextPosition(position: MediaOverlayPosition) {
-    updateActiveMedia((item) => ({
-      ...item,
-      overlayTextPosition: normalizeOverlayPosition(position, DEFAULT_TEXT_POSITION),
-    }));
-  }
-
-  function updateStickerPosition(stickerId: string, position: MediaOverlayPosition) {
-    updateActiveMedia((item) => ({
-      ...item,
-      stickers: item.stickers.map((sticker) =>
-        sticker.id === stickerId
-          ? {
-              ...sticker,
-              ...normalizeOverlayPosition(position, sticker),
-            }
-          : sticker
-      ),
-    }));
-  }
-
-  function handleTrimSegmentPress(segmentIndex: number) {
-    if (!activeMedia || activeMedia.type !== "video") {
+    if (productImageUrls.length === 0) {
+      Alert.alert(copy.csAddPhotos, copy.csListingPhotoRequired);
       return;
     }
-
-    const ratio =
-      trimHandle === "start"
-        ? segmentIndex / TRIM_SEGMENTS
-        : Math.min(1, (segmentIndex + 1) / TRIM_SEGMENTS);
-
-    updateActiveMedia((item) => {
-      if (trimHandle === "start") {
-        return {
-          ...item,
-          trimStartRatio: Math.min(ratio, item.trimEndRatio - MIN_TRIM_GAP_RATIO),
-        };
-      }
-
-      return {
-        ...item,
-        trimEndRatio: Math.max(ratio, item.trimStartRatio + MIN_TRIM_GAP_RATIO),
-      };
-    });
-  }
-
-  async function submitStudioContent() {
-    if (mode === "product") {
-      await submitProduct();
-      return;
-    }
-
-    if (!activeMedia) {
-      alert(copy.csAddMedia, copy.csPickAtLeastOne);
-      return;
-    }
-
     setIsPublishing(true);
     try {
-      if (mode === "post") {
-        const result = await createPost({
-          caption: composePublishCaption(studioCaption, activeMedia.overlayText, undefined),
-          hashtags: collectPublishHashtags(studioHashtags, `${studioCaption} ${activeMedia.overlayText}`),
-          location: studioLocation.trim() || undefined,
-          mediaItems: studioMediaItems.map((item) => ({
-            uri: item.uri,
-            type: item.type,
-            mimeType: item.mimeType,
-            fileName: item.fileName,
-            durationSeconds: item.durationSeconds,
-            editConfig: buildMediaEditConfig(item),
-          })),
-        });
-
-        if (!result.ok) {
-          alert(copy.csPostUnavailable, result.message ?? copy.csPostFailed);
-          return;
-        }
-
-        resetStudio();
-        alert(copy.csPostPublished, copy.csPostLive);
-        navigation.navigate("Home");
-        return;
-      }
-
-      if (mode === "reel") {
-        if (activeMedia.type !== "video") {
-          alert(copy.csVideoRequired, copy.csChooseReelVideo);
-          return;
-        }
-
-        const result = await createReel({
-          caption: composePublishCaption(studioCaption, activeMedia.overlayText, studioLocation),
-          hashtags: collectPublishHashtags(studioHashtags, `${studioCaption} ${activeMedia.overlayText}`),
-          videoUrl: activeMedia.uri,
-          thumbnailUrl: activeMedia.posterUri || "",
-          videoMimeType: activeMedia.mimeType,
-          videoFileName: activeMedia.fileName,
-          videoDurationSeconds: activeMedia.durationSeconds,
-          editConfig: buildMediaEditConfig(activeMedia),
-        });
-
-        if (!result.ok) {
-          alert(copy.csReelUnavailable, result.message ?? copy.csReelFailed);
-          return;
-        }
-
-        resetStudio();
-        if (result.reel) {
-          rootNavigation.navigate("ReelViewer", { reelId: result.reel.id });
-          return;
-        }
-        alert(copy.reelPublished);
-        navigation.navigate("Reels");
-        return;
-      }
-
-      const storyCaption = composePublishCaption(
-        composeCaptionWithHashtags(studioCaption, studioHashtags),
-        activeMedia.overlayText,
-        studioLocation
-      );
-      const storyResult = await createStory({
-        imageUrl: activeMedia.type === "video" ? activeMedia.posterUri || activeMedia.uri : activeMedia.uri,
-        videoUrl: activeMedia.type === "video" ? activeMedia.uri : undefined,
-        mediaType: activeMedia.type as StoryMediaType,
-        videoMimeType: activeMedia.type === "video" ? activeMedia.mimeType : undefined,
-        videoFileName: activeMedia.type === "video" ? activeMedia.fileName : undefined,
-        videoDurationSeconds: activeMedia.type === "video" ? activeMedia.durationSeconds : undefined,
-        caption: storyCaption,
-        saveToHighlights,
-        highlightLabel,
-        editConfig: buildMediaEditConfig(activeMedia),
+      const result = await createProduct({
+        title: productTitle,
+        description: productDescription,
+        price: productPrice,
+        imageUrls: productImageUrls,
+        category: productCategory,
+        condition: productCondition,
+        location: productLocation,
       });
-
-      if (!storyResult.ok) {
-        alert(copy.storyUnavailableTitle, storyResult.message ?? copy.storyUnavailableBody);
+      if (!result.ok) {
+        Alert.alert(copy.csContentBlocked, result.message ?? copy.csProductFailed);
         return;
       }
-
-      resetStudio();
-      if (storyResult.story) {
-        rootNavigation.navigate("StoryViewer", {
-          userId: storyResult.story.userId,
-          storyId: storyResult.story.id,
-        });
-        return;
-      }
-      alert(copy.storyPostedTitle, copy.storyPostedBody);
-      navigation.navigate("Home");
+      setProductTitle("");
+      setProductDescription("");
+      setProductPrice("");
+      setProductCategory("Electronics");
+      setProductCondition("Good");
+      setProductLocation("");
+      setProductImageUrls([]);
+      Alert.alert(copy.productPublished);
+      navigation.navigate("Marketplace");
     } finally {
       setIsPublishing(false);
     }
   }
 
-  async function submitProduct() {
-    if (!productTitle.trim() || !productDescription.trim() || !productPrice.trim() || !productLocation.trim()) {
-      alert(copy.communityMissingDetailsTitle, copy.csMissingListing);
-      return;
-    }
-
-    if (productImageUrls.length === 0) {
-      alert(copy.csAddPhotos, copy.csListingPhotoRequired);
-      return;
-    }
-
-    const result = await createProduct({
-      title: productTitle,
-      description: productDescription,
-      price: productPrice,
-      imageUrls: productImageUrls,
-      category: productCategory,
-      condition: productCondition,
-      location: productLocation,
-    });
-    if (!result.ok) {
-      alert(copy.csContentBlocked, result.message ?? copy.csProductFailed);
-      return;
-    }
-
-    setProductTitle("");
-    setProductDescription("");
-    setProductPrice("");
-    setProductCategory("Electronics");
-    setProductCondition("Good");
-    setProductLocation("");
-    setProductImageUrls([]);
-    alert(copy.productPublished);
-    navigation.navigate("Marketplace");
-  }
-
   function resetStudio() {
-    setStudioCaption("");
-    setStudioHashtags("");
-    setStudioLocation("");
-    setStudioMediaItems([]);
-    setActiveMediaId(null);
-    setPreviewMuted(false);
-    setTrimHandle("start");
+    setCaption("");
+    setHashtags("");
+    setLocation("");
+    setItems([]);
+    setActiveId(null);
+    setHideLikes(false);
+    setCommentsOff(false);
     setSaveToHighlights(false);
     setHighlightLabel("");
+    setDraftId(null);
   }
+
+  const publishLabel = isPublishing
+    ? storyProgress && storyProgress.total > 1
+      ? fill(copy.crStoryCount, { done: storyProgress.done + 1, total: storyProgress.total })
+      : mode === "story"
+        ? copy.csPostingStory
+        : mode === "reel"
+          ? copy.csUploadingReel
+          : copy.csPublishingPost
+    : mode === "story"
+      ? items.length > 1
+        ? fill(copy.crShareStories, { count: items.length })
+        : copy.postStory
+      : mode === "reel"
+        ? copy.csPublishReel
+        : copy.csPublishPost;
+
+  const progressLine = publishProgress
+    ? publishProgress.stage === "uploading"
+      ? publishProgress.total && publishProgress.total > 1
+        ? fill(copy.edPreviewUploadingCount, { done: Math.min(publishProgress.total, (publishProgress.done ?? 0) + 1), total: publishProgress.total })
+        : copy.crPublishUploading
+      : copy.crPublishRendering
+    : null;
+
+  const previewAspect = studioMode === "post" ? 4 / 5 : 9 / 16;
 
   return (
     <Screen contentContainerStyle={styles.screenContent} scrollable>
-      <LinearGradient
-        colors={[palette.background, palette.background]}
-        style={styles.hero}
-      >
-        <SectionTitle title={copy.create} subtitle={copy.csUploadStudio} />
-        <Text style={styles.heroBody}>
-          {mode === "story"
-            ? copy.csIntroStory
-            : copy.csIntroPost}
-        </Text>
-      </LinearGradient>
+      <SectionTitle subtitle={copy.crIntro} title={copy.create} />
 
-      <View style={styles.modeSection}>
-        <Text style={styles.sectionEyebrow}>{copy.csPostType}</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.modeRow}>
-          <ModeButton active={mode === "post"} icon="images-outline" label={copy.csModePost} onPress={() => switchMode("post")} />
-          <ModeButton active={mode === "reel"} icon="play-circle-outline" label={copy.csModeReel} onPress={() => switchMode("reel")} />
-          <ModeButton active={mode === "story"} icon="albums-outline" label={copy.csModeStory} onPress={() => switchMode("story")} />
-          <ModeButton active={mode === "product"} icon="bag-handle-outline" label={copy.csModeShop} onPress={() => switchMode("product")} />
-        </ScrollView>
+      <View accessibilityRole="tablist" style={styles.modeTabs}>
+        {(
+          [
+            ["post", "images-outline", copy.csModePost],
+            ["reel", "play-circle-outline", copy.csModeReel],
+            ["story", "albums-outline", copy.csModeStory],
+            ["product", "bag-handle-outline", copy.csModeShop],
+          ] as const
+        ).map(([id, icon, label]) => (
+          <Pressable
+            accessibilityRole="tab"
+            accessibilityState={{ selected: mode === id }}
+            disabled={isPublishing}
+            key={id}
+            onPress={() => switchMode(id)}
+            style={[styles.modeTab, mode === id ? styles.modeTabActive : null]}
+          >
+            <Ionicons color={mode === id ? palette.text : palette.muted} name={icon} size={16} />
+            <Text numberOfLines={1} style={[styles.modeTabLabel, mode === id ? styles.modeTabLabelActive : null]}>
+              {label}
+            </Text>
+          </Pressable>
+        ))}
       </View>
 
       {mode === "product" ? (
-        <View style={styles.formCard}>
-          <SectionTitle
-            title={copy.csSellItem}
-            subtitle={copy.csSellBody}
-          />
+        <View style={styles.card}>
+          <SectionTitle subtitle={copy.csSellBody} title={copy.csSellItem} />
           <PrimaryButton
             disabled={isPublishing}
             label={productImageUrls.length > 0 ? fill(copy.csListingPhotos, { count: productImageUrls.length }) : copy.csUploadListingPhotos}
@@ -650,748 +713,334 @@ export function CreateScreen({
             variant="ghost"
           />
           {productImageUrls.length > 0 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.thumbnailRow}>
+            <ScrollView contentContainerStyle={styles.thumbRow} horizontal showsHorizontalScrollIndicator={false}>
               {productImageUrls.map((imageUrl, index) => (
-                <Image key={`${imageUrl}-${index}`} source={{ uri: imageUrl }} style={styles.productThumb} />
+                <Image key={`${imageUrl.slice(0, 40)}-${index}`} source={{ uri: imageUrl }} style={styles.productThumb} />
               ))}
             </ScrollView>
           ) : null}
           <InputField label={copy.productTitle} onChangeText={setProductTitle} placeholder={copy.csProductTitlePh} value={productTitle} />
-          <InputField
-            label={copy.productDescription}
-            multiline
-            onChangeText={setProductDescription}
-            placeholder={copy.csProductDescPh}
-            value={productDescription}
-          />
-          <InputField label={`${copy.productPrice} (${listingCurrency})`} keyboardType="numeric" onChangeText={setProductPrice} placeholder="420" value={productPrice} />
+          <InputField label={copy.productDescription} multiline onChangeText={setProductDescription} placeholder={copy.csProductDescPh} value={productDescription} />
+          <InputField keyboardType="numeric" label={`${copy.productPrice} (${listingCurrency})`} onChangeText={setProductPrice} placeholder="420" value={productPrice} />
           <InputField label={copy.location} onChangeText={setProductLocation} placeholder={copy.locationPlaceholder} value={productLocation} />
-          <Text style={styles.sectionLabel}>{copy.category}</Text>
-          <View style={styles.choiceRow}>
+          <Text style={styles.label}>{copy.category}</Text>
+          <View style={styles.chipRow}>
             {marketplaceCategories
               .filter((item) => item !== "All")
               .map((item) => (
-                <ChoiceChip key={item} active={productCategory === item} label={categoryLabel(item, copy)} onPress={() => setProductCategory(item)} />
+                <Chip active={productCategory === item} key={item} label={categoryLabel(item, copy)} onPress={() => setProductCategory(item)} />
               ))}
           </View>
-          <Text style={styles.sectionLabel}>{copy.csCondition}</Text>
-          <View style={styles.choiceRow}>
+          <Text style={styles.label}>{copy.csCondition}</Text>
+          <View style={styles.chipRow}>
             {productConditions.map((item) => (
-              <ChoiceChip key={item} active={productCondition === item} label={conditionLabel(item, copy)} onPress={() => setProductCondition(item)} />
+              <Chip active={productCondition === item} key={item} label={conditionLabel(item, copy)} onPress={() => setProductCondition(item)} />
             ))}
           </View>
           <PrimaryButton
             disabled={isPublishing}
             label={isPublishing ? copy.csUploadingListing : copy.publishProduct}
             onPress={() => {
-              void submitStudioContent();
+              void submit();
             }}
           />
         </View>
-      ) : (
+      ) : items.length === 0 ? (
         <>
-          <View style={styles.previewCard}>
-            <View style={styles.previewHeader}>
-              <View style={styles.previewHeaderCopy}>
-                <Text style={styles.previewTitle}>{copy.csStudioPreview}</Text>
-                <Text style={styles.previewSubtitle}>{studioSummary}</Text>
-              </View>
-              <Pressable
-                disabled={isPublishing}
-                onPress={() => {
-                  void handlePickStudioMedia();
-                }}
-                style={[styles.mediaPickerButton, isPublishing ? styles.mediaPickerButtonDisabled : null]}
-              >
-                <Ionicons
-                  color={palette.text}
-                  name={mode === "reel" ? "play-circle-outline" : "images-outline"}
-                  size={16}
-                />
-                <Text numberOfLines={1} style={styles.mediaPickerButtonLabel}>
-                  {studioMediaItems.length > 0
-                    ? mode === "post"
-                      ? copy.csReplaceMedia
-                      : copy.csReplace
-                    : mode === "reel"
-                      ? copy.csPickVideo
-                      : copy.csPickMedia}
-                </Text>
-              </Pressable>
+          <Pressable accessibilityRole="button" disabled={isPublishing} onPress={() => void pickMedia(false)} style={styles.emptyCard}>
+            <View style={styles.emptyIcon}>
+              <Ionicons color={palette.primary} name={mode === "reel" ? "film-outline" : mode === "story" ? "albums-outline" : "images-outline"} size={30} />
             </View>
+            <Text style={styles.emptyTitle}>{copy.crChoose}</Text>
+            <Text style={styles.emptyBody}>{mode === "reel" ? copy.crEmptyReel : mode === "story" ? copy.crEmptyStory : copy.crEmptyPost}</Text>
+            <View style={styles.featureRow}>
+              {[copy.edToolClips, copy.edMusic, copy.edCaptions, copy.edEffects, copy.edVoice, copy.edDraw].map((feature) => (
+                <View key={feature} style={styles.featurePill}>
+                  <Text style={styles.featureLabel}>{feature}</Text>
+                </View>
+              ))}
+            </View>
+          </Pressable>
 
-            <View
-              onLayout={(event: LayoutChangeEvent) => {
-                const { width, height } = event.nativeEvent.layout;
-                setPreviewSurfaceSize((currentSize) =>
-                  currentSize.width === width && currentSize.height === height ? currentSize : { width, height }
-                );
-              }}
-              style={styles.previewSurface}
-            >
-              {activeMedia ? (
-                <>
-                  {activeMedia.type === "video" ? (
-                    <StudioVideoPreview
-                      item={activeMedia}
-                      muted={previewMuted}
-                      onSeekRatioChange={handleTrimSegmentPress}
-                      onToggleMuted={() => setPreviewMuted((currentValue) => !currentValue)}
-                      trimHandle={trimHandle}
-                    />
-                  ) : (
-                    <Image source={{ uri: activeMedia.uri }} style={styles.previewMedia} />
-                  )}
-
-                  {activeMedia.editor ? <FilterPreview filters={activeMedia.editor.filters} /> : renderFilterOverlays(activeMedia.filters)}
-                  {activeMedia.editor ? (
-                    <StudioLayersOverlay
-                      height={previewSurfaceSize.height}
-                      studio={activeMedia.editor.studio}
-                      width={previewSurfaceSize.width}
-                    />
-                  ) : null}
-
-                  <SafeLinearGradient
-                    colors={["rgba(0,0,0,0.08)", "rgba(0,0,0,0.18)", "rgba(0,0,0,0.64)"]}
-                    pointerEvents="none"
-                    style={StyleSheet.absoluteFillObject}
-                  />
-
-                  <View style={styles.previewTopRail}>
-                    <View style={styles.previewBadge}>
-                      <Ionicons color={palette.text} name={activeMedia.type === "video" ? "videocam-outline" : "image-outline"} size={14} />
-                      <Text style={styles.previewBadgeLabel}>{mode === "reel" ? copy.csModeReel : mode === "story" ? copy.csModeStory : copy.csModePost}</Text>
-                    </View>
-                    {studioLocation.trim() ? (
-                      <View style={styles.previewBadge}>
-                        <Ionicons color={palette.text} name="location-outline" size={14} />
-                        <Text numberOfLines={1} style={styles.previewBadgeLabel}>
-                          {studioLocation.trim()}
+          {DRAFTS_SUPPORTED && drafts.length > 0 ? (
+            <View style={styles.section}>
+              <Text style={styles.label}>
+                {copy.crDrafts} · {drafts.length}
+              </Text>
+              <ScrollView contentContainerStyle={styles.thumbRow} horizontal showsHorizontalScrollIndicator={false}>
+                {drafts.map((draft) => {
+                  const first = draft.items[0];
+                  return (
+                    <Pressable
+                      accessibilityLabel={`${copy.crDrafts}: ${draft.caption || modeLabel(draft.mode, copy)}`}
+                      key={draft.id}
+                      onLongPress={() => deleteDraft(draft)}
+                      onPress={() => openDraft(draft)}
+                      style={styles.draftCard}
+                    >
+                      {first ? <Image source={{ uri: first.posterUri || first.uri }} style={styles.draftThumb} /> : <View style={styles.draftThumb} />}
+                      <Pressable accessibilityLabel={copy.delete} hitSlop={8} onPress={() => deleteDraft(draft)} style={styles.draftDelete}>
+                        <Ionicons color="#ffffff" name="close" size={14} />
+                      </Pressable>
+                      <View style={styles.draftMeta}>
+                        <Text numberOfLines={1} style={styles.draftMode}>
+                          {modeLabel(draft.mode, copy)}
+                          {draft.items.length > 1 ? ` · ${draft.items.length}` : ""}
+                        </Text>
+                        <Text numberOfLines={1} style={styles.draftDate}>
+                          {formatRelativeTime(draft.savedAt, language)}
                         </Text>
                       </View>
-                    ) : null}
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          ) : null}
+        </>
+      ) : (
+        <>
+          <View style={styles.previewWrap}>
+            <Pressable
+              accessibilityHint={copy.crTapToEdit}
+              accessibilityRole="button"
+              disabled={isPublishing || !activeItem}
+              onLayout={(event: LayoutChangeEvent) => {
+                const { width, height } = event.nativeEvent.layout;
+                setPreviewSize((current) => (current.width === width && current.height === height ? current : { width, height }));
+              }}
+              onPress={() => activeItem && openEditorFor(activeItem)}
+              style={[styles.preview, { aspectRatio: previewAspect, width: studioMode === "post" ? "100%" : "72%" }]}
+            >
+              {activeItem ? (
+                <>
+                  <Image
+                    resizeMode="cover"
+                    source={{ uri: activeItem.type === "video" || activeItem.editor?.timeline?.[0]?.type === "video" ? activeItem.posterUri || activeItem.uri : activeItem.uri }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  {activeItem.editor ? <FilterPreview filters={activeItem.editor.filters} /> : null}
+                  {activeItem.editor ? <StudioLayersOverlay height={previewSize.height} studio={activeItem.editor.studio} width={previewSize.width} /> : null}
+                  <View style={styles.previewBadges}>
+                    {itemBadges(activeItem, copy).map((badge) => (
+                      <View key={badge} style={styles.previewBadge}>
+                        <Text style={styles.previewBadgeLabel}>{badge}</Text>
+                      </View>
+                    ))}
                   </View>
-
-                  {activeMedia.overlayText.trim() ? (
-                    <DraggableOverlay
-                      onPositionChange={updateOverlayTextPosition}
-                      position={activeMedia.overlayTextPosition}
-                      previewHeight={previewSurfaceSize.height}
-                      previewWidth={previewSurfaceSize.width}
-                      style={styles.overlayTextWrap}
-                    >
-                      <Text style={styles.overlayText}>{activeMedia.overlayText.trim()}</Text>
-                    </DraggableOverlay>
-                  ) : null}
-
-                  {activeMedia.stickers.map((sticker) => (
-                    <DraggableOverlay
-                      key={sticker.id}
-                      onPositionChange={(position) => updateStickerPosition(sticker.id, position)}
-                      position={sticker}
-                      previewHeight={previewSurfaceSize.height}
-                      previewWidth={previewSurfaceSize.width}
-                      style={styles.stickerBadge}
-                    >
-                      <Text style={styles.stickerLabel}>{sticker.value}</Text>
-                    </DraggableOverlay>
-                  ))}
-
-                  <View style={styles.previewFooter}>
-                    <Text numberOfLines={2} style={styles.previewCaption}>
-                      {studioCaption.trim() || copy.csCaptionPreviewPh}
-                    </Text>
-                    {studioHashtagPreview.length > 0 ? (
-                      <Text numberOfLines={2} style={styles.previewTags}>
-                        {studioHashtagPreview.join("  ")}
-                      </Text>
-                    ) : null}
+                  <View style={styles.editFab}>
+                    <Ionicons color="#ffffff" name="color-wand" size={16} />
+                    <Text style={styles.editFabLabel}>{copy.edOpenEditor}</Text>
                   </View>
                 </>
-              ) : (
-                  <View style={styles.emptyPreviewState}>
-                    <Ionicons color={palette.primary} name="sparkles-outline" size={34} />
-                    <Text style={styles.emptyPreviewTitle}>{copy.csStudioReady}</Text>
-                    <Text style={styles.emptyPreviewBody}>
-                      {mode === "story"
-                        ? copy.csEmptyStory
-                        : copy.csEmptyPost}
-                    </Text>
-                  </View>
-                )}
-              </View>
+              ) : null}
+            </Pressable>
+          </View>
 
-            {studioMediaItems.length > 0 ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.thumbnailRow}>
-                {studioMediaItems.map((item) => (
+          <ScrollView contentContainerStyle={styles.thumbRow} horizontal showsHorizontalScrollIndicator={false}>
+            {items.map((item, index) => {
+              const selected = item.id === activeItem?.id;
+              return (
+                <View key={item.id} style={styles.itemWrap}>
                   <Pressable
-                    key={item.id}
-                    onPress={() => setActiveMediaId(item.id)}
-                    style={[styles.mediaThumbWrap, item.id === activeMedia?.id ? styles.mediaThumbWrapActive : null]}
+                    accessibilityLabel={`${index + 1}`}
+                    accessibilityState={{ selected }}
+                    onPress={() => setActiveId(item.id)}
+                    style={[styles.itemThumbWrap, selected ? styles.itemThumbActive : null]}
                   >
-                    <Image source={{ uri: item.posterUri || item.uri }} style={styles.mediaThumb} />
-                    {item.type === "video" ? (
-                      <View style={styles.thumbVideoBadge}>
-                        <Ionicons color={palette.text} name="play" size={12} />
+                    <Image source={{ uri: item.posterUri || item.uri }} style={styles.itemThumb} />
+                    {items.length > 1 ? (
+                      <View style={styles.itemNumber}>
+                        <Text style={styles.itemNumberLabel}>{index + 1}</Text>
+                      </View>
+                    ) : null}
+                    {item.type === "video" || item.editor?.timeline ? (
+                      <View style={styles.itemVideo}>
+                        <Ionicons color="#ffffff" name="play" size={10} />
                       </View>
                     ) : null}
                   </Pressable>
-                ))}
-              </ScrollView>
+                  {selected ? (
+                    <View style={styles.itemTools}>
+                      {items.length > 1 ? (
+                        <Pressable accessibilityLabel={copy.edMoveLeft} disabled={index === 0} hitSlop={6} onPress={() => moveItem(item.id, -1)}>
+                          <Ionicons color={index === 0 ? palette.borderStrong : palette.text} name="chevron-back" size={16} />
+                        </Pressable>
+                      ) : null}
+                      <Pressable accessibilityLabel={copy.csRemove} hitSlop={6} onPress={() => removeItem(item.id)}>
+                        <Ionicons color={palette.danger} name="trash-outline" size={16} />
+                      </Pressable>
+                      {items.length > 1 ? (
+                        <Pressable accessibilityLabel={copy.edMoveRight} disabled={index === items.length - 1} hitSlop={6} onPress={() => moveItem(item.id, 1)}>
+                          <Ionicons color={index === items.length - 1 ? palette.borderStrong : palette.text} name="chevron-forward" size={16} />
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
+            {mode !== "reel" && items.length < ITEM_LIMITS[studioMode] ? (
+              <Pressable accessibilityLabel={copy.crAddMore} disabled={isPublishing} onPress={() => void pickMedia(true)} style={styles.addTile}>
+                <Ionicons color={palette.primary} name="add" size={26} />
+              </Pressable>
             ) : null}
+            {mode === "reel" ? (
+              <Pressable accessibilityLabel={copy.csReplace} disabled={isPublishing} onPress={() => void pickMedia(false)} style={styles.addTile}>
+                <Ionicons color={palette.primary} name="swap-horizontal" size={22} />
+              </Pressable>
+            ) : null}
+          </ScrollView>
+
+          {mode === "post" && activeItem && activeItem.type === "image" && !activeItem.editor?.timeline ? (
+            <View style={styles.section}>
+              <Text style={styles.label}>{copy.crAltText}</Text>
+              <TextInput
+                maxLength={300}
+                multiline
+                onChangeText={(text) => updateItem(activeItem.id, { altText: text })}
+                placeholder={copy.crAltTextPh}
+                placeholderTextColor={palette.muted}
+                style={styles.input}
+                value={activeItem.altText ?? ""}
+              />
+            </View>
+          ) : null}
+
+          <View style={styles.section}>
+            <InputField
+              label={copy.captionLabel}
+              multiline
+              onChangeText={setCaption}
+              placeholder={mode === "story" ? copy.csStoryCaptionPh : mode === "reel" ? copy.csReelCaptionPh : copy.csPostCaptionPh}
+              value={caption}
+            />
+            <InputField label={copy.hashtagsTitle} onChangeText={setHashtags} placeholder={copy.csHashtagsPh} value={hashtags} />
+            {hashtagPreview.length > 0 ? <Text style={styles.hashtags}>{hashtagPreview.join(" ")}</Text> : null}
+            <InputField label={copy.location} onChangeText={setLocation} placeholder={copy.locationPlaceholder} value={location} />
           </View>
 
-          <View style={styles.formCard}>
-            <SectionTitle
-              title={copy.csEditTools}
-              subtitle={
-                mode === "story"
-                  ? copy.csToolsStoryBody
-                  : copy.csToolsPostBody
-              }
-            />
-
-            <View style={styles.toolCluster}>
-              <Text style={styles.sectionLabel}>{mode === "story" ? copy.csStoryTools : copy.csQuickTools}</Text>
-              <View style={styles.toolRow}>
-                <ToolChip
-                  active={false}
-                  icon="images-outline"
-                  label={studioMediaItems.length > 0 ? copy.csChangeMedia : copy.csSelectMedia}
-                  onPress={() => {
-                    void handlePickStudioMedia();
-                  }}
-                />
-                <ToolChip
-                  active={Boolean(activeMedia && activeMedia.type === "image")}
-                  icon="crop-outline"
-                  label={copy.csCropImage}
-                  onPress={() => {
-                    void handleCropActiveImage();
-                  }}
-                />
-                {activeMedia?.type === "video" ? (
-                  <ToolChip
-                    active={previewMuted}
-                    icon={previewMuted ? "volume-mute-outline" : "volume-high-outline"}
-                    label={previewMuted ? "Muted" : copy.csSoundOn}
-                    onPress={() => setPreviewMuted((currentValue) => !currentValue)}
-                  />
-                ) : null}
-                <ToolChip
-                  active={Boolean(activeMedia)}
-                  icon="trash-outline"
-                  label={copy.csRemove}
-                  onPress={() => {
-                    if (!activeMedia) {
-                      return;
-                    }
-
-                    const nextItems = studioMediaItems.filter((item) => item.id !== activeMedia.id);
-                    setStudioMediaItems(nextItems);
-                    setActiveMediaId(nextItems[0]?.id ?? null);
-                  }}
-                />
-              </View>
-            </View>
-
-            {activeMedia ? (
-              <View style={styles.toolCluster}>
-                <Text style={styles.sectionLabel}>{copy.edEditorTitle}</Text>
-                <Text style={styles.helperCopy}>{copy.edEditorBody}</Text>
-                <PrimaryButton label={copy.edOpenEditor} onPress={() => openEditorFor(activeMedia)} />
-                {activeMedia.editor ? (
-                  <View style={styles.choiceRow}>
-                    {activeMedia.editor.filterId !== "normal" ? (
-                      <ChoiceChip active label={copy[getStudioFilter(activeMedia.editor.filterId).labelKey]} onPress={() => openEditorFor(activeMedia)} />
-                    ) : null}
-                    {activeMedia.editor.studio.texts?.length ? (
-                      <ChoiceChip active label={`${copy.edText} ${activeMedia.editor.studio.texts.length}`} onPress={() => openEditorFor(activeMedia)} />
-                    ) : null}
-                    {activeMedia.editor.studio.stickers?.length ? (
-                      <ChoiceChip active label={`${copy.edStickers} ${activeMedia.editor.studio.stickers.length}`} onPress={() => openEditorFor(activeMedia)} />
-                    ) : null}
-                    {activeMedia.editor.studio.music ? (
-                      <ChoiceChip active label={`♪ ${activeMedia.editor.studio.music.title}`} onPress={() => openEditorFor(activeMedia)} />
-                    ) : null}
-                    {activeMedia.type === "video" && (activeMedia.editor.trimStartRatio > 0.001 || activeMedia.editor.trimEndRatio < 0.999) ? (
-                      <ChoiceChip
-                        active
-                        label={`${copy.edTrim} ${formatDuration(
-                          Math.round((activeMedia.durationSeconds ?? 0) * (activeMedia.editor.trimEndRatio - activeMedia.editor.trimStartRatio))
-                        )}`}
-                        onPress={() => openEditorFor(activeMedia)}
-                      />
-                    ) : null}
-                    {activeMedia.type === "video" && activeMedia.editor.speed !== 1 ? (
-                      <ChoiceChip active label={`${activeMedia.editor.speed}x`} onPress={() => openEditorFor(activeMedia)} />
-                    ) : null}
-                  </View>
-                ) : null}
-              </View>
-            ) : null}
-
-            <View style={styles.toolCluster}>
-              <Text style={styles.sectionLabel}>{copy.csDetails}</Text>
-              <InputField
-                label={copy.captionLabel}
-                multiline
-                onChangeText={setStudioCaption}
-                placeholder={
-                  mode === "story"
-                    ? copy.csStoryCaptionPh
-                    : mode === "reel"
-                      ? copy.csReelCaptionPh
-                      : copy.csPostCaptionPh
-                }
-                value={studioCaption}
+          {mode === "story" ? (
+            <View style={styles.settingsCard}>
+              <SettingRow
+                body={copy.crHighlightBody}
+                label={copy.saveHighlight}
+                onChange={setSaveToHighlights}
+                value={saveToHighlights}
               />
-              <InputField
-                label={copy.hashtagsTitle}
-                onChangeText={setStudioHashtags}
-                placeholder={copy.csHashtagsPh}
-                value={studioHashtags}
-              />
-              {studioHashtagPreview.length > 0 ? (
-                <Text style={styles.hashtagPreview}>{studioHashtagPreview.join(" ")}</Text>
+              {saveToHighlights ? (
+                <TextInput
+                  maxLength={40}
+                  onChangeText={setHighlightLabel}
+                  placeholder={copy.highlightTitlePlaceholder}
+                  placeholderTextColor={palette.muted}
+                  style={styles.input}
+                  value={highlightLabel}
+                />
               ) : null}
-              <InputField
-                label={copy.location}
-                onChangeText={setStudioLocation}
-                placeholder={copy.locationPlaceholder}
-                value={studioLocation}
-              />
             </View>
+          ) : (
+            <View style={styles.settingsCard}>
+              <SettingRow body={copy.crHideLikesBody} label={copy.crHideLikes} onChange={setHideLikes} value={hideLikes} />
+              <View style={styles.divider} />
+              <SettingRow body={copy.crCommentsOffBody} label={copy.crCommentsOff} onChange={setCommentsOff} value={commentsOff} />
+            </View>
+          )}
 
-            {mode === "story" ? (
-              <View style={styles.toolCluster}>
-                <Text style={styles.sectionLabel}>{copy.csStoryVisibility}</Text>
-                <View style={styles.toolRow}>
-                  <ToolChip
-                    active={!saveToHighlights}
-                    icon="time-outline"
-                    label="24h only"
-                    onPress={() => setSaveToHighlights(false)}
-                  />
-                  <ToolChip
-                    active={saveToHighlights}
-                    icon="star-outline"
-                    label={copy.saveHighlight}
-                    onPress={() => setSaveToHighlights(true)}
-                  />
-                </View>
-                {saveToHighlights ? (
-                  <TextInput
-                    onChangeText={setHighlightLabel}
-                    placeholder={copy.highlightTitlePlaceholder}
-                    placeholderTextColor={palette.muted}
-                    style={styles.inlineInput}
-                    value={highlightLabel}
-                  />
-                ) : null}
-              </View>
+          <View style={styles.actions}>
+            {DRAFTS_SUPPORTED ? (
+              <PrimaryButton disabled={isPublishing} label={copy.crSaveDraft} onPress={() => void saveDraft()} style={styles.draftButton} variant="ghost" />
             ) : null}
-
             <PrimaryButton
               disabled={isPublishing}
-              label={
-                isPublishing
-                  ? mode === "story"
-                    ? copy.csPostingStory
-                    : mode === "reel"
-                      ? copy.csUploadingReel
-                      : copy.csPublishingPost
-                  : mode === "story"
-                    ? copy.postStory
-                    : mode === "reel"
-                      ? copy.csPublishReel
-                      : copy.csPublishPost
-              }
+              label={publishLabel}
+              loading={isPublishing}
               onPress={() => {
-                void submitStudioContent();
+                void submit();
               }}
+              style={styles.shareButton}
             />
           </View>
+          {progressLine ? <Text style={styles.progress}>{progressLine}</Text> : null}
         </>
       )}
+
+      {notice ? (
+        <View pointerEvents="none" style={styles.notice}>
+          <Text style={styles.noticeLabel}>{notice}</Text>
+        </View>
+      ) : null}
     </Screen>
   );
 }
 
-function ModeButton({
-  label,
-  icon,
-  active,
-  onPress,
-}: {
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  active: boolean;
-  onPress: () => void;
-}) {
+function SettingRow({ label, body, value, onChange }: { label: string; body: string; value: boolean; onChange: (value: boolean) => void }) {
   return (
-    <Pressable onPress={onPress} style={[styles.modeButton, active ? styles.modeButtonActive : null]}>
-      <Ionicons color={active ? "#ffffff" : palette.text} name={icon} size={18} />
-      <Text style={[styles.modeLabel, active ? styles.modeLabelActive : null]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function ToolChip({
-  label,
-  icon,
-  active,
-  onPress,
-}: {
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={[styles.toolChip, active ? styles.toolChipActive : null]}>
-      <Ionicons color={active ? "#ffffff" : palette.text} name={icon} size={16} />
-      <Text style={[styles.toolChipLabel, active ? styles.toolChipLabelActive : null]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function ChoiceChip({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={[styles.choiceChip, active ? styles.choiceChipActive : null]}>
-      <Text style={[styles.choiceLabel, active ? styles.choiceLabelActive : null]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function StudioVideoPreview({
-  item,
-  muted,
-  trimHandle,
-  onSeekRatioChange,
-  onToggleMuted,
-}: {
-  item: StudioMediaItem;
-  muted: boolean;
-  trimHandle: TrimHandle;
-  onSeekRatioChange: (segmentIndex: number) => void;
-  onToggleMuted: () => void;
-}) {
-  const expoVideo = getExpoVideoModule();
-  if (!expoVideo) {
-    return (
-      <View style={styles.videoFallback}>
-        <Image source={{ uri: item.posterUri || item.uri }} style={styles.previewMedia} />
+    <Pressable accessibilityRole="switch" accessibilityState={{ checked: value }} onPress={() => onChange(!value)} style={styles.settingRow}>
+      <View style={styles.settingCopy}>
+        <Text style={styles.settingLabel}>{label}</Text>
+        <Text style={styles.settingBody}>{body}</Text>
       </View>
-    );
-  }
-
-  return (
-    <RealStudioVideoPreview
-      expoVideo={expoVideo}
-      item={item}
-      muted={muted}
-      onSeekRatioChange={onSeekRatioChange}
-      onToggleMuted={onToggleMuted}
-      trimHandle={trimHandle}
-    />
+      <Switch
+        onValueChange={onChange}
+        thumbColor="#ffffff"
+        trackColor={{ false: palette.borderStrong, true: palette.primary }}
+        value={value}
+      />
+    </Pressable>
   );
 }
 
-function RealStudioVideoPreview({
-  expoVideo,
-  item,
-  muted,
-  trimHandle,
-  onSeekRatioChange,
-  onToggleMuted,
-}: {
-  expoVideo: ExpoVideoModule;
-  item: StudioMediaItem;
-  muted: boolean;
-  trimHandle: TrimHandle;
-  onSeekRatioChange: (segmentIndex: number) => void;
-  onToggleMuted: () => void;
-}) {
-  const { VideoView, useVideoPlayer } = expoVideo;
-  const player = useVideoPlayer(item.uri, (videoPlayer) => {
-    videoPlayer.loop = false;
-    videoPlayer.audioMixingMode = "duckOthers";
-    videoPlayer.muted = muted;
-    videoPlayer.volume = muted ? 0 : 1;
-    videoPlayer.playbackRate = item.speed;
-    videoPlayer.timeUpdateEventInterval = 0.2;
-    videoPlayer.play();
-  });
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [currentTimeSeconds, setCurrentTimeSeconds] = useState(0);
-  const [durationSeconds, setDurationSeconds] = useState(item.durationSeconds ?? 0);
-
-  const effectiveDuration = durationSeconds || item.durationSeconds || 0;
-  const trimStartSeconds = effectiveDuration > 0 ? effectiveDuration * item.trimStartRatio : 0;
-  const trimEndSeconds = effectiveDuration > 0 ? effectiveDuration * item.trimEndRatio : effectiveDuration;
-  const progressRatio = effectiveDuration > 0 ? Math.min(1, Math.max(0, currentTimeSeconds / effectiveDuration)) : 0;
-
-  useEffect(() => {
-    try {
-      player.audioMixingMode = "duckOthers";
-      player.muted = muted;
-      player.volume = muted ? 0 : 1;
-      player.playbackRate = item.speed;
-    } catch (error) {
-      console.warn("Sohba studio could not update the video preview.", error);
-    }
-  }, [item.speed, muted, player]);
-
-  useEffect(() => {
-    try {
-      if (effectiveDuration > 0) {
-        const nextStart = effectiveDuration * item.trimStartRatio;
-        const nextEnd = effectiveDuration * item.trimEndRatio;
-        if (player.currentTime < nextStart || player.currentTime > nextEnd) {
-          player.currentTime = nextStart;
-          setCurrentTimeSeconds(nextStart);
-        }
-      }
-    } catch (error) {
-      console.warn("Sohba studio could not sync trim markers.", error);
-    }
-  }, [effectiveDuration, item.trimEndRatio, item.trimStartRatio, player]);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (nextState) => {
-      try {
-        if (nextState === "active") {
-          if (isPlaying) {
-            player.audioMixingMode = "duckOthers";
-            player.muted = muted;
-            player.volume = muted ? 0 : 1;
-            player.play();
-          }
-        } else {
-          player.pause();
-        }
-      } catch (error) {
-        console.warn("Sohba studio video preview could not update app state playback.", error);
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [isPlaying, player]);
-
-  useEventListener(player, "sourceLoad", (event: any) => {
-    const nextDuration =
-      typeof event?.duration === "number"
-        ? event.duration
-        : typeof player.duration === "number"
-          ? player.duration
-          : item.durationSeconds ?? 0;
-    if (nextDuration > 0) {
-      setDurationSeconds(nextDuration);
-    }
-  });
-
-  useEventListener(player, "timeUpdate", (event: any) => {
-    const nextTime =
-      typeof event?.currentTime === "number"
-        ? event.currentTime
-        : typeof player.currentTime === "number"
-          ? player.currentTime
-          : 0;
-    setCurrentTimeSeconds(nextTime);
-
-    if (effectiveDuration <= 0) {
-      return;
-    }
-
-    const nextTrimStart = effectiveDuration * item.trimStartRatio;
-    const nextTrimEnd = effectiveDuration * item.trimEndRatio;
-    if (nextTrimEnd > nextTrimStart && nextTime >= nextTrimEnd) {
-      try {
-        player.currentTime = nextTrimStart;
-      } catch (error) {
-        console.warn("Sohba studio preview could not loop within the trim range.", error);
-      }
-    }
-  });
-
-  function togglePlayback() {
-    try {
-      if (isPlaying) {
-        player.pause();
-      } else {
-        if (effectiveDuration > 0 && currentTimeSeconds >= trimEndSeconds) {
-          player.currentTime = trimStartSeconds;
-          setCurrentTimeSeconds(trimStartSeconds);
-        }
-        player.play();
-      }
-      setIsPlaying((currentValue) => !currentValue);
-    } catch (error) {
-      console.warn("Sohba studio preview could not toggle playback.", error);
-    }
-  }
-
-  function seekToRatio(ratio: number) {
-    if (effectiveDuration <= 0) {
-      return;
-    }
-
-    const clampedRatio = clampRatio(ratio, item.trimStartRatio, item.trimEndRatio);
-    const nextTime = effectiveDuration * clampedRatio;
-    try {
-      player.currentTime = nextTime;
-      setCurrentTimeSeconds(nextTime);
-    } catch (error) {
-      console.warn("Sohba studio preview could not seek to that point.", error);
-    }
-  }
-
+function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
-    <View style={styles.videoPreviewSurface}>
-      <Pressable onPress={togglePlayback} style={styles.videoPreviewTouchable}>
-        <VideoView
-          allowsPictureInPicture={false}
-          contentFit="cover"
-          fullscreenOptions={{ enable: false }}
-          nativeControls={false}
-          player={player}
-          style={styles.previewMedia}
-        />
-        {!isPlaying ? (
-          <View style={styles.videoPauseBadge}>
-            <Ionicons color={palette.text} name="play" size={34} />
-          </View>
-        ) : null}
-      </Pressable>
-
-      <View style={styles.videoControlBar}>
-        <View style={styles.videoMetaRow}>
-          <Pressable onPress={togglePlayback} style={styles.previewIconButton}>
-            <Ionicons color={palette.text} name={isPlaying ? "pause" : "play"} size={18} />
-          </Pressable>
-          <Text style={styles.videoMetaText}>
-            {formatDuration(Math.round(currentTimeSeconds))} / {formatDuration(Math.round(effectiveDuration))}
-          </Text>
-          <Pressable onPress={onToggleMuted} style={styles.previewIconButton}>
-            <Ionicons color={palette.text} name={muted ? "volume-mute" : "volume-high"} size={18} />
-          </Pressable>
-        </View>
-
-        <View style={styles.videoSeekBar}>
-          {Array.from({ length: TRIM_SEGMENTS }).map((_, index) => {
-            const segmentStart = index / TRIM_SEGMENTS;
-            const segmentEnd = (index + 1) / TRIM_SEGMENTS;
-            const isInTrimRange = segmentEnd > item.trimStartRatio && segmentStart < item.trimEndRatio;
-            const isPlayed = progressRatio >= segmentEnd;
-            const isHandle =
-              (trimHandle === "start" && index === Math.round(item.trimStartRatio * TRIM_SEGMENTS)) ||
-              (trimHandle === "end" && index === Math.round(item.trimEndRatio * TRIM_SEGMENTS) - 1);
-            return (
-              <Pressable
-                key={`preview-seek-${index}`}
-                onLongPress={() => onSeekRatioChange(index)}
-                onPress={() => seekToRatio((index + 0.5) / TRIM_SEGMENTS)}
-                style={[
-                  styles.videoSeekSegment,
-                  isInTrimRange ? styles.videoSeekSegmentActive : null,
-                  isPlayed ? styles.videoSeekSegmentPlayed : null,
-                  isHandle ? styles.videoSeekSegmentHandle : null,
-                ]}
-              />
-            );
-          })}
-        </View>
-      </View>
-    </View>
+    <Pressable accessibilityState={{ selected: active }} onPress={onPress} style={[styles.chip, active ? styles.chipActive : null]}>
+      <Text style={[styles.chipLabel, active ? styles.chipLabelActive : null]}>{label}</Text>
+    </Pressable>
   );
 }
 
-function renderFilterOverlays(filters: StudioFilterSettings) {
-  const layers: React.ReactElement[] = [];
+function modeLabel(mode: StudioMode, copy: CopyStrings) {
+  return mode === "reel" ? copy.csModeReel : mode === "story" ? copy.csModeStory : copy.csModePost;
+}
 
-  if (filters.brightness !== 0) {
-    layers.push(
-      <View
-        key="brightness"
-        pointerEvents="none"
-        style={[
-          StyleSheet.absoluteFillObject,
-          {
-            backgroundColor:
-              filters.brightness > 0
-                ? `rgba(255,255,255,${filters.brightness * 0.06})`
-                : `rgba(0,0,0,${Math.abs(filters.brightness) * 0.08})`,
-          },
-        ]}
-      />
-    );
+function formatDuration(value: number) {
+  const safe = Number.isFinite(value) ? Math.max(0, value) : 0;
+  return `${Math.floor(safe / 60)}:${String(Math.floor(safe % 60)).padStart(2, "0")}`;
+}
+
+/** Short labels on the preview: clips, length, music, captions, voice. */
+function itemBadges(item: CreateItem, copy: CopyStrings) {
+  const badges: string[] = [];
+  const timeline = item.editor?.timeline;
+  if (timeline && timeline.length > 1) {
+    badges.push(fill(copy.crClips, { count: timeline.length }));
   }
-
-  if (filters.contrast !== 0) {
-    layers.push(
-      <View
-        key="contrast"
-        pointerEvents="none"
-        style={[
-          StyleSheet.absoluteFillObject,
-          {
-            borderColor:
-              filters.contrast > 0
-                ? `rgba(255,255,255,${filters.contrast * 0.08})`
-                : `rgba(0,0,0,${Math.abs(filters.contrast) * 0.12})`,
-            borderWidth: Math.abs(filters.contrast) * 4,
-          },
-        ]}
-      />
-    );
+  const seconds = timeline ? timelineSeconds(timeline, item.editor?.speed ?? 1) : item.type === "video" ? item.durationSeconds ?? 0 : 0;
+  if (seconds > 0) {
+    badges.push(formatDuration(seconds));
   }
-
-  if (filters.saturation !== 0) {
-    layers.push(
-      <View
-        key="saturation"
-        pointerEvents="none"
-        style={[
-          StyleSheet.absoluteFillObject,
-          {
-            backgroundColor:
-              filters.saturation > 0
-                ? `rgba(229,41,79,${filters.saturation * 0.04})`
-                : `rgba(92,112,128,${Math.abs(filters.saturation) * 0.05})`,
-          },
-        ]}
-      />
-    );
+  if (item.editor?.studio.music) {
+    badges.push(`♪ ${item.editor.studio.music.title}`);
   }
-
-  if (filters.grayscale > 0) {
-    layers.push(
-      <View
-        key="grayscale"
-        pointerEvents="none"
-        style={[
-          StyleSheet.absoluteFillObject,
-          {
-            backgroundColor: `rgba(108,116,126,${filters.grayscale / 160})`,
-          },
-        ]}
-      />
-    );
+  if (item.editor?.studio.captions?.length) {
+    badges.push("CC");
   }
+  if (item.editor?.voiceover) {
+    badges.push("🎙");
+  }
+  return badges.slice(0, 4);
+}
 
-  return layers;
+function emptyResultFor(item: CreateItem): EditorResult {
+  return {
+    filterId: "normal",
+    filters: { brightness: 0, contrast: 0, saturation: 0, grayscale: 0, vignette: 0, grain: 0, sharpen: 0 },
+    trimStartRatio: 0,
+    trimEndRatio: 1,
+    speed: 1,
+    studio: {},
+    posterUri: item.posterUri,
+  };
 }
 
 function parseHashtags(value: string, options?: { allowBareWords?: boolean }) {
@@ -1412,9 +1061,17 @@ function collectPublishHashtags(inputValue: string, fallbackText: string) {
   return explicitTags.length > 0 ? explicitTags : parseHashtags(fallbackText);
 }
 
-// Upload limits of the media host: 100 MB per video and 10 MB per photo.
-const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+function composeCaption(caption: string, location?: string) {
+  const lines = [caption.trim() || undefined, location?.trim() ? `📍 ${location.trim()}` : undefined].filter((item): item is string => Boolean(item));
+  return lines.join("\n\n");
+}
+
+function composeCaptionWithHashtags(caption: string, hashtags: string) {
+  const tagLine = parseHashtags(hashtags, { allowBareWords: true })
+    .map((tag) => `#${tag}`)
+    .join(" ");
+  return [caption.trim() || undefined, tagLine || undefined].filter((item): item is string => Boolean(item)).join("\n\n");
+}
 
 function isAssetTooLarge(asset: ImagePicker.ImagePickerAsset) {
   if (typeof asset.fileSize !== "number" || asset.fileSize <= 0) {
@@ -1423,800 +1080,405 @@ function isAssetTooLarge(asset: ImagePicker.ImagePickerAsset) {
   return asset.fileSize > (asset.type === "video" ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES);
 }
 
-async function createStudioMediaItem(
-  asset: ImagePicker.ImagePickerAsset,
-  index: number,
-  previous?: StudioMediaItem
-): Promise<StudioMediaItem> {
-  const mediaType: StudioMediaType = asset.type === "video" ? "video" : "image";
-  let posterUri = previous?.posterUri;
-
-  if (mediaType === "video") {
+async function itemFromAsset(asset: ImagePicker.ImagePickerAsset, index = 0): Promise<CreateItem> {
+  const type = asset.type === "video" ? "video" : "image";
+  let posterUri: string | undefined;
+  if (type === "video") {
     try {
-      const thumbnail = await VideoThumbnails.getThumbnailAsync(asset.uri, {
-        time: 700,
-        quality: 0.65,
-      });
-      posterUri = thumbnail.uri;
+      posterUri = (await VideoThumbnails.getThumbnailAsync(asset.uri, { time: 700, quality: 0.65 })).uri;
     } catch {
-      posterUri = previous?.posterUri;
+      posterUri = undefined;
     }
   }
-
   return {
-    id: previous?.id || asset.assetId || `${Date.now()}-${index + 1}`,
+    id: `${asset.assetId || "item"}-${Date.now().toString(36)}-${index}`,
     uri: asset.uri,
-    type: mediaType,
-    mimeType: asset.mimeType || (mediaType === "video" ? "video/mp4" : "image/jpeg"),
-    fileName: resolveStudioFileName(asset, mediaType, index),
-    durationSeconds:
-      mediaType === "video" && typeof asset.duration === "number"
-        ? Math.max(1, Math.round(asset.duration / 1000))
-        : previous?.durationSeconds,
+    type,
+    mimeType: asset.mimeType || (type === "video" ? "video/mp4" : "image/jpeg"),
+    fileName: resolveFileName(asset, type, index),
+    durationSeconds: type === "video" && typeof asset.duration === "number" ? Math.max(1, Math.round(asset.duration / 1000)) : undefined,
     posterUri,
-    overlayText: previous?.overlayText || "",
-    overlayTextPosition: normalizeOverlayPosition(previous?.overlayTextPosition, DEFAULT_TEXT_POSITION),
-    stickers:
-      previous?.stickers.map((sticker, stickerIndex) => ({
-        ...sticker,
-        ...normalizeOverlayPosition(sticker, DEFAULT_STICKER_POSITIONS[stickerIndex] ?? DEFAULT_STICKER_POSITIONS[DEFAULT_STICKER_POSITIONS.length - 1]),
-      })) || [],
-    speed: previous?.speed || 1,
-    trimStartRatio: previous?.trimStartRatio ?? 0,
-    trimEndRatio: previous?.trimEndRatio ?? 1,
-    filters: previous?.filters || {
-      brightness: 0,
-      contrast: 0,
-      saturation: 0,
-      grayscale: 0,
-    },
   };
 }
 
-function constrainStudioItems(items: StudioMediaItem[], mode: CreateMode) {
-  if (mode === "post" || mode === "product") {
-    return items.slice(0, 6);
-  }
-
-  if (mode === "reel") {
-    const firstVideo = items.find((item) => item.type === "video");
-    return firstVideo ? [firstVideo] : [];
-  }
-
-  return items.slice(0, 1);
-}
-
-function composePublishCaption(caption: string, overlayText: string, location?: string) {
-  const normalizedCaption = caption.trim();
-  const normalizedOverlay = overlayText.trim();
-  const normalizedLocation = location?.trim();
-  const lines = [
-    normalizedCaption || undefined,
-    normalizedOverlay && normalizedOverlay !== normalizedCaption ? normalizedOverlay : undefined,
-    normalizedLocation ? `📍 ${normalizedLocation}` : undefined,
-  ].filter((item): item is string => Boolean(item));
-  return lines.join("\n\n");
-}
-
-function composeCaptionWithHashtags(caption: string, hashtags: string) {
-  const normalizedCaption = caption.trim();
-  const tagLine = parseHashtags(hashtags, { allowBareWords: true })
-    .map((tag) => `#${tag}`)
-    .join(" ");
-  return [normalizedCaption || undefined, tagLine || undefined].filter((item): item is string => Boolean(item)).join("\n\n");
-}
-
-function resolveStudioFileName(asset: ImagePicker.ImagePickerAsset, mediaType: StudioMediaType, index: number) {
-  const fallbackBase = `pulseora-studio-${index + 1}`;
-  const candidate = asset.fileName?.trim() || getLastUriPathPart(asset.uri) || fallbackBase;
-  const safeName = sanitizeUploadFileName(candidate) || fallbackBase;
-
-  if (/\.[a-z0-9]{2,5}$/i.test(safeName)) {
-    return safeName;
-  }
-
-  return `${safeName}.${inferUploadExtension(asset.mimeType, mediaType === "video" ? "mp4" : "jpg")}`;
-}
-
-function getLastUriPathPart(uri: string) {
-  const rawName = uri.split("?")[0].split("/").filter(Boolean).pop() ?? "";
+function resolveFileName(asset: ImagePicker.ImagePickerAsset, type: "image" | "video", index: number) {
+  const fallback = `sohba-studio-${index + 1}`;
+  const candidate = asset.fileName?.trim() || asset.uri.split("?")[0].split("/").filter(Boolean).pop() || fallback;
+  let decoded = candidate;
   try {
-    return decodeURIComponent(rawName);
+    decoded = decodeURIComponent(candidate);
   } catch {
-    return rawName;
+    decoded = candidate;
   }
-}
-
-function sanitizeUploadFileName(value: string) {
-  return value.trim().replace(/[^a-zA-Z0-9._-]/g, "_").replace(/^_+|_+$/g, "");
-}
-
-function inferUploadExtension(mimeType: string | undefined, fallback: string) {
+  const safe = decoded.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/^_+|_+$/g, "") || fallback;
+  if (/\.[a-z0-9]{2,5}$/i.test(safe)) {
+    return safe;
+  }
   const extensions: Record<string, string> = {
     "image/jpeg": "jpg",
-    "image/jpg": "jpg",
     "image/png": "png",
     "image/webp": "webp",
     "image/heic": "heic",
     "video/mp4": "mp4",
     "video/quicktime": "mov",
-    "video/x-m4v": "m4v",
     "video/webm": "webm",
   };
-
-  return mimeType ? extensions[mimeType.toLowerCase()] ?? fallback : fallback;
-}
-
-function formatDuration(value: number) {
-  const safeValue = Number.isFinite(value) ? Math.max(0, value) : 0;
-  const minutes = Math.floor(safeValue / 60);
-  const seconds = Math.floor(safeValue % 60);
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
-
-function clampRatio(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function normalizeOverlayPosition(
-  position: Partial<MediaOverlayPosition> | undefined,
-  fallback: MediaOverlayPosition
-): MediaOverlayPosition {
-  return {
-    x: clampRatio(position?.x ?? fallback.x, 0.02, 0.9),
-    y: clampRatio(position?.y ?? fallback.y, 0.02, 0.9),
-  };
-}
-
-function buildMediaEditConfig(item: StudioMediaItem): MediaEditConfig | undefined {
-  if (item.editor) {
-    const editor = item.editor;
-    const isVideo = item.type === "video";
-    const hasTrim = isVideo && (editor.trimStartRatio > 0.001 || editor.trimEndRatio < 0.999);
-    const hasSpeed = isVideo && editor.speed !== 1;
-    const hasFilter = hasFilterChanges(editor.filters);
-    const hasStudio = Object.keys(editor.studio).length > 0;
-    if (!hasTrim && !hasSpeed && !hasFilter && !hasStudio) {
-      return undefined;
-    }
-    return {
-      ...(hasFilter ? { filters: editor.filters } : {}),
-      ...(hasTrim ? { trimStartRatio: editor.trimStartRatio, trimEndRatio: editor.trimEndRatio } : {}),
-      ...(hasSpeed ? { playbackRate: editor.speed } : {}),
-      ...(hasStudio ? { studio: editor.studio } : {}),
-    };
-  }
-
-  const overlayText = item.overlayText.trim();
-  const stickers = item.stickers
-    .map((sticker, index) => {
-      const normalizedSticker = sticker.value.trim();
-      if (!normalizedSticker) {
-        return null;
-      }
-
-      const normalizedPosition = normalizeOverlayPosition(
-        sticker,
-        DEFAULT_STICKER_POSITIONS[index] ?? DEFAULT_STICKER_POSITIONS[DEFAULT_STICKER_POSITIONS.length - 1]
-      );
-      return {
-        value: normalizedSticker,
-        x: normalizedPosition.x,
-        y: normalizedPosition.y,
-      };
-    })
-    .filter((sticker): sticker is MediaStickerPlacement => Boolean(sticker));
-  const filters = {
-    brightness: item.filters.brightness,
-    contrast: item.filters.contrast,
-    saturation: item.filters.saturation,
-    grayscale: item.filters.grayscale,
-  };
-
-  const hasFilter =
-    filters.brightness !== 0 ||
-    filters.contrast !== 0 ||
-    filters.saturation !== 0 ||
-    filters.grayscale !== 0;
-  const hasTrim = item.type === "video" && (Math.abs(item.trimStartRatio) > 0.001 || Math.abs(item.trimEndRatio - 1) > 0.001);
-  const hasSpeed = item.type === "video" && item.speed !== 1;
-  const hasOverlay = Boolean(overlayText) || stickers.length > 0;
-
-  if (!hasFilter && !hasTrim && !hasSpeed && !hasOverlay) {
-    return undefined;
-  }
-
-  return {
-    overlayText: overlayText || undefined,
-    overlayTextPosition: overlayText ? normalizeOverlayPosition(item.overlayTextPosition, DEFAULT_TEXT_POSITION) : undefined,
-    stickers: stickers.length > 0 ? stickers : undefined,
-    filters: hasFilter ? filters : undefined,
-    trimStartRatio: hasTrim ? item.trimStartRatio : undefined,
-    trimEndRatio: hasTrim ? item.trimEndRatio : undefined,
-    playbackRate: hasSpeed ? item.speed : undefined,
-  };
-}
-
-function alert(title: string, message?: string) {
-  return Alert.alert(title, message);
+  return `${safe}.${(asset.mimeType && extensions[asset.mimeType.toLowerCase()]) || (type === "video" ? "mp4" : "jpg")}`;
 }
 
 function getMediaPickerErrorMessage(error: unknown, copy: CopyStrings) {
   const message = error instanceof Error ? error.message : "";
-  if (message.toLowerCase().includes("permission")) {
-    return copy.csMediaAccessUnavailableBody;
-  }
-
-  return copy.csPickerUnavailableBody;
-}
-
-function DraggableOverlay({
-  children,
-  onPositionChange,
-  position,
-  previewHeight,
-  previewWidth,
-  style,
-}: {
-  children: ReactNode;
-  onPositionChange: (position: MediaOverlayPosition) => void;
-  position: MediaOverlayPosition;
-  previewHeight: number;
-  previewWidth: number;
-  style?: any;
-}) {
-  const [itemSize, setItemSize] = useState({ width: 0, height: 0 });
-  const dragOriginRef = useRef({
-    left: 0,
-    top: 0,
-  });
-
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gestureState) =>
-          Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2,
-        onPanResponderGrant: () => {
-          dragOriginRef.current = {
-            left: position.x * previewWidth,
-            top: position.y * previewHeight,
-          };
-        },
-        onPanResponderMove: (_, gestureState) => {
-          if (previewWidth <= 0 || previewHeight <= 0) {
-            return;
-          }
-
-          const maxLeft = Math.max(0, previewWidth - itemSize.width);
-          const maxTop = Math.max(0, previewHeight - itemSize.height);
-          const nextLeft = Math.min(maxLeft, Math.max(0, dragOriginRef.current.left + gestureState.dx));
-          const nextTop = Math.min(maxTop, Math.max(0, dragOriginRef.current.top + gestureState.dy));
-
-          onPositionChange({
-            x: previewWidth > 0 ? nextLeft / previewWidth : position.x,
-            y: previewHeight > 0 ? nextTop / previewHeight : position.y,
-          });
-        },
-      }),
-    [itemSize.height, itemSize.width, onPositionChange, position.x, position.y, previewHeight, previewWidth]
-  );
-
-  return (
-    <View
-      onLayout={(event: LayoutChangeEvent) => {
-        const { height, width } = event.nativeEvent.layout;
-        setItemSize((currentSize) =>
-          currentSize.width === width && currentSize.height === height ? currentSize : { width, height }
-        );
-      }}
-      style={[
-        style,
-        {
-          left: position.x * previewWidth,
-          top: position.y * previewHeight,
-        },
-      ]}
-      {...panResponder.panHandlers}
-    >
-      {children}
-    </View>
-  );
-}
-
-function getExpoVideoModule() {
-  if (cachedExpoVideoModule !== undefined) {
-    return cachedExpoVideoModule;
-  }
-
-  try {
-    cachedExpoVideoModule = require("expo-video") as ExpoVideoModule;
-  } catch (error) {
-    console.warn("Sohba upload studio video module is unavailable in this build.", error);
-    cachedExpoVideoModule = null;
-  }
-
-  return cachedExpoVideoModule;
+  return message.toLowerCase().includes("permission") ? copy.csMediaAccessUnavailableBody : copy.csPickerUnavailableBody;
 }
 
 const styles = createThemedStyles({
   screenContent: {
     gap: spacing.lg,
   },
-  hero: {
-    gap: spacing.sm,
-    paddingTop: spacing.sm,
-  },
-  heroBody: {
-    color: palette.muted,
-    fontSize: 14,
-    lineHeight: 22,
-  },
-  modeSection: {
-    gap: spacing.sm,
-  },
-  sectionEyebrow: {
-    color: palette.muted,
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-  },
-  modeRow: {
-    gap: spacing.sm,
-    paddingRight: spacing.lg,
-  },
-  modeButton: {
-    alignItems: "center",
-    backgroundColor: palette.surface,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.pill,
-    borderWidth: 1,
+  modeTabs: {
+    backgroundColor: palette.surfaceMuted,
+    borderRadius: radii.lg,
     flexDirection: "row",
-    gap: 10,
-    minWidth: 112,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    gap: 4,
+    padding: 4,
   },
-  modeButtonActive: {
-    backgroundColor: palette.primary,
-    borderColor: palette.primary,
+  modeTab: {
+    alignItems: "center",
+    borderRadius: radii.md,
+    flex: 1,
+    flexDirection: "row",
+    gap: 5,
+    justifyContent: "center",
+    minHeight: 40,
+    paddingHorizontal: 4,
   },
-  modeLabel: {
-    color: palette.text,
-    fontSize: 14,
+  modeTabActive: {
+    backgroundColor: palette.background,
+    elevation: 2,
+    shadowColor: "#0d1117",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+  },
+  modeTabLabel: {
+    color: palette.muted,
+    fontSize: 13,
     fontWeight: "700",
   },
-  modeLabelActive: {
-    color: "#ffffff",
+  modeTabLabelActive: {
+    color: palette.text,
+    fontWeight: "800",
   },
-  previewCard: {
+  card: {
     backgroundColor: palette.surface,
-    borderColor: palette.borderStrong,
+    borderColor: palette.border,
     borderRadius: radii.xl,
     borderWidth: 1,
     gap: spacing.md,
-    overflow: "hidden",
-    padding: spacing.xl,
+    padding: spacing.lg,
   },
-  previewHeader: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: spacing.md,
-    justifyContent: "space-between",
-    flexWrap: "wrap",
+  emptyCard: {
+    alignItems: "center",
+    backgroundColor: palette.surface,
+    borderColor: palette.borderStrong,
+    borderRadius: radii.xl,
+    borderStyle: "dashed",
+    borderWidth: 1.5,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xxl,
   },
-  previewHeaderCopy: {
-    flex: 1,
-    minWidth: 180,
+  emptyIcon: {
+    alignItems: "center",
+    backgroundColor: palette.background,
+    borderRadius: 32,
+    height: 64,
+    justifyContent: "center",
+    width: 64,
   },
-  previewTitle: {
+  emptyTitle: {
     color: palette.text,
     fontSize: 18,
     fontWeight: "800",
   },
-  mediaPickerButton: {
-    alignItems: "center",
-    alignSelf: "flex-start",
-    backgroundColor: palette.glass,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    maxWidth: "100%",
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-  },
-  mediaPickerButtonDisabled: {
-    opacity: 0.45,
-  },
-  mediaPickerButtonLabel: {
-    color: palette.text,
-    fontSize: 13,
-    fontWeight: "800",
-    flexShrink: 1,
-  },
-  previewSubtitle: {
+  emptyBody: {
     color: palette.muted,
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 4,
-    maxWidth: 220,
-  },
-  previewSurface: {
-    backgroundColor: palette.backgroundDeep,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.xl,
-    borderWidth: 1,
-    height: 520,
-    overflow: "hidden",
-    position: "relative",
-  },
-  previewMedia: {
-    height: "100%",
-    width: "100%",
-  },
-  emptyPreviewState: {
-    alignItems: "center",
-    flex: 1,
-    gap: spacing.md,
-    justifyContent: "center",
-    paddingHorizontal: spacing.xl,
-  },
-  emptyPreviewTitle: {
-    color: palette.text,
-    fontSize: 20,
-    fontWeight: "800",
-  },
-  emptyPreviewBody: {
-    color: palette.textSoft,
     fontSize: 14,
-    lineHeight: 22,
+    lineHeight: 20,
     textAlign: "center",
   },
-  previewTopRail: {
-    alignItems: "flex-start",
+  featureRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: spacing.sm,
-    left: spacing.md,
-    position: "absolute",
-    right: spacing.md,
-    top: spacing.md,
+    gap: 6,
+    justifyContent: "center",
+    marginTop: spacing.xs,
   },
-  previewBadge: {
-    alignItems: "center",
-    backgroundColor: "rgba(7,16,24,0.58)",
-    borderColor: "rgba(255,255,255,0.14)",
+  featurePill: {
+    backgroundColor: palette.background,
+    borderColor: palette.border,
     borderRadius: radii.pill,
     borderWidth: 1,
-    flexDirection: "row",
-    gap: 6,
-    maxWidth: "100%",
-    paddingHorizontal: spacing.md,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  previewBadgeLabel: {
-    color: palette.text,
+  featureLabel: {
+    color: palette.textSoft,
     fontSize: 12,
     fontWeight: "700",
   },
-  overlayTextWrap: {
-    backgroundColor: "rgba(7,16,24,0.22)",
-    borderColor: "rgba(255,255,255,0.2)",
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    maxWidth: "82%",
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    position: "absolute",
-  },
-  overlayText: {
-    color: "#ffffff",
-    fontSize: 28,
-    fontWeight: "900",
-    letterSpacing: 0.3,
-    lineHeight: 34,
-    textAlign: "left",
-    textShadowColor: "rgba(0,0,0,0.45)",
-    textShadowOffset: { width: 0, height: 4 },
-    textShadowRadius: 12,
-  },
-  stickerBadge: {
-    alignItems: "center",
-    backgroundColor: "rgba(7,16,24,0.34)",
-    borderColor: "rgba(255,255,255,0.18)",
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    minWidth: 56,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    position: "absolute",
-  },
-  stickerLabel: {
-    fontSize: 22,
-  },
-  previewFooter: {
-    bottom: spacing.lg,
-    gap: spacing.sm,
-    left: spacing.lg,
-    position: "absolute",
-    right: spacing.lg,
-  },
-  previewCaption: {
-    color: palette.text,
-    fontSize: 16,
-    fontWeight: "800",
-    lineHeight: 22,
-  },
-  previewTags: {
-    color: palette.accentSoft,
-    fontSize: 13,
-    fontWeight: "700",
-    lineHeight: 18,
-  },
-  thumbnailRow: {
+  section: {
     gap: spacing.sm,
   },
-  mediaThumbWrap: {
-    borderColor: palette.border,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    overflow: "hidden",
-    position: "relative",
-  },
-  mediaThumbWrapActive: {
-    borderColor: palette.primary,
-    borderWidth: 2,
-  },
-  mediaThumb: {
-    height: 92,
-    width: 72,
-  },
-  thumbVideoBadge: {
-    alignItems: "center",
-    backgroundColor: "rgba(7,16,24,0.72)",
-    borderRadius: radii.pill,
-    bottom: 8,
-    height: 24,
-    justifyContent: "center",
-    left: 8,
-    position: "absolute",
-    width: 24,
-  },
-  formCard: {
-    backgroundColor: palette.surface,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.xl,
-    borderWidth: 1,
-    gap: spacing.md,
-    padding: spacing.xl,
-  },
-  toolCluster: {
-    gap: spacing.sm,
-  },
-  sectionLabel: {
+  label: {
     color: palette.textSoft,
     fontSize: 13,
     fontWeight: "800",
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
   },
-  helperCopy: {
-    color: palette.muted,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  toolRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  thumbRow: {
+    alignItems: "flex-start",
     gap: spacing.sm,
+    paddingRight: spacing.lg,
   },
-  toolChip: {
+  draftCard: {
+    width: 104,
+  },
+  draftThumb: {
+    backgroundColor: palette.surfaceMuted,
+    borderRadius: radii.md,
+    height: 132,
+    width: 104,
+  },
+  draftDelete: {
     alignItems: "center",
-    backgroundColor: palette.glass,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10,
+    backgroundColor: "rgba(13,17,23,0.6)",
+    borderRadius: 11,
+    height: 22,
+    justifyContent: "center",
+    position: "absolute",
+    right: 6,
+    top: 6,
+    width: 22,
   },
-  toolChipActive: {
-    backgroundColor: palette.primary,
-    borderColor: palette.primary,
+  draftMeta: {
+    gap: 1,
+    paddingTop: 6,
   },
-  toolChipLabel: {
+  draftMode: {
     color: palette.text,
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "800",
   },
-  toolChipLabelActive: {
+  draftDate: {
+    color: palette.muted,
+    fontSize: 12,
+  },
+  previewWrap: {
+    alignItems: "center",
+  },
+  preview: {
+    backgroundColor: palette.surfaceMuted,
+    borderRadius: radii.xl,
+    overflow: "hidden",
+  },
+  previewBadges: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    left: 10,
+    position: "absolute",
+    right: 10,
+    top: 10,
+  },
+  previewBadge: {
+    backgroundColor: "rgba(13,17,23,0.6)",
+    borderRadius: radii.pill,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  previewBadgeLabel: {
     color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "800",
   },
-  inlineInput: {
-    backgroundColor: palette.input,
+  editFab: {
+    alignItems: "center",
+    backgroundColor: palette.primary,
+    borderRadius: radii.pill,
+    bottom: 12,
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    position: "absolute",
+    right: 12,
+  },
+  editFabLabel: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  itemWrap: {
+    alignItems: "center",
+    gap: 6,
+  },
+  itemThumbWrap: {
+    borderColor: "transparent",
+    borderRadius: radii.md,
+    borderWidth: 2,
+    overflow: "hidden",
+  },
+  itemThumbActive: {
+    borderColor: palette.primary,
+  },
+  itemThumb: {
+    height: 84,
+    width: 64,
+  },
+  itemNumber: {
+    alignItems: "center",
+    backgroundColor: palette.primary,
+    borderRadius: 9,
+    height: 18,
+    justifyContent: "center",
+    left: 4,
+    position: "absolute",
+    top: 4,
+    width: 18,
+  },
+  itemNumberLabel: {
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  itemVideo: {
+    alignItems: "center",
+    backgroundColor: "rgba(13,17,23,0.6)",
+    borderRadius: 9,
+    bottom: 4,
+    height: 18,
+    justifyContent: "center",
+    position: "absolute",
+    right: 4,
+    width: 18,
+  },
+  itemTools: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  addTile: {
+    alignItems: "center",
+    backgroundColor: palette.surface,
     borderColor: palette.borderStrong,
-    borderRadius: radii.lg,
+    borderRadius: radii.md,
+    borderStyle: "dashed",
+    borderWidth: 1.5,
+    height: 88,
+    justifyContent: "center",
+    width: 64,
+  },
+  input: {
+    backgroundColor: palette.input,
+    borderColor: palette.border,
+    borderRadius: radii.md,
     borderWidth: 1,
     color: palette.text,
     fontSize: 15,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md + 2,
-  },
-  choiceRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-  },
-  choiceChip: {
-    backgroundColor: palette.backgroundSoft,
-    borderColor: palette.border,
-    borderRadius: radii.pill,
-    borderWidth: 1,
+    minHeight: 48,
     paddingHorizontal: spacing.md,
-    paddingVertical: 10,
+    paddingVertical: spacing.sm,
   },
-  choiceChipActive: {
-    backgroundColor: palette.cardAlt,
-    borderColor: palette.primary,
-  },
-  choiceLabel: {
-    color: palette.textSoft,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  choiceLabelActive: {
-    color: palette.primary,
-  },
-  filterControl: {
-    gap: spacing.sm,
-  },
-  filterLabelRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  filterLabel: {
-    color: palette.text,
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  filterValue: {
-    color: palette.accentSoft,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  trimToolbar: {
-    alignItems: "center",
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-    justifyContent: "space-between",
-  },
-  trimHandleRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-  },
-  trimNudgeRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-  },
-  miniAdjustButton: {
-    backgroundColor: palette.backgroundSoft,
-    borderColor: palette.borderStrong,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 8,
-  },
-  miniAdjustLabel: {
-    color: palette.text,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  trimBar: {
-    flexDirection: "row",
-    gap: 4,
-  },
-  trimSegment: {
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderRadius: radii.pill,
-    flex: 1,
-    height: 12,
-  },
-  trimSegmentActive: {
-    backgroundColor: "rgba(31,91,255,0.36)",
-  },
-  trimSegmentHandle: {
-    backgroundColor: palette.accent,
-  },
-  trimMetaRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  trimMetaLabel: {
-    color: palette.muted,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  hashtagPreview: {
+  hashtags: {
     color: palette.accentSoft,
     fontSize: 13,
     fontWeight: "700",
     lineHeight: 19,
+  },
+  settingsCard: {
+    backgroundColor: palette.surface,
+    borderRadius: radii.lg,
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  settingRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.md,
+  },
+  settingCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  settingLabel: {
+    color: palette.text,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  settingBody: {
+    color: palette.muted,
+    fontSize: 12.5,
+    lineHeight: 17,
+  },
+  divider: {
+    backgroundColor: palette.border,
+    height: 1,
+  },
+  actions: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  draftButton: {
+    flex: 1,
+  },
+  shareButton: {
+    flex: 2,
+  },
+  progress: {
+    color: palette.muted,
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  chip: {
+    backgroundColor: palette.backgroundSoft,
+    borderColor: palette.border,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+  },
+  chipActive: {
+    backgroundColor: palette.cardAlt,
+    borderColor: palette.primary,
+  },
+  chipLabel: {
+    color: palette.textSoft,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  chipLabelActive: {
+    color: palette.primary,
   },
   productThumb: {
     borderRadius: radii.lg,
     height: 96,
     width: 96,
   },
-  videoFallback: {
-    flex: 1,
-  },
-  videoPreviewSurface: {
-    flex: 1,
-  },
-  videoPreviewTouchable: {
-    flex: 1,
-  },
-  videoPauseBadge: {
-    alignItems: "center",
-    backgroundColor: "rgba(7,16,24,0.55)",
+  notice: {
+    alignSelf: "center",
+    backgroundColor: "rgba(13,17,23,0.86)",
     borderRadius: radii.pill,
-    height: 74,
-    justifyContent: "center",
-    left: "50%",
-    marginLeft: -37,
-    marginTop: -37,
-    position: "absolute",
-    top: "50%",
-    width: 74,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
-  previewIconButton: {
-    alignItems: "center",
-    backgroundColor: "rgba(7,16,24,0.48)",
-    borderRadius: radii.pill,
-    height: 34,
-    justifyContent: "center",
-    width: 34,
-  },
-  videoControlBar: {
-    bottom: spacing.md,
-    gap: spacing.sm,
-    left: spacing.md,
-    position: "absolute",
-    right: spacing.md,
-  },
-  videoMetaRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  videoMetaText: {
-    color: palette.text,
-    fontSize: 12,
+  noticeLabel: {
+    color: "#ffffff",
+    fontSize: 13,
     fontWeight: "700",
-  },
-  videoSeekBar: {
-    flexDirection: "row",
-    gap: 3,
-  },
-  videoSeekSegment: {
-    backgroundColor: "rgba(255,255,255,0.12)",
-    borderRadius: radii.pill,
-    flex: 1,
-    height: 8,
-  },
-  videoSeekSegmentActive: {
-    backgroundColor: "rgba(255,255,255,0.28)",
-  },
-  videoSeekSegmentPlayed: {
-    backgroundColor: palette.primary,
-  },
-  videoSeekSegmentHandle: {
-    backgroundColor: palette.accent,
   },
 });

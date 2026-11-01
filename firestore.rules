@@ -29,6 +29,14 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
     }
 
+    // For shared lists (likes, followers, story viewers): the only change allowed is adding or
+    // removing yourself, so nobody can edit other people's entries.
+    function onlySelfToggled(field) {
+      let before = resource.data.get(field, []).toSet();
+      let after = request.resource.data.get(field, []).toSet();
+      return before.difference(after).union(after.difference(before)).hasOnly([request.auth.uid]);
+    }
+
     match /users/{userId} {
       allow read: if signedIn();
       allow create: if signedIn() &&
@@ -38,8 +46,8 @@ service cloud.firestore {
         request.resource.data.get("isBanned", false) == false;
       allow update: if signedIn() && (
         (userId == request.auth.uid && keepsPrivilegedUserFields()) ||
-        // Following someone updates only their followers list.
-        changedOnly(["followers", "updatedAt"]) ||
+        // Following someone updates only their followers list, and only with yourself.
+        (changedOnly(["followers", "updatedAt"]) && onlySelfToggled("followers")) ||
         (isAdmin() && changedOnly(["isBanned", "bannedAt", "updatedAt"]))
       );
     }
@@ -49,7 +57,14 @@ service cloud.firestore {
       allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
       allow update: if signedIn() && (
         resource.data.userId == request.auth.uid ||
-        request.resource.data.diff(resource.data).changedKeys().hasOnly(["viewerIds", "updatedAt"])
+        // affectedKeys (not changedKeys) so a viewer can't add new fields to someone's story either.
+        (changedOnly(["viewerIds", "updatedAt"]) && onlySelfToggled("viewerIds")) ||
+        // Answering a poll sticker: only your own answer (0 or 1) changes.
+        (
+          changedOnly(["pollVotes"]) &&
+          request.resource.data.pollVotes.diff(resource.data.get("pollVotes", {})).affectedKeys().hasOnly([request.auth.uid]) &&
+          request.resource.data.pollVotes[request.auth.uid] in [0, 1]
+        )
       );
       allow delete: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
@@ -67,7 +82,7 @@ service cloud.firestore {
           request.resource.data.userId == resource.data.userId &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(["viewCount", "reachCount", "boostedUntil", "boostPlanId"])
         ) ||
-        changedOnly(["likedBy", "updatedAt"]) ||
+        (changedOnly(["likedBy", "updatedAt"]) && onlySelfToggled("likedBy")) ||
         changedOnly(["repostCount", "updatedAt"]) ||
         (
           // A real view adds exactly one view (and at most one reach) per write.
@@ -85,14 +100,22 @@ service cloud.firestore {
       allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
       allow update: if signedIn() && (
         resource.data.userId == request.auth.uid ||
-        request.resource.data.diff(resource.data).changedKeys().hasOnly(["likedBy", "commentCount", "updatedAt"])
+        (
+          // affectedKeys (not changedKeys): others can't add fields such as commentsOff to someone's post.
+          changedOnly(["likedBy", "commentCount", "updatedAt"]) &&
+          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(["likedBy"]) || onlySelfToggled("likedBy"))
+        )
       );
       allow delete: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     match /postComments/{commentId} {
       allow read: if signedIn();
-      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      // Not on posts whose creator turned comments off (the creator still can).
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid && (
+        get(/databases/$(database)/documents/posts/$(request.resource.data.postId)).data.get("commentsOff", false) != true ||
+        get(/databases/$(database)/documents/posts/$(request.resource.data.postId)).data.userId == request.auth.uid
+      );
       allow update: if false;
       allow delete: if signedIn() && (
         resource.data.userId == request.auth.uid ||
@@ -104,20 +127,46 @@ service cloud.firestore {
     match /products/{productId} {
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if signedIn() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin() ||
+        // A buyer placing an order marks an available listing as pending, nothing else.
+        (
+          resource.data.userId != request.auth.uid &&
+          resource.data.get("listingStatus", "available") == "available" &&
+          request.resource.data.listingStatus == "pending" &&
+          changedOnly(["listingStatus", "updatedAt"])
+        )
+      );
       allow delete: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     match /comments/{commentId} {
       allow read: if signedIn();
-      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      // Not on reels whose creator turned comments off (the creator still can).
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid && (
+        !("reelId" in request.resource.data) ||
+        !exists(/databases/$(database)/documents/reels/$(request.resource.data.reelId)) ||
+        get(/databases/$(database)/documents/reels/$(request.resource.data.reelId)).data.get("commentsOff", false) != true ||
+        get(/databases/$(database)/documents/reels/$(request.resource.data.reelId)).data.userId == request.auth.uid
+      );
       allow delete: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     match /communities/{communityId} {
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update, delete: if signedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow update: if signedIn() && (
+        resource.data.ownerId == request.auth.uid ||
+        isAdmin() ||
+        // Joining (public communities only) or leaving: add or remove only yourself.
+        (
+          changedOnly(["memberIds", "updatedAt"]) &&
+          onlySelfToggled("memberIds") &&
+          (resource.data.get("visibility", "public") == "public" || !(request.auth.uid in request.resource.data.memberIds))
+        )
+      );
+      allow delete: if signedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
     }
 
     match /communityPosts/{postId} {
@@ -127,13 +176,17 @@ service cloud.firestore {
     }
 
     match /savedPosts/{savedPostId} {
-      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      // get: a missing document may be checked (resource == null); list queries must match the condition.
+      allow get: if signedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow list: if signedIn() && resource.data.userId == request.auth.uid;
       allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
       allow delete: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     match /notifications/{notificationId} {
-      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      // get: a missing document may be checked (resource == null); list queries must match the condition.
+      allow get: if signedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow list: if signedIn() && resource.data.userId == request.auth.uid;
       // Actors may create notifications for other users (likes, comments,
       // follows, mentions, messages) directly from the app when the backend
       // delivery API is unavailable. The actor must identify themselves and
@@ -145,7 +198,7 @@ service cloud.firestore {
         (
           resource.data.userId == request.auth.uid &&
           request.resource.data.userId == resource.data.userId &&
-          request.resource.data.diff(resource.data).changedKeys().hasOnly(["readAt"])
+          changedOnly(["readAt"])
         ) || (
           // Deduplicated re-sends by the original actor keep the recipient.
           resource.data.actorId == request.auth.uid &&
@@ -156,7 +209,9 @@ service cloud.firestore {
     }
 
     match /devicePushTokens/{tokenId} {
-      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      // get: a missing document may be checked (resource == null); list queries must match the condition.
+      allow get: if signedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow list: if signedIn() && resource.data.userId == request.auth.uid;
       allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
       allow update: if signedIn() &&
         resource.data.userId == request.auth.uid &&
@@ -173,8 +228,6 @@ service cloud.firestore {
     }
 
     // Free voice/video calls: only the two people in the call can see or change it.
-    // Chats and orders (below): the writer must be one of the people in it. Note: on create the
-    // document does not exist yet, so the check reads request.resource (the new data), not resource.
     match /calls/{callId} {
       // The phone listens for calls with "calleeId == me", so that condition is allowed on its own too.
       allow read: if signedIn() && (
@@ -202,8 +255,12 @@ service cloud.firestore {
       }
     }
 
+    // Chats and orders: the writer must be one of the people in it. On create the document does not
+    // exist yet, so the check reads request.resource (the new data), not resource.
     match /directThreads/{threadId} {
-      allow read: if signedIn() && (resource == null || request.auth.uid in resource.data.participantIds);
+      // get: a missing document may be checked (resource == null); list queries must match the condition.
+      allow get: if signedIn() && (resource == null || request.auth.uid in resource.data.participantIds);
+      allow list: if signedIn() && request.auth.uid in resource.data.participantIds;
       allow create: if signedIn() &&
         request.auth.uid in request.resource.data.participantIds &&
         request.resource.data.participantIds.size() == 2;
@@ -221,7 +278,9 @@ service cloud.firestore {
     }
 
     match /marketplaceThreads/{threadId} {
-      allow read: if signedIn() && (resource == null || request.auth.uid in resource.data.participantIds);
+      // get: a missing document may be checked (resource == null); list queries must match the condition.
+      allow get: if signedIn() && (resource == null || request.auth.uid in resource.data.participantIds);
+      allow list: if signedIn() && request.auth.uid in resource.data.participantIds;
       allow create: if signedIn() &&
         request.auth.uid in request.resource.data.participantIds &&
         request.resource.data.participantIds.size() == 2;

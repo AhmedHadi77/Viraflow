@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { sizedImageUrl } from "../services/mediaUpload";
 import { Avatar } from "../components/Avatar";
 import { useEffect, useMemo, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
@@ -145,7 +146,7 @@ export function ExploreScreen({
                   onPress={() => setSelectedPostId(entry.post.id)}
                   style={styles.postResultCard}
                 >
-                  <Image source={{ uri: entry.imageUrl }} style={styles.postResultImage} />
+                  <Image source={{ uri: sizedImageUrl(entry.imageUrl, 420) }} style={styles.postResultImage} />
                   <View style={styles.postResultCopy}>
                     <Text style={styles.postResultBadge}>{entry.badge}</Text>
                     <Text numberOfLines={1} style={styles.postResultAuthor}>
@@ -227,7 +228,7 @@ export function ExploreScreen({
                 const imageUrl = post.media[0]?.thumbnailUrl || post.media[0]?.url || author?.profileImage;
                 return (
                   <Pressable key={post.id} onPress={() => setSelectedPostId(post.id)} style={styles.recentPostCard}>
-                    {imageUrl ? <Image source={{ uri: imageUrl }} style={styles.recentPostImage} /> : null}
+                    {imageUrl ? <Image source={{ uri: sizedImageUrl(imageUrl, 600) }} style={styles.recentPostImage} /> : null}
                     <View style={styles.recentPostBody}>
                       <Text numberOfLines={1} style={styles.recentPostMeta}>
                         @{author?.username ?? "pulseora.creator"}
@@ -260,7 +261,7 @@ export function ExploreScreen({
                       }}
                       style={styles.masonryTile}
                     >
-                      <Image source={{ uri: item.imageUrl }} style={[styles.masonryImage, { aspectRatio: item.aspectRatio }]} />
+                      <Image source={{ uri: sizedImageUrl(item.imageUrl, 600) }} style={[styles.masonryImage, { aspectRatio: item.aspectRatio }]} />
                       <View style={styles.tileShade} />
                       <View style={styles.tileBadge}>
                         <Text style={styles.tileBadgeLabel}>{item.badge}</Text>

@@ -3,6 +3,13 @@ import { z } from "zod";
 import { rejectIfSexualMedia } from "./contentSafety";
 import { AuthenticatedRequest } from "../middleware/auth";
 import {
+  CaptionsSourceError,
+  CaptionsUnavailableError,
+  isAllowedCaptionSource,
+  isCaptionsConfigured,
+  transcribeCaptions,
+} from "../services/captionService";
+import {
   buildCloudinaryDeliveryUrl,
   createCloudinaryUploadSignature,
   isCloudinaryConfigured,
@@ -22,9 +29,32 @@ const moderationCheckSchema = z.object({
   seconds: z.number().min(1).max(300).optional(),
 });
 
+const captionsSchema = z.object({
+  url: z.string().url().max(4000),
+  language: z
+    .string()
+    .regex(/^[a-z]{2}$/)
+    .optional(),
+});
+
+// A creator can ask for captions a few times a minute (each call runs speech recognition).
+const captionRequests = new Map<string, number[]>();
+function allowCaptionRequest(userId: string) {
+  const now = Date.now();
+  const recent = (captionRequests.get(userId) ?? []).filter((time) => now - time < 60_000);
+  if (recent.length >= 4) {
+    captionRequests.set(userId, recent);
+    return false;
+  }
+  recent.push(now);
+  captionRequests.set(userId, recent);
+  return true;
+}
+
 export function getMediaStatus(_req: AuthenticatedRequest, res: Response) {
   res.json({
     cloudinaryConfigured: isCloudinaryConfigured(),
+    captionsConfigured: isCaptionsConfigured(),
     firebaseReady: true,
     delivery: {
       defaultVideoTransform: "q_auto,f_auto",
@@ -94,4 +124,41 @@ export async function postMediaModerationCheck(req: AuthenticatedRequest, res: R
   res.json({
     allowed: true,
   });
+}
+
+/** Automatic captions: speech in a finished video (its sound from Cloudinary) to timed lines. */
+export async function postMediaCaptions(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user?.id;
+  if (!userId) {
+    res.status(401).json({ message: "Unauthorized." });
+    return;
+  }
+  const parsed = captionsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json(parsed.error.flatten());
+    return;
+  }
+  if (!isAllowedCaptionSource(parsed.data.url)) {
+    res.status(400).json({ message: "Captions can only be made for videos uploaded to Sohba." });
+    return;
+  }
+  if (!allowCaptionRequest(userId)) {
+    res.status(429).json({ message: "Please wait a minute before making captions again." });
+    return;
+  }
+  try {
+    const result = await transcribeCaptions(parsed.data.url, parsed.data.language);
+    res.json(result);
+  } catch (error) {
+    if (error instanceof CaptionsUnavailableError) {
+      res.status(503).json({ message: error.message });
+      return;
+    }
+    if (error instanceof CaptionsSourceError) {
+      res.status(422).json({ message: error.message });
+      return;
+    }
+    console.error("Captions failed", error);
+    res.status(502).json({ message: "Captions could not be made right now. Please try again." });
+  }
 }

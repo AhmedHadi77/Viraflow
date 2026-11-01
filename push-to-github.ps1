@@ -9,13 +9,13 @@ if (-not (git config user.email)) { git config user.email "ahmed777hady@gmail.co
 if (-not (git config user.name)) { git config user.name "Ahmed Hadi" }
 
 git add -A -- . ':!*.apk' ':!android' ':!.vscode' ':!mobile/google-services (2).json' ':!.claude-sync' ':!sohba' ':!sohba-site.zip'
-git commit -m "Sohba 1.0.14: Daylight redesign (white, cobalt, Manrope), fix chat and order database rules" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -m "Claude-Session: https://claude.ai/code/session_01Y5eZbnuB2VMsVoRpWv7ru8"
+git commit -m "Sohba 1.0.15: video and photo editor (multi-clip timeline, 37 transitions, automatic captions, voiceover, effects, frames, drawing, text and sticker animations); story polls, questions, links and countdowns; comments off and hidden likes; double-tap like animations; new welcome, home, messages, marketplace and profile screens; captions server endpoint; tighter database rules" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -m "Claude-Session: https://claude.ai/code/session_01Y5eZbnuB2VMsVoRpWv7ru8"
 $commitCode = $LASTEXITCODE
 git push origin main
 $pushCode = $LASTEXITCODE
 if ($commitCode -ne 0 -and -not (git status --porcelain)) { $commitCode = 0 }
 
-# Publish the database security rules (calls + reports were added)
+# Publish the database security rules (story polls, comments off, field checks)
 npm run firebase:deploy:rules
 if ($LASTEXITCODE -ne 0) {
     Write-Host "RULES NOT PUBLISHED - paste firestore.rules into Firebase console > Firestore > Rules and press Publish." -ForegroundColor Yellow

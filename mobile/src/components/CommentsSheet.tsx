@@ -45,6 +45,8 @@ interface CommentsSheetProps {
   onChangeDraft: (value: string) => void;
   onSubmit: () => void;
   onClose: () => void;
+  /** When set, commenting is closed and this note shows instead of the composer. */
+  closedMessage?: string;
 }
 
 function useKeyboardHeight() {
@@ -78,6 +80,7 @@ export function CommentsSheet({
   isPosting = false,
   currentUserAvatar,
   language,
+  closedMessage,
   onChangeDraft,
   onSubmit,
   onClose,
@@ -154,6 +157,12 @@ export function CommentsSheet({
             style={styles.listView}
           />
 
+          {closedMessage ? (
+            <View style={[styles.composer, styles.closedComposer]}>
+              <Ionicons color={palette.muted} name="lock-closed-outline" size={16} />
+              <Text style={styles.closedLabel}>{closedMessage}</Text>
+            </View>
+          ) : (
           <View style={styles.composer}>
             <Image source={{ uri: currentUserAvatar || DEFAULT_PROFILE_IMAGE }} style={styles.composerAvatar} />
             <View style={styles.inputShell}>
@@ -178,6 +187,7 @@ export function CommentsSheet({
               {isPosting ? <ActivityIndicator color="#ffffff" size="small" /> : <Ionicons color="#ffffff" name="arrow-up" size={20} />}
             </Pressable>
           </View>
+          )}
         </View>
       </View>
     </Modal>
@@ -185,6 +195,15 @@ export function CommentsSheet({
 }
 
 const styles = createThemedStyles({
+  closedComposer: {
+    gap: 8,
+    justifyContent: "center",
+  },
+  closedLabel: {
+    color: palette.muted,
+    fontSize: 14,
+    fontWeight: "600",
+  },
   layer: {
     flex: 1,
     justifyContent: "flex-end",

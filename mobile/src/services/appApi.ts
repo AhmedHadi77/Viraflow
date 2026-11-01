@@ -1168,6 +1168,25 @@ function normalizeLanguage(language: string | undefined, fallback?: LanguageOpti
   return fallback ?? "en";
 }
 
+let lastWakeAt = 0;
+
+/**
+ * The Sohba server sleeps after a quiet spell and needs ~45 s to wake. A tiny request as soon as the
+ * app opens (and when it comes back to the foreground) wakes it early, so posting, uploads and alerts
+ * are quick by the time someone uses them. Fire-and-forget; at most once every 4 minutes.
+ */
+export function wakeSohbaServer() {
+  if (!API_BASE_URL || Date.now() - lastWakeAt < 4 * 60 * 1000) {
+    return;
+  }
+  lastWakeAt = Date.now();
+  void fetch(`${API_BASE_URL}/meta/health`).catch(() => {
+    lastWakeAt = 0;
+  });
+}
+
+const REQUEST_TIMEOUT_MS = 70 * 1000;
+
 async function request<T>(
   path: string,
   options: { method: "GET" | "POST" | "PATCH" | "DELETE"; token?: string; body?: unknown }
@@ -1176,6 +1195,9 @@ async function request<T>(
     throw new AppApiError("Missing EXPO_PUBLIC_API_BASE_URL");
   }
 
+  // Never hang forever: long enough for a sleeping server to wake, then give a clear error.
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS) : null;
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
       method: options.method,
@@ -1184,6 +1206,7 @@ async function request<T>(
         ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
       },
       body: options.body ? JSON.stringify(options.body) : undefined,
+      ...(controller ? { signal: controller.signal } : {}),
     });
 
     if (!response.ok) {
@@ -1209,6 +1232,10 @@ async function request<T>(
       throw error;
     }
 
-    throw new AppApiError("Could not reach the Sohba backend. Start the API and try again.");
+    throw new AppApiError("Sohba couldn't reach its server. Check your connection and try again in a moment.");
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
   }
 }

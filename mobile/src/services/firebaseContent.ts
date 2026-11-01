@@ -108,6 +108,17 @@ export async function createFirebaseStory(userId: string, payload: CreateStoryPa
   return story;
 }
 
+/** Records the viewer's answer to a story's poll (one answer per person; they can change it). */
+export async function voteFirebaseStoryPoll(userId: string, storyId: string, option: number) {
+  if (option !== 0 && option !== 1) {
+    throw new Error("Pick one of the answers.");
+  }
+  const db = getRequiredFirestore();
+  await updateDoc(doc(db, STORIES_COLLECTION, storyId), {
+    [`pollVotes.${userId}`]: option,
+  });
+}
+
 export async function markFirebaseStoryViewed(userId: string, storyId: string, existing?: Story): Promise<Story> {
   const db = getRequiredFirestore();
   const storyRef = doc(db, STORIES_COLLECTION, storyId);
@@ -218,6 +229,12 @@ export async function createFirebaseReel(userId: string, payload: CreateReelPayl
   const studio = normalizeStudioData(payload.editConfig?.studio);
   if (studio) {
     reel.studio = studio;
+  }
+  if (payload.hideLikes) {
+    reel.hideLikes = true;
+  }
+  if (payload.commentsOff) {
+    reel.commentsOff = true;
   }
 
   await setDoc(reelRef, reel);
@@ -347,24 +364,26 @@ async function deleteFirebaseProductDocument(productId: string, ownerId?: string
     throw new Error("You can only delete your own listing.");
   }
 
-  const [savedSnapshot, notificationsSnapshot] = await Promise.all([
-    getDocs(query(collection(db, SAVED_POSTS_COLLECTION), where("entityId", "==", productId), limit(500))),
-    getDocs(query(collection(db, NOTIFICATIONS_COLLECTION), where("entityId", "==", productId), limit(500))),
-  ]);
-  const batch = writeBatch(db);
+  await deleteDoc(productRef);
 
-  batch.delete(productRef);
-  savedSnapshot.docs.forEach((item) => {
-    if (item.data().entityType === "product") {
-      batch.delete(item.ref);
+  // Tidy up the owner's own saved entries and alerts for this listing. Other people's saved items
+  // are private to them; the app hides saved items whose listing no longer exists.
+  if (ownerId) {
+    try {
+      const [savedSnapshot, notificationsSnapshot] = await Promise.all([
+        getDocs(query(collection(db, SAVED_POSTS_COLLECTION), where("userId", "==", ownerId), where("entityId", "==", productId), limit(50))),
+        getDocs(query(collection(db, NOTIFICATIONS_COLLECTION), where("userId", "==", ownerId), where("entityId", "==", productId), limit(200))),
+      ]);
+      const batch = writeBatch(db);
+      savedSnapshot.docs.forEach((item) => batch.delete(item.ref));
+      notificationsSnapshot.docs.forEach((item) => batch.delete(item.ref));
+      if (!savedSnapshot.empty || !notificationsSnapshot.empty) {
+        await batch.commit();
+      }
+    } catch {
+      // The listing itself is already deleted; leftover alerts are harmless.
     }
-  });
-  notificationsSnapshot.docs.forEach((item) => {
-    if (item.data().entityType === "product") {
-      batch.delete(item.ref);
-    }
-  });
-  await batch.commit();
+  }
 }
 
 export function getFirebaseContentErrorMessage(error: unknown) {
@@ -405,7 +424,21 @@ function normalizeStoryDoc(id: string, data: Record<string, unknown>): Story {
     highlightedAt: readOptionalString(data.highlightedAt),
     highlightLabel: readOptionalString(data.highlightLabel),
     studio: normalizeStudioData(data.studio),
+    pollVotes: readPollVotes(data.pollVotes),
   };
+}
+
+function readPollVotes(value: unknown): Record<string, number> | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const votes: Record<string, number> = {};
+  Object.entries(value as Record<string, unknown>).forEach(([userId, choice]) => {
+    if (choice === 0 || choice === 1) {
+      votes[userId] = choice;
+    }
+  });
+  return Object.keys(votes).length > 0 ? votes : undefined;
 }
 
 function normalizeReelDoc(id: string, data: Record<string, unknown>): Reel {
@@ -426,6 +459,8 @@ function normalizeReelDoc(id: string, data: Record<string, unknown>): Reel {
     reachCount: readNumber(data.reachCount, 0),
     boostedUntil: typeof data.boostedUntil === "string" && data.boostedUntil.trim() ? data.boostedUntil.trim() : undefined,
     studio: normalizeStudioData(data.studio),
+    ...(data.hideLikes === true ? { hideLikes: true } : {}),
+    ...(data.commentsOff === true ? { commentsOff: true } : {}),
   };
 }
 

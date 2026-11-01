@@ -5,30 +5,53 @@ import { useStudioMusic } from "../services/studioMusic";
 import { useEventListener } from "expo";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   Easing,
   Image,
+  Keyboard,
+  KeyboardEvent,
+  Linking,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getCopy } from "../data/copy";
 import { useAppState } from "../providers/AppProvider";
-import { buildCloudinaryPlayableVideoUrl } from "../services/mediaUpload";
+import { buildCloudinaryPlayableVideoUrl, sizedImageUrl } from "../services/mediaUpload";
 import { darkPalette as palette, radii, spacing, createDarkStyles } from "../theme";
-import { Story, User } from "../types/models";
+import { Story, StudioStickerLayer, User } from "../types/models";
+import { fill } from "../utils/labels";
 import { formatRelativeTime } from "../utils/timeFormatting";
 
 type ExpoVideoModule = typeof import("expo-video");
 let cachedExpoVideoModule: ExpoVideoModule | null | undefined;
 
 const IMAGE_STORY_DURATION_MS = 5500;
+const QUICK_REACTIONS = ["😂", "😮", "😍", "😢", "👏", "🔥"];
+
+function useKeyboardHeight() {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const show = Keyboard.addListener(showEvent, (event: KeyboardEvent) => setHeight(event.endCoordinates.height));
+    const hide = Keyboard.addListener(hideEvent, () => setHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return height;
+}
 
 export function StoryViewerScreen({
   navigation,
@@ -37,7 +60,19 @@ export function StoryViewerScreen({
   navigation: any;
   route: { params: { userId: string; storyId?: string } };
 }) {
-  const { language, stories, currentUser, getUserById, markStoryViewed, deleteStory, toggleStoryHighlight } = useAppState();
+  const {
+    language,
+    stories,
+    currentUser,
+    getUserById,
+    markStoryViewed,
+    deleteStory,
+    toggleStoryHighlight,
+    voteStoryPoll,
+    canDirectMessageUser,
+    startDirectChat,
+    sendDirectMessage,
+  } = useAppState();
   const copy = getCopy(language);
   const insets = useSafeAreaInsets();
   const userStories = useMemo(
@@ -64,6 +99,13 @@ export function StoryViewerScreen({
   const imageProgress = useRef(new Animated.Value(0)).current;
   const mediaOpacity = useRef(new Animated.Value(1)).current;
   const [imageProgressValue, setImageProgressValue] = useState(0);
+  const imageProgressRef = useRef(0);
+  const [replyText, setReplyText] = useState("");
+  const [replyFocused, setReplyFocused] = useState(false);
+  const [questionLayer, setQuestionLayer] = useState<StudioStickerLayer | null>(null);
+  const [sendingReply, setSendingReply] = useState(false);
+  const [replyNotice, setReplyNotice] = useState<string | null>(null);
+  const keyboardHeight = useKeyboardHeight();
   const activeStory = userStories[activeIndex];
   const creator = activeStory ? getUserById(activeStory.userId) : null;
   const [mediaSize, setMediaSize] = useState({ width: 0, height: 0 });
@@ -80,6 +122,7 @@ export function StoryViewerScreen({
 
   useEffect(() => {
     const listenerId = imageProgress.addListener(({ value }) => {
+      imageProgressRef.current = value;
       setImageProgressValue(value);
     });
 
@@ -98,26 +141,31 @@ export function StoryViewerScreen({
     }
   }, [navigation, userStories.length]);
 
+  // Replying, answering a question or looking at viewers holds the story still.
+  const holdStory = viewerSheetOpen || replyFocused || Boolean(questionLayer) || sendingReply;
+
   useEffect(() => {
     setViewerSheetOpen(false);
     setVideoDurationSeconds(0);
     setVideoCurrentTimeSeconds(0);
+    setQuestionLayer(null);
     imageProgress.stopAnimation();
     imageProgress.setValue(0);
+    imageProgressRef.current = 0;
 
-    if (!activeStory) {
+    if (activeStory) {
+      void markStoryViewed(activeStory.id);
+    }
+  }, [activeIndex, activeStory?.id, imageProgress]);
+
+  useEffect(() => {
+    if (!activeStory || activeStory.mediaType === "video" || holdStory) {
       return;
     }
-
-    void markStoryViewed(activeStory.id);
-
-    if (activeStory.mediaType === "video") {
-      return;
-    }
-
+    const remaining = Math.max(0, 1 - imageProgressRef.current) * IMAGE_STORY_DURATION_MS;
     const animation = Animated.timing(imageProgress, {
       toValue: 1,
-      duration: IMAGE_STORY_DURATION_MS,
+      duration: remaining,
       easing: Easing.linear,
       useNativeDriver: false,
     });
@@ -130,7 +178,15 @@ export function StoryViewerScreen({
     return () => {
       animation.stop();
     };
-  }, [activeIndex, activeStory?.id, activeStory?.mediaType, imageProgress]);
+  }, [activeIndex, activeStory?.id, activeStory?.mediaType, holdStory, imageProgress]);
+
+  useEffect(() => {
+    if (!replyNotice) {
+      return;
+    }
+    const timer = setTimeout(() => setReplyNotice(null), 2200);
+    return () => clearTimeout(timer);
+  }, [replyNotice]);
 
   useEffect(() => {
     mediaOpacity.setValue(0.88);
@@ -187,6 +243,66 @@ export function StoryViewerScreen({
         ? Math.min(1, Math.max(0, videoCurrentTimeSeconds / videoDurationSeconds))
         : 0
       : imageProgressValue;
+
+  const pollSticker = activeStory.studio?.stickers?.find((sticker) => sticker.kind === "poll");
+  const votes = activeStory.pollVotes ?? {};
+  const myVote = currentUser ? votes[currentUser.id] : undefined;
+  const pollCounts = [0, 1].map((option) => Object.values(votes).filter((choice) => choice === option).length);
+
+  function openStickerLink(url: string) {
+    Alert.alert(copy.svOpenLink, url, [
+      { text: copy.cancel, style: "cancel" },
+      { text: copy.svOpen, onPress: () => void Linking.openURL(url).catch(() => undefined) },
+    ]);
+  }
+
+  async function sendStoryMessage(text: string) {
+    if (!creator || isOwnStory || sendingReply) {
+      return false;
+    }
+    if (!canDirectMessageUser(creator.id)) {
+      Alert.alert(copy.chatFollowToMessage);
+      return false;
+    }
+    setSendingReply(true);
+    try {
+      const thread = await startDirectChat(creator.id);
+      if (!thread.ok || !thread.threadId) {
+        Alert.alert(thread.message ?? copy.svReplyFailed);
+        return false;
+      }
+      const sent = await sendDirectMessage(thread.threadId, { text });
+      if (!sent.ok) {
+        Alert.alert(sent.message ?? copy.svReplyFailed);
+        return false;
+      }
+      setReplyNotice(copy.svReplySent);
+      return true;
+    } finally {
+      setSendingReply(false);
+    }
+  }
+
+  async function submitReply() {
+    const text = replyText.trim();
+    if (!text) {
+      return;
+    }
+    const message = questionLayer ? `❓ ${questionLayer.value}\n💬 ${text}` : `↩️ ${copy.svRepliedToStory}\n${text}`;
+    const ok = await sendStoryMessage(message);
+    if (ok) {
+      setReplyText("");
+      setQuestionLayer(null);
+      Keyboard.dismiss();
+    }
+  }
+
+  async function sendReaction(emoji: string) {
+    const ok = await sendStoryMessage(`${emoji} ${copy.svReactedToStory}`);
+    if (ok) {
+      Keyboard.dismiss();
+    }
+  }
 
   async function handleDelete() {
     Alert.alert(copy.deleteStoryTitle, copy.deleteStoryBody, [
@@ -263,9 +379,9 @@ export function StoryViewerScreen({
             setVideoCurrentTimeSeconds(currentTime);
             setVideoDurationSeconds(duration);
           }}
+          paused={holdStory}
           story={activeStory}
         />
-        <StudioLayersOverlay height={mediaSize.height} studio={activeStory.studio} width={mediaSize.width} />
       </Animated.View>
 
       <View style={[styles.topOverlay, { paddingTop: insets.top + 10 }]}>
@@ -335,16 +451,105 @@ export function StoryViewerScreen({
         <Pressable onPress={goNext} style={styles.tapZone} />
       </View>
 
-      <View style={[styles.bottomOverlay, { paddingBottom: Math.max(insets.bottom, 20) + 8 }]}>
+      {/* Above the tap zones so polls, questions and links can be tapped. */}
+      <View pointerEvents="box-none" style={styles.layersLayer}>
+        <StudioLayersOverlay
+          captionBottom={mediaSize.height * 0.2}
+          countdownLabels={{ d: copy.cdDaysShort, h: copy.cdHoursShort, m: copy.cdMinutesShort, done: copy.cdNow }}
+          currentTime={activeStory.mediaType === "video" ? videoCurrentTimeSeconds : undefined}
+          height={mediaSize.height}
+          onLinkPress={openStickerLink}
+          onQuestionPress={isOwnStory ? undefined : (layer) => setQuestionLayer(layer)}
+          poll={
+            pollSticker
+              ? {
+                  counts: pollCounts,
+                  myVote,
+                  showResults: isOwnStory || myVote !== undefined,
+                  onVote: isOwnStory
+                    ? undefined
+                    : (option) => {
+                        void voteStoryPoll(activeStory.id, option).then((result) => {
+                          if (!result.ok) {
+                            Alert.alert(result.message ?? copy.svReplyFailed);
+                          }
+                        });
+                      },
+                }
+              : undefined
+          }
+          questionPlaceholder={copy.sqTypeAnswer}
+          studio={activeStory.studio}
+          width={mediaSize.width}
+        />
+      </View>
+
+      <View
+        style={[
+          styles.bottomOverlay,
+          { paddingBottom: (Platform.OS === "ios" && keyboardHeight ? keyboardHeight : Math.max(insets.bottom, 20)) + 8 },
+        ]}
+      >
         {activeStory.highlightedAt ? (
           <View style={styles.highlightPill}>
             <Ionicons color="#151922" name="sparkles" size={12} />
             <Text style={styles.highlightPillLabel}>{activeStory.highlightLabel || copy.highlights}</Text>
           </View>
         ) : null}
-        <Text numberOfLines={3} style={styles.caption}>
-          {activeStory.caption?.trim() || copy.pulseoraStory}
-        </Text>
+        {!replyFocused ? (
+          <Text numberOfLines={3} style={styles.caption}>
+            {activeStory.caption?.trim() || copy.pulseoraStory}
+          </Text>
+        ) : null}
+        {replyNotice ? <Text style={styles.replyNotice}>{replyNotice}</Text> : null}
+        {!isOwnStory ? (
+          <>
+            {replyFocused || questionLayer ? (
+              <View style={styles.reactionRow}>
+                {QUICK_REACTIONS.map((emoji) => (
+                  <Pressable accessibilityLabel={emoji} disabled={sendingReply} key={emoji} onPress={() => void sendReaction(emoji)} style={styles.reaction}>
+                    <Text style={styles.reactionEmoji}>{emoji}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+            {questionLayer ? (
+              <View style={styles.questionBanner}>
+                <Ionicons color="#ffffff" name="help-circle" size={16} />
+                <Text numberOfLines={2} style={styles.questionBannerLabel}>
+                  {questionLayer.value}
+                </Text>
+                <Pressable accessibilityLabel={copy.cancel} hitSlop={8} onPress={() => setQuestionLayer(null)}>
+                  <Ionicons color="rgba(255,255,255,0.8)" name="close" size={16} />
+                </Pressable>
+              </View>
+            ) : null}
+            <View style={styles.replyRow}>
+              <TextInput
+                autoFocus={Boolean(questionLayer)}
+                key={questionLayer?.id ?? "reply"}
+                maxLength={500}
+                onBlur={() => setReplyFocused(false)}
+                onChangeText={setReplyText}
+                onFocus={() => setReplyFocused(true)}
+                onSubmitEditing={() => void submitReply()}
+                placeholder={questionLayer ? copy.sqTypeAnswer : fill(copy.svReplyTo, { name: creator.name.split(" ")[0] })}
+                placeholderTextColor="rgba(255,255,255,0.7)"
+                returnKeyType="send"
+                style={styles.replyInput}
+                value={replyText}
+              />
+              <Pressable
+                accessibilityLabel={copy.svSend}
+                disabled={!replyText.trim() || sendingReply}
+                onPress={() => void submitReply()}
+                style={[styles.replySend, !replyText.trim() ? styles.replySendIdle : null]}
+              >
+                {sendingReply ? <ActivityIndicator color="#ffffff" size="small" /> : <Ionicons color="#ffffff" name="paper-plane" size={18} />}
+              </Pressable>
+            </View>
+          </>
+        ) : null}
       </View>
 
       <Modal
@@ -378,6 +583,14 @@ export function StoryViewerScreen({
                       <Text style={styles.viewerName}>{viewer.name}</Text>
                       <Text style={styles.viewerMeta}>@{viewer.username}</Text>
                     </View>
+                    {pollSticker && votes[viewer.id] !== undefined ? (
+                      <View style={styles.voteChip}>
+                        <Ionicons color="#ffffff" name="stats-chart" size={11} />
+                        <Text numberOfLines={1} style={styles.voteChipLabel}>
+                          {pollSticker.options?.[votes[viewer.id]] ?? ""}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
                 ))
               )}
@@ -392,11 +605,13 @@ export function StoryViewerScreen({
 function StoryMedia({
   story,
   isMuted,
+  paused,
   onProgress,
   onComplete,
 }: {
   story: Story;
   isMuted: boolean;
+  paused: boolean;
   onProgress: (currentTime: number, duration: number) => void;
   onComplete: () => void;
 }) {
@@ -409,25 +624,28 @@ function StoryMedia({
           isMuted={isMuted}
           onComplete={onComplete}
           onProgress={onProgress}
+          paused={paused}
           story={story}
         />
       );
     }
   }
 
-  return <Image resizeMode="cover" source={{ uri: story.imageUrl }} style={styles.media} />;
+  return <Image resizeMode="cover" source={{ uri: sizedImageUrl(story.imageUrl, 1080) }} style={styles.media} />;
 }
 
 function StoryVideoPlayer({
   expoVideo,
   story,
   isMuted,
+  paused,
   onProgress,
   onComplete,
 }: {
   expoVideo: ExpoVideoModule;
   story: Story;
   isMuted: boolean;
+  paused: boolean;
   onProgress: (currentTime: number, duration: number) => void;
   onComplete: () => void;
 }) {
@@ -462,7 +680,11 @@ function StoryVideoPlayer({
       player.muted = isMuted || (story.studio?.originalVolume ?? 1) <= 0.001;
       player.volume = story.studio?.originalVolume ?? 1;
       player.timeUpdateEventInterval = 0.2;
-      player.play();
+      if (paused) {
+        player.pause();
+      } else {
+        player.play();
+      }
     } catch {
       // ignore viewer startup issues
     }
@@ -474,7 +696,7 @@ function StoryVideoPlayer({
         // ignore teardown issues
       }
     };
-  }, [isMuted, player]);
+  }, [isMuted, paused, player]);
 
   return (
     <VideoView
@@ -625,6 +847,92 @@ const styles = createDarkStyles({
   },
   tapZone: {
     flex: 1,
+  },
+  layersLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 3,
+  },
+  replyNotice: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(31,91,255,0.9)",
+    borderRadius: radii.pill,
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "800",
+    overflow: "hidden",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  reactionRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 4,
+  },
+  reaction: {
+    alignItems: "center",
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  reactionEmoji: {
+    fontSize: 30,
+  },
+  questionBanner: {
+    alignItems: "center",
+    backgroundColor: "#1f5bff",
+    borderRadius: radii.md,
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  questionBannerLabel: {
+    color: "#ffffff",
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  replyRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  replyInput: {
+    borderColor: "rgba(255,255,255,0.55)",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    color: "#ffffff",
+    flex: 1,
+    fontSize: 15,
+    minHeight: 46,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  replySend: {
+    alignItems: "center",
+    backgroundColor: "#1f5bff",
+    borderRadius: 23,
+    height: 46,
+    justifyContent: "center",
+    width: 46,
+  },
+  replySendIdle: {
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
+  voteChip: {
+    alignItems: "center",
+    backgroundColor: "#1f5bff",
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    gap: 4,
+    maxWidth: 120,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  voteChipLabel: {
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "800",
   },
   bottomOverlay: {
     bottom: 0,

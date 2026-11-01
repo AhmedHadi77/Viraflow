@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Image, ImageStyle, StyleProp, StyleSheet, Text, View } from "react-native";
-import { repairMediaUrl } from "../services/mediaUpload";
+import { repairMediaUrl, sizedImageUrl } from "../services/mediaUpload";
 import { fonts, getThemeMode, sheet } from "../theme";
 
 // Soft, distinct tones for people without a photo: pastels on the light theme, deep tones on dark.
@@ -15,6 +15,13 @@ function toneFor(name?: string | null) {
   }
   const tones = getThemeMode() === "light" ? AVATAR_TONES_LIGHT : AVATAR_TONES_DARK;
   return tones[hash % tones.length];
+}
+
+/** Pixel width to request for an avatar: three times its on-screen size covers sharp phone screens. */
+function avatarPixelWidth(style: StyleProp<ImageStyle>) {
+  const flat = StyleSheet.flatten(style) ?? {};
+  const size = typeof flat.width === "number" ? flat.width : 48;
+  return Math.min(480, Math.max(96, size * 3));
 }
 
 /** Placeholder avatar links that are generated rather than real photos; drawn locally instead. */
@@ -66,7 +73,7 @@ export function Avatar({
     );
   }
 
-  return <Image blurRadius={blurRadius} onError={() => setFailed(true)} source={{ uri: source }} style={style} />;
+  return <Image blurRadius={blurRadius} onError={() => setFailed(true)} source={{ uri: sizedImageUrl(source, avatarPixelWidth(style)) }} style={style} />;
 }
 
 const styles = sheet({

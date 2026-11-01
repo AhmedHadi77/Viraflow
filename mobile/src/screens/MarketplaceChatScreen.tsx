@@ -3,7 +3,7 @@ import { listingStatusLabel } from "../utils/labels";
 import { rtlFlipStyle } from "../utils/layoutDirection";
 import { useProductPriceFormatter } from "../utils/priceFormatting";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Image, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, View } from "react-native";
 import { ChatComposer } from "../components/ChatComposer";
 import { Screen } from "../components/Screen";
 import { getCopy } from "../data/copy";
@@ -11,17 +11,51 @@ import { useAppState } from "../providers/AppProvider";
 import { palette, radii, spacing, createThemedStyles } from "../theme";
 import { formatLocaleDateTime, formatRelativeTime } from "../utils/timeFormatting";
 
-export function MarketplaceChatScreen({ navigation, route }: { navigation: any; route: { params: { threadId: string } } }) {
+type MarketplaceChatRoute = { params: { threadId: string } };
+
+/** Loads the conversation first, then shows it (see DirectChatScreen: keeps hook order stable). */
+export function MarketplaceChatScreen({ navigation, route }: { navigation: any; route: MarketplaceChatRoute }) {
+  const { language, currentUser, marketplaceThreads, openMarketplaceThread } = useAppState();
+  const copy = getCopy(language);
+  const [loadFinished, setLoadFinished] = useState(false);
+  const thread = marketplaceThreads.find((item) => item.id === route.params.threadId);
+
+  useEffect(() => {
+    let active = true;
+    setLoadFinished(false);
+    void Promise.resolve(openMarketplaceThread(route.params.threadId))
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) {
+          setLoadFinished(true);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [route.params.threadId]);
+
+  if (!thread || !currentUser) {
+    return (
+      <Screen contentContainerStyle={styles.emptyWrap}>
+        {loadFinished ? <Text style={styles.emptyText}>{copy.conversationNotFound}</Text> : <ActivityIndicator color={palette.primary} />}
+      </Screen>
+    );
+  }
+
+  return <MarketplaceChatConversation key={thread.id} navigation={navigation} route={route} />;
+}
+
+function MarketplaceChatConversation({ navigation, route }: { navigation: any; route: MarketplaceChatRoute }) {
   const {
     language,
-    currentUser,
+    currentUser: signedInUser,
     marketplaceThreads,
     products,
     getUserById,
     getMarketplaceMessagesForThread,
     getMarketplaceTypingUsers,
     getUserPresence,
-    openMarketplaceThread,
     markMarketplaceThreadRead,
     sendMarketplaceMessage,
     setMarketplaceTyping,
@@ -30,21 +64,9 @@ export function MarketplaceChatScreen({ navigation, route }: { navigation: any; 
   const formatProductPrice = useProductPriceFormatter();
   const [draft, setDraft] = useState("");
   const messagesScrollRef = useRef<ScrollView>(null);
-  const thread = marketplaceThreads.find((item) => item.id === route.params.threadId);
-
-  useEffect(() => {
-    void openMarketplaceThread(route.params.threadId);
-  }, [route.params.threadId]);
-
-  if (!thread || !currentUser) {
-    return (
-      <Screen contentContainerStyle={styles.emptyWrap}>
-        <Text style={styles.emptyText}>{copy.conversationNotFound}</Text>
-      </Screen>
-    );
-  }
-
-  const activeThread = thread;
+  // The parent only renders this once the thread and the signed-in user exist.
+  const activeThread = marketplaceThreads.find((item) => item.id === route.params.threadId)!;
+  const currentUser = signedInUser!;
   const product = products.find((item) => item.id === activeThread.productId);
   const counterpartId = currentUser.id === activeThread.buyerId ? activeThread.sellerId : activeThread.buyerId;
   const counterpart = getUserById(counterpartId);

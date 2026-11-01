@@ -1,4 +1,5 @@
 import { Alert, Image, ScrollView, Text, View } from "react-native";
+import { sizedImageUrl } from "../services/mediaUpload";
 import { categoryLabel, conditionLabel } from "../utils/labels";
 import { usePriceTools } from "../utils/priceFormatting";
 import { PrimaryButton } from "../components/PrimaryButton";
@@ -92,11 +93,11 @@ export function ProductDetailsScreen({ navigation, route }: { navigation: any; r
 
   return (
     <Screen scrollable>
-      <Image source={{ uri: activeProduct.imageUrl }} style={styles.heroImage} />
+      <Image source={{ uri: sizedImageUrl(activeProduct.imageUrl, 1080) }} style={styles.heroImage} />
       {activeProduct.imageUrls.length > 1 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.galleryRow}>
           {activeProduct.imageUrls.map((imageUrl, index) => (
-            <Image key={`${imageUrl}-${index}`} source={{ uri: imageUrl }} style={styles.galleryThumb} />
+            <Image key={`${imageUrl}-${index}`} source={{ uri: sizedImageUrl(imageUrl, 240) }} style={styles.galleryThumb} />
           ))}
         </ScrollView>
       ) : null}

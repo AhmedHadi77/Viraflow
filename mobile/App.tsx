@@ -136,6 +136,10 @@ const SOHBA_FONTS = {
   Manrope_600SemiBold: require("@expo-google-fonts/manrope/600SemiBold/Manrope_600SemiBold.ttf"),
   Manrope_700Bold: require("@expo-google-fonts/manrope/700Bold/Manrope_700Bold.ttf"),
   Manrope_800ExtraBold: require("@expo-google-fonts/manrope/800ExtraBold/Manrope_800ExtraBold.ttf"),
+  // Display fonts for text in the photo and video editor.
+  BebasNeue_400Regular: require("@expo-google-fonts/bebas-neue/400Regular/BebasNeue_400Regular.ttf"),
+  Pacifico_400Regular: require("@expo-google-fonts/pacifico/400Regular/Pacifico_400Regular.ttf"),
+  PlayfairDisplay_700Bold_Italic: require("@expo-google-fonts/playfair-display/700Bold_Italic/PlayfairDisplay_700Bold_Italic.ttf"),
 };
 
 function ThemedNavigation() {

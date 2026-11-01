@@ -25,6 +25,7 @@ import {
   derivePlanType,
   deleteApiAccount,
   fetchApiMe,
+  wakeSohbaServer,
   deliverNotificationWithApi,
   notifyFollowersWithApi,
   fetchApiBootstrap,
@@ -95,6 +96,7 @@ import {
   createFirebaseCommunity,
   createFirebaseCommunityPost,
   deleteFirebaseCommunityPost,
+  setFirebaseCommunityMembership,
   createFirebaseMarketplaceOrder,
   fetchFirebaseCommunityActivity,
   fetchFirebaseCommunityCommerceSnapshot,
@@ -116,6 +118,7 @@ import {
   isFirebaseContentConfigured,
   markFirebaseStoryViewed,
   updateFirebaseStoryHighlight,
+  voteFirebaseStoryPoll,
   updateFirebaseProductListingStatus,
 } from "../services/firebaseContent";
 import {
@@ -176,14 +179,21 @@ import {
 } from "../services/supabaseAuth";
 import {
   buildCloudinaryEditedImageUrl,
-  buildCloudinaryEditedVideoUrl,
-  buildCloudinaryVideoThumbnailUrl,
   checkUploadedMediaSafety,
   isMediaApiConfigured,
   MediaFolder,
+  requestStudioCaptions,
   uploadDataUrlToCloudinary,
   uploadMediaToCloudinary,
 } from "../services/mediaUpload";
+import {
+  publishStudioVideo,
+  renderStudioPreviewWith,
+  type StudioMode,
+  type StudioPreviewInput,
+  type StudioPreviewResult,
+  type StudioProgressUpdate,
+} from "../services/studioPublish";
 import {
   DEFAULT_PUSH_NOTIFICATIONS_STATUS,
   registerForPushNotificationsAsync,
@@ -244,6 +254,7 @@ import {
   RegisterPayload,
   SavedPost,
   Story,
+  StudioCaption,
   SubscriptionPlan,
   UpdateProfilePayload,
   User,
@@ -372,6 +383,13 @@ interface AppContextValue {
   ) => Promise<{ ok: boolean; message?: string }>;
   createPost: (payload: CreatePostPayload) => Promise<{ ok: boolean; message?: string }>;
   createReel: (payload: CreateReelPayload) => Promise<{ ok: boolean; message?: string; reel?: Reel }>;
+  /** What publishing is doing right now (uploading files, or the media service preparing a video). */
+  publishProgress: StudioProgressUpdate | null;
+  /** Makes the finished photo or video in the cloud so the creator can watch it before sharing. */
+  renderStudioPreview: (input: StudioPreviewInput) => Promise<StudioPreviewResult>;
+  /** Automatic captions for a finished video's sound (an mp3 link). */
+  transcribeStudioCaptions: (audioUrl: string) => Promise<{ ok: boolean; captions?: StudioCaption[]; message?: string; unavailable?: boolean }>;
+  voteStoryPoll: (storyId: string, option: number) => Promise<{ ok: boolean; message?: string }>;
   subscribeToPlan: (planType: PlanType) => Promise<{ ok: boolean; message?: string; subscription?: AppSubscription }>;
   boostReel: (payload: CreateReelBoostPayload) => Promise<{ ok: boolean; message?: string; boost?: ReelBoostCampaign }>;
   createProduct: (payload: CreateProductPayload) => Promise<{ ok: boolean; message?: string }>;
@@ -379,6 +397,8 @@ interface AppContextValue {
   createCommunity: (payload: CreateCommunityPayload) => Promise<{ ok: boolean; message?: string }>;
   createCommunityPost: (payload: CreateCommunityPostPayload) => Promise<{ ok: boolean; message?: string }>;
   deleteCommunityPost: (communityId: string, postId: string) => Promise<{ ok: boolean; message?: string }>;
+  /** Joins the community, or leaves it if already a member. */
+  toggleCommunityMembership: (communityId: string) => Promise<{ ok: boolean; joined?: boolean; message?: string }>;
   markCommunityChatRead: (communityId: string) => void;
   setCommunityTyping: (communityId: string, isTyping: boolean) => void;
   sendCommunityChatMessage: (communityId: string, text: string) => Promise<{ ok: boolean; message?: string }>;
@@ -422,6 +442,7 @@ const AppContext = createContext<AppContextValue | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [publishProgress, setPublishProgress] = useState<StudioProgressUpdate | null>(null);
   const [language, setLanguageState] = useState<LanguageOption | null>(null);
   const [region, setRegionState] = useState<string>(() => detectDeviceRegion());
   const localeTag = useMemo(() => {
@@ -466,6 +487,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const addDiagnostic = (message: string) => {
     setStartupDiagnostics((current) => [...current.slice(-14), `${new Date().toLocaleTimeString()}: ${message}`]);
   };
+
+  // Wake the server as soon as the app opens and whenever it returns to the foreground.
+  useEffect(() => {
+    wakeSohbaServer();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        wakeSohbaServer();
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     const startupSafetyTimer = setTimeout(() => {
@@ -540,25 +572,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             await AsyncStorage.multiRemove([STORAGE_KEYS.session, STORAGE_KEYS.firebaseUser]);
           } else {
             if (isAppApiConfigured()) {
-              addDiagnostic("Checking API health...");
-              // Only a definite "not signed in" answer logs the user out. A slow or sleeping server
-              // (common right after the backend wakes up) must not throw people out of the app.
-              const verified = await fetchApiMe(refreshedToken)
-                .then(() => true)
-                .catch((err) => {
-                  addDiagnostic(`API check failed: ${err instanceof Error ? err.message : "Unknown error"}`);
-                  const status = (err as { status?: number } | null)?.status;
-                  return !(status === 401 || status === 403);
-                });
-
-              if (!verified) {
-                addDiagnostic("API identity verification failed. Logging out.");
-                await AsyncStorage.multiRemove([STORAGE_KEYS.session, STORAGE_KEYS.firebaseUser]);
-                await logoutFromFirebaseProfile().catch(() => undefined);
-                setSession(null);
-                setUsers([]);
-                return;
-              }
+              addDiagnostic("Checking the sign-in with the server in the background...");
+              // The server check runs alongside loading the feed: a sleeping server (it can take
+              // ~45 s to wake) must never hold up the app. Only a definite "not signed in" answer
+              // logs the user out.
+              void fetchApiMe(refreshedToken).catch(async (err) => {
+                const status = (err as { status?: number } | null)?.status;
+                if (status === 401 || status === 403) {
+                  addDiagnostic("Server says the sign-in is no longer valid. Logging out.");
+                  await AsyncStorage.multiRemove([STORAGE_KEYS.session, STORAGE_KEYS.firebaseUser]);
+                  await logoutFromFirebaseProfile().catch(() => undefined);
+                  setSession(null);
+                  setUsers([]);
+                }
+              });
             }
 
             const nextSession = {
@@ -4073,7 +4100,73 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function renderStudioPreview(input: StudioPreviewInput): Promise<StudioPreviewResult> {
+    if (!currentUser) {
+      return { ok: false, message: "Log in to preview." };
+    }
+    const tokenResult = await ensureFirebaseWriteSessionReady(session, "Log in to preview.");
+    if (!tokenResult.token) {
+      return { ok: false, message: tokenResult.message ?? SESSION_REFRESH_MESSAGE };
+    }
+    try {
+      ensureMediaApiConfigured();
+    } catch (error) {
+      return { ok: false, message: readUploadErrorMessage(error) };
+    }
+    return renderStudioPreviewWith(
+      tokenResult.token,
+      normalizeUploadPrefix(`${currentUser.username}-${input.mode}-${Date.now().toString(36)}`),
+      input
+    );
+  }
+
+  async function transcribeStudioCaptions(audioUrl: string) {
+    const tokenResult = await ensureFirebaseWriteSessionReady(session, "Log in to make captions.");
+    if (!tokenResult.token) {
+      return { ok: false, message: tokenResult.message ?? SESSION_REFRESH_MESSAGE };
+    }
+    try {
+      // The spoken language is detected automatically (it can differ from the app's language).
+      const captions = await requestStudioCaptions(tokenResult.token, audioUrl);
+      return { ok: true, captions };
+    } catch (error) {
+      const status = (error as { status?: number }).status;
+      // 404: the server hasn't been updated with captions yet; 503: speech recognition isn't set up.
+      return { ok: false, message: readUploadErrorMessage(error), unavailable: status === 404 || status === 503 };
+    }
+  }
+
+  async function voteStoryPoll(storyId: string, option: number) {
+    if (!currentUser) {
+      return { ok: false, message: "Log in to vote." };
+    }
+    const previous = stories.find((story) => story.id === storyId);
+    setStories((current) =>
+      current.map((story) =>
+        story.id === storyId ? { ...story, pollVotes: { ...(story.pollVotes ?? {}), [currentUser.id]: option } } : story
+      )
+    );
+    try {
+      await voteFirebaseStoryPoll(currentUser.id, storyId, option);
+      return { ok: true };
+    } catch (error) {
+      if (previous) {
+        setStories((current) => current.map((story) => (story.id === storyId ? previous : story)));
+      }
+      return { ok: false, message: getFirebaseContentErrorMessage(error) };
+    }
+  }
+
+  // Publishing shows its progress (uploading, then the media service preparing the video).
   async function createStory(payload: CreateStoryPayload) {
+    try {
+      return await createStoryNow(payload);
+    } finally {
+      setPublishProgress(null);
+    }
+  }
+
+  async function createStoryNow(payload: CreateStoryPayload) {
     if (!currentUser) {
       return { ok: false, message: "Login required before posting a story." };
     }
@@ -4113,6 +4206,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 durationSeconds: payload.videoDurationSeconds,
                 publicIdPrefix,
                 editConfig: payload.editConfig,
+                mode: "story",
+                onProgress: setPublishProgress,
               })
             : null;
         const imageUrl =
@@ -4201,6 +4296,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 durationSeconds: payload.videoDurationSeconds,
                 publicIdPrefix,
                 editConfig: payload.editConfig,
+                mode: "story",
+                onProgress: setPublishProgress,
               })
             : null;
         const imageUrl =
@@ -4438,7 +4535,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return { ok: true };
   }
 
+  // Publishing shows its progress (uploading, then the media service preparing the video).
   async function createPost(payload: CreatePostPayload) {
+    try {
+      return await createPostNow(payload);
+    } finally {
+      setPublishProgress(null);
+    }
+  }
+
+  async function createPostNow(payload: CreatePostPayload) {
     if (!currentUser) {
       return { ok: false, message: "Login required before publishing a post." };
     }
@@ -4503,6 +4609,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       for (let index = 0; index < payload.mediaItems.length; index += 1) {
         const item = payload.mediaItems[index];
+        if (payload.mediaItems.length > 1) {
+          setPublishProgress({ stage: "uploading", done: index, total: payload.mediaItems.length });
+        }
 
         try {
           if (item.type === "video") {
@@ -4515,6 +4624,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               durationSeconds: item.durationSeconds,
               publicIdPrefix: buildUploadPublicIdPrefix(prefixBase, `video-${index + 1}`),
               editConfig: item.editConfig,
+              mode: "post",
+              onProgress: setPublishProgress,
             });
 
             uploadedMedia.push({
@@ -4549,6 +4660,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             studio: (
               await prepareStudioForPublish(firebaseSessionResult.token, item.editConfig, buildUploadPublicIdPrefix(prefixBase, `sound-${index + 1}`))
             )?.studio,
+            ...(item.altText?.trim() ? { altText: item.altText.trim().slice(0, 300) } : {}),
           });
         } catch (mediaError) {
           throw new Error(`Media ${index + 1} could not be uploaded. ${readUploadErrorMessage(mediaError)}`);
@@ -4560,6 +4672,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         hashtags: normalizedHashtags,
         location: normalizedLocation,
         media: uploadedMedia,
+        hideLikes: payload.hideLikes,
+        commentsOff: payload.commentsOff,
       });
 
       setPosts((current) => upsertPost(current, createdPost));
@@ -4570,7 +4684,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // Publishing shows its progress (uploading, then the media service preparing the video).
   async function createReel(payload: CreateReelPayload) {
+    try {
+      return await createReelNow(payload);
+    } finally {
+      setPublishProgress(null);
+    }
+  }
+
+  async function createReelNow(payload: CreateReelPayload) {
     if (!currentUser) {
       return { ok: false, message: "Login required before posting a reel." };
     }
@@ -4608,6 +4731,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           durationSeconds: payload.videoDurationSeconds,
           publicIdPrefix: normalizeUploadPrefix(`${currentUser.username}-reel`),
           editConfig: payload.editConfig,
+          mode: "reel",
+          onProgress: setPublishProgress,
         });
         const thumbnailUrl = payload.thumbnailUrl.trim()
           ? await uploadImageSourceForFirebaseContent({
@@ -4691,6 +4816,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           durationSeconds: payload.videoDurationSeconds,
           publicIdPrefix: normalizeUploadPrefix(`${currentUser.username}-reel`),
           editConfig: payload.editConfig,
+          mode: "reel",
+          onProgress: setPublishProgress,
         });
         const thumbnailUrl = payload.thumbnailUrl.trim()
           ? await uploadImageSourceForFirebaseContent({
@@ -5166,6 +5293,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       return { ok: false, message: getApiErrorMessage(error) };
     }
+  }
+
+  async function toggleCommunityMembership(communityId: string) {
+    if (!currentUser) {
+      return { ok: false, message: getCopy(language).cdJoinFailed };
+    }
+    const community = communities.find((item) => item.id === communityId);
+    if (!community) {
+      return { ok: false, message: getCopy(language).cdNotFound };
+    }
+    if (community.ownerId === currentUser.id) {
+      return { ok: true, joined: true };
+    }
+    const join = !community.memberIds.includes(currentUser.id);
+    const applyMembership = (current: CommunitySpace[]) =>
+      current.map((item) =>
+        item.id === communityId
+          ? {
+              ...item,
+              memberIds: join
+                ? Array.from(new Set([...item.memberIds, currentUser.id]))
+                : item.memberIds.filter((memberId) => memberId !== currentUser.id),
+            }
+          : item
+      );
+
+    if (isFirebaseBackedSession(session)) {
+      try {
+        await withFirestoreRetry(() => setFirebaseCommunityMembership(currentUser.id, communityId, join));
+        setCommunities(applyMembership);
+        return { ok: true, joined: join };
+      } catch (error) {
+        return { ok: false, message: getFirebaseCommunityCommerceErrorMessage(error) };
+      }
+    }
+
+    setCommunities(applyMembership);
+    return { ok: true, joined: join };
   }
 
   async function deleteCommunityPost(communityId: string, postId: string) {
@@ -5682,6 +5847,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         toggleStoryHighlight,
         createPost,
         createReel,
+        publishProgress,
+        renderStudioPreview,
+        transcribeStudioCaptions,
+        voteStoryPoll,
         subscribeToPlan,
         boostReel,
         createProduct,
@@ -5689,6 +5858,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         createCommunity,
         createCommunityPost,
         deleteCommunityPost,
+        toggleCommunityMembership,
         markCommunityChatRead,
         setCommunityTyping,
         sendCommunityChatMessage,
@@ -5963,6 +6133,8 @@ async function uploadVideoSourceForFirebaseContent(input: {
   fileName?: string;
   durationSeconds?: number;
   editConfig?: CreateReelPayload["editConfig"];
+  mode?: StudioMode;
+  onProgress?: (update: StudioProgressUpdate) => void;
 }) {
   ensureMediaApiConfigured();
   const source = input.source.trim();
@@ -5972,38 +6144,8 @@ async function uploadVideoSourceForFirebaseContent(input: {
     throw new Error(`Pick or paste a ${mediaLabel} first.`);
   }
 
-  if (isLocalMediaUri(source)) {
-    const uploaded = await uploadMediaToCloudinary({
-      token: input.token,
-      uri: source,
-      mimeType: input.mimeType || inferMimeTypeFromUri(source, "video/mp4"),
-      fileName: input.fileName || inferFileNameFromUri(source, "reel.mp4"),
-      folder: input.folder ?? "reels",
-      publicIdPrefix: input.publicIdPrefix,
-      resourceType: "video",
-    });
-    await checkUploadedMediaSafety({
-      token: input.token,
-      type: "video",
-      url: uploaded.secureUrl,
-      label: mediaLabel,
-      seconds: normalizeMediaModerationSeconds(input.durationSeconds ?? uploaded.duration ?? 12),
-    });
-
-    const videoDuration = input.durationSeconds ?? uploaded.duration;
-
-    return {
-      videoUrl: buildCloudinaryEditedVideoUrl(uploaded.secureUrl, input.editConfig, {
-        durationSeconds: videoDuration,
-      }),
-      thumbnailUrl: buildCloudinaryVideoThumbnailUrl(uploaded.secureUrl, {
-        editConfig: input.editConfig,
-        durationSeconds: videoDuration,
-      }),
-    };
-  }
-
-  if (isHttpUrl(source)) {
+  // Links from other websites are kept as they are (after the safety check).
+  if (isHttpUrl(source) && !source.includes("/upload/")) {
     await checkUploadedMediaSafety({
       token: input.token,
       type: "video",
@@ -6011,19 +6153,31 @@ async function uploadVideoSourceForFirebaseContent(input: {
       label: mediaLabel,
       seconds: normalizeMediaModerationSeconds(input.durationSeconds),
     });
-
-    return {
-      videoUrl: source.includes("/video/upload/")
-        ? buildCloudinaryEditedVideoUrl(source, input.editConfig, { durationSeconds: input.durationSeconds })
-        : source,
-      thumbnailUrl: buildCloudinaryVideoThumbnailUrl(source, {
-        editConfig: input.editConfig,
-        durationSeconds: input.durationSeconds,
-      }),
-    };
+    return { videoUrl: source, thumbnailUrl: source };
   }
 
-  throw new Error("Use a valid video file or video URL.");
+  if (!isLocalMediaUri(source) && !isHttpUrl(source)) {
+    throw new Error("Use a valid video file or video URL.");
+  }
+
+  const published = await publishStudioVideo(
+    {
+      token: input.token,
+      folder: input.folder ?? "reels",
+      publicIdPrefix: input.publicIdPrefix,
+      mode: input.mode ?? "reel",
+      onProgress: input.onProgress,
+    },
+    {
+      source,
+      label: mediaLabel,
+      mimeType: input.mimeType,
+      fileName: input.fileName,
+      durationSeconds: input.durationSeconds,
+      editConfig: input.editConfig,
+    }
+  );
+  return { videoUrl: published.videoUrl, thumbnailUrl: published.thumbnailUrl };
 }
 
 async function uploadPostVideoSourceForFirebaseContent(input: Omit<Parameters<typeof uploadVideoSourceForFirebaseContent>[0], "folder">) {

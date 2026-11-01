@@ -20,7 +20,7 @@ export type ConversationType = "marketplace" | "direct";
 export type StoryMediaType = "image" | "video";
 export type PostMediaType = "image" | "video";
 export type ChatMessageMediaType = "image" | "video";
-export type StudioPlaybackRate = 0.5 | 1 | 1.5 | 2;
+export type StudioPlaybackRate = 0.5 | 0.75 | 1 | 1.25 | 1.5 | 2;
 export type UserRole = "user" | "admin";
 export type ReportStatus = "open" | "reviewed" | "resolved";
 export type ReportedEntityType = "post" | "reel" | "story" | "user";
@@ -89,6 +89,10 @@ export interface Reel {
   reachCount: number;
   boostedUntil?: string;
   studio?: MediaStudioData;
+  /** Only the creator sees the like count. */
+  hideLikes?: boolean;
+  /** Nobody can comment. */
+  commentsOff?: boolean;
 }
 
 export interface ReelComment {
@@ -109,6 +113,8 @@ export interface PostMediaItem {
   mimeType?: string;
   durationSeconds?: number;
   studio?: MediaStudioData;
+  /** Description of a photo for people using a screen reader. */
+  altText?: string;
 }
 
 export interface Post {
@@ -121,6 +127,8 @@ export interface Post {
   likedBy: string[];
   commentCount: number;
   createdAt: string;
+  hideLikes?: boolean;
+  commentsOff?: boolean;
 }
 
 export interface PostComment {
@@ -147,6 +155,8 @@ export interface Story {
   highlightedAt?: string;
   highlightLabel?: string;
   studio?: MediaStudioData;
+  /** Poll sticker answers: who chose which answer (0 or 1). */
+  pollVotes?: Record<string, number>;
 }
 
 export interface Product {
@@ -329,9 +339,28 @@ export interface MediaStickerPlacement extends MediaOverlayPosition {
   value: string;
 }
 
-export type StudioTextStyle = "classic" | "modern" | "neon" | "typewriter" | "strong";
+export type StudioTextStyle = "classic" | "modern" | "neon" | "typewriter" | "strong" | "headline" | "script" | "elegant";
 export type StudioTextBackground = "none" | "solid" | "soft";
-export type StudioStickerKind = "emoji" | "location" | "mention" | "hashtag" | "time";
+/** How a text layer appears: shown live in viewers (loops with the video). */
+export type StudioTextAnimation =
+  | "none"
+  | "fade"
+  | "pop"
+  | "slide"
+  | "zoom"
+  | "drop"
+  | "spin"
+  | "typewriter"
+  | "bounce"
+  | "pulse"
+  | "float"
+  | "swing"
+  | "shake"
+  | "flicker"
+  | "heartbeat";
+/** How a sticker moves in viewers. */
+export type StudioStickerAnimation = "none" | "pop" | "pulse" | "bounce" | "float" | "swing" | "wiggle" | "heartbeat" | "rotate";
+export type StudioStickerKind = "emoji" | "location" | "mention" | "hashtag" | "time" | "poll" | "countdown" | "link" | "question";
 
 /** A piece of text placed on a photo or video in the editor. Position is the centre, as 0..1 of the frame. */
 export interface StudioTextLayer {
@@ -345,17 +374,47 @@ export interface StudioTextLayer {
   style: StudioTextStyle;
   background: StudioTextBackground;
   align: "left" | "center" | "right";
+  animation?: StudioTextAnimation;
+  /** Videos only: show from/until these seconds of the finished video (whole video when absent). */
+  startSeconds?: number;
+  endSeconds?: number;
 }
 
 export interface StudioStickerLayer {
   id: string;
   kind: StudioStickerKind;
+  /** Emoji, place, @name, #tag or time; the question for a poll or question box; the title for a countdown; the label for a link. */
   value: string;
   x: number;
   y: number;
   scale: number;
   rotation: number;
+  /** Poll answers (2). */
+  options?: string[];
+  /** Countdown target time (ISO date). */
+  targetAt?: string;
+  /** Link sticker address (https). */
+  url?: string;
+  animation?: StudioStickerAnimation;
 }
+
+/** One freehand brush stroke. Points are x,y pairs as 0..1 of the frame; width is a share of the frame width. */
+export interface StudioStroke {
+  id: string;
+  color: string;
+  width: number;
+  points: number[];
+  glow?: boolean;
+}
+
+/** One line of automatic or typed captions, in seconds of the finished video. */
+export interface StudioCaption {
+  start: number;
+  end: number;
+  text: string;
+}
+
+export type StudioCaptionStyle = "clean" | "box" | "bold" | "highlight";
 
 /** A soundtrack: a track from the Sohba library (trackId) or the creator's own uploaded sound (url). */
 export interface StudioMusic {
@@ -375,10 +434,115 @@ export interface StudioMusic {
 export interface MediaStudioData {
   texts?: StudioTextLayer[];
   stickers?: StudioStickerLayer[];
+  drawings?: StudioStroke[];
+  captions?: StudioCaption[];
+  captionStyle?: StudioCaptionStyle;
   music?: StudioMusic;
   /** Volume of the video's own sound, 0..1. */
   originalVolume?: number;
   filterName?: string;
+}
+
+/** Effects processed into the finished video when it is shared. */
+export interface StudioVideoEffects {
+  reverse?: boolean;
+  boomerang?: boolean;
+  /** Extra times the video plays (1 = plays twice). */
+  loop?: number;
+  fadeIn?: boolean;
+  fadeOut?: boolean;
+  stabilize?: boolean;
+}
+
+/** Looks processed into a photo when it is shared. */
+export type StudioPhotoEffect = "none" | "enhance" | "autocolor" | "cartoon" | "oil" | "sepia" | "zorro" | "aurora" | "sonnet" | "warm" | "pixelate";
+
+export type StudioAspect = "original" | "9:16" | "4:5" | "1:1" | "16:9";
+
+/** Frame of the finished photo or video: shape, fill or fit (with a background), turn and mirror. */
+export interface StudioCanvas {
+  aspect: StudioAspect;
+  fit: "fill" | "fit";
+  background: "blur" | "black" | "white";
+  rotate: 0 | 90 | 180 | 270;
+  mirror: boolean;
+}
+
+export type StudioTransition =
+  | "none"
+  | "fade"
+  | "fadefast"
+  | "fadeslow"
+  | "fadeblack"
+  | "fadewhite"
+  | "fadegrays"
+  | "dissolve"
+  | "distance"
+  | "hblur"
+  | "wipeleft"
+  | "wiperight"
+  | "wipeup"
+  | "wipedown"
+  | "slideleft"
+  | "slideright"
+  | "slideup"
+  | "slidedown"
+  | "smoothleft"
+  | "smoothright"
+  | "smoothup"
+  | "smoothdown"
+  | "circleopen"
+  | "circleclose"
+  | "circlecrop"
+  | "rectcrop"
+  | "vertopen"
+  | "horzopen"
+  | "diagtl"
+  | "diagbr"
+  | "hlslice"
+  | "vuslice"
+  | "squeezeh"
+  | "squeezev"
+  | "zoomin"
+  | "radial"
+  | "pixelize";
+
+/** An extra clip joined after the main video (multi-clip editing). */
+export interface StudioClip {
+  id: string;
+  /** Local file while editing, https link once uploaded. */
+  uri: string;
+  type: "image" | "video";
+  durationSeconds?: number;
+  trimStartRatio: number;
+  trimEndRatio: number;
+  /** How long a photo clip shows. */
+  imageSeconds?: number;
+  /** Transition into this clip from the one before. */
+  transition?: StudioTransition;
+  posterUri?: string;
+  mimeType?: string;
+  fileName?: string;
+  /** Set after upload: the media service id used to join the clip, and its link. */
+  publicId?: string;
+  remoteUrl?: string;
+  /** Photos: a gentle zoom while it shows. */
+  motion?: boolean;
+  /** Set after upload when a photo was made into a short video (publicId then points to that video). */
+  renderedAs?: "video";
+}
+
+/** The creator's recorded narration, mixed into the finished video. */
+export interface StudioVoiceover {
+  /** Local recording while editing. */
+  uri?: string;
+  /** Set after upload. */
+  publicId?: string;
+  url?: string;
+  volume: number;
+  durationSeconds?: number;
+  /** Volume of the video's own sound under the narration (0..1). */
+  originalVolume?: number;
 }
 
 export interface MediaEditConfig {
@@ -391,6 +555,16 @@ export interface MediaEditConfig {
   playbackRate?: StudioPlaybackRate;
   /** Live layers and soundtrack from the editor (kept with the post, reel or story). */
   studio?: MediaStudioData;
+  effects?: StudioVideoEffects;
+  photoEffect?: StudioPhotoEffect;
+  canvas?: StudioCanvas;
+  /** Other clips of a multi-clip video, in timeline order (the main video itself is not in this list). */
+  clips?: StudioClip[];
+  /** Where the main video sits among the clips: clips before this index play before it. */
+  baseClipIndex?: number;
+  voiceover?: StudioVoiceover;
+  /** The main media is a photo made into a video of this many seconds (with a gentle zoom when motion is on). */
+  photoVideo?: { seconds: number; motion: boolean };
 }
 
 export interface CreateReelPayload {
@@ -404,6 +578,8 @@ export interface CreateReelPayload {
   thumbnailMimeType?: string;
   thumbnailFileName?: string;
   editConfig?: MediaEditConfig;
+  hideLikes?: boolean;
+  commentsOff?: boolean;
 }
 
 export interface CreateReelBoostPayload {
@@ -542,6 +718,7 @@ export interface CreatePostMediaPayload {
   fileName?: string;
   durationSeconds?: number;
   editConfig?: MediaEditConfig;
+  altText?: string;
 }
 
 export interface CreatePostPayload {
@@ -549,6 +726,8 @@ export interface CreatePostPayload {
   hashtags: string[];
   location?: string;
   mediaItems: CreatePostMediaPayload[];
+  hideLikes?: boolean;
+  commentsOff?: boolean;
 }
 
 export interface UpdateProfilePayload {

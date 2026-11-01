@@ -26,7 +26,9 @@ export function CommunityDetailsScreen({ navigation, route }: { navigation: any;
     markCommunityChatRead,
     sendCommunityChatMessage,
     setCommunityTyping,
+    toggleCommunityMembership,
   } = useAppState();
+  const [membershipBusy, setMembershipBusy] = useState(false);
   const [postText, setPostText] = useState("");
   const [postImage, setPostImage] = useState("");
   const [chatDraft, setChatDraft] = useState("");
@@ -89,6 +91,16 @@ export function CommunityDetailsScreen({ navigation, route }: { navigation: any;
   const resolvedCommunity = activeCommunity;
   const owner = getUserById(activeCommunity.ownerId);
   const isOwner = currentUser?.id === activeCommunity.ownerId;
+  const isMember = Boolean(currentUser && activeCommunity.memberIds.includes(currentUser.id));
+
+  async function handleToggleMembership() {
+    setMembershipBusy(true);
+    const result = await toggleCommunityMembership(resolvedCommunity.id);
+    setMembershipBusy(false);
+    if (!result.ok) {
+      Alert.alert(copy.cdUnavailable, result.message ?? copy.cdJoinFailed);
+    }
+  }
   const posts = getCommunityPosts(activeCommunity.id);
   const typingUsers =
     activeCommunity.kind === "group"
@@ -176,6 +188,16 @@ export function CommunityDetailsScreen({ navigation, route }: { navigation: any;
     <Screen scrollable>
       <Image source={{ uri: activeCommunity.coverImage }} style={styles.coverImage} />
       <SectionTitle title={activeCommunity.name} subtitle={communityKindLabel(activeCommunity.kind, copy)} />
+      {!isOwner && currentUser && (isMember || activeCommunity.visibility === "public") ? (
+        <PrimaryButton
+          label={isMember ? copy.cdLeave : copy.cdJoin}
+          loading={membershipBusy}
+          onPress={() => {
+            void handleToggleMembership();
+          }}
+          variant={isMember ? "outline" : "solid"}
+        />
+      ) : null}
 
       <View style={styles.metaRow}>
         <MetaCard label={copy.category} value={activeCommunity.category} />

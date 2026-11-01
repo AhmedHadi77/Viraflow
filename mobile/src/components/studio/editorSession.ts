@@ -1,4 +1,13 @@
-import type { MediaEditFilters, MediaStudioData, StudioPlaybackRate } from "../../types/models";
+import type {
+  MediaEditFilters,
+  MediaStudioData,
+  StudioCanvas,
+  StudioClip,
+  StudioPhotoEffect,
+  StudioPlaybackRate,
+  StudioVideoEffects,
+  StudioVoiceover,
+} from "../../types/models";
 
 export type EditorMode = "story" | "reel" | "post";
 
@@ -21,6 +30,24 @@ export interface EditorResult {
   studio: MediaStudioData;
   /** Chosen cover frame for a video (local image file). */
   posterUri?: string;
+  /** Video effects processed when shared (reverse, boomerang, loop, fades, stabilize). */
+  effects?: StudioVideoEffects;
+  /** Photo look processed when shared (single photos). */
+  photoEffect?: StudioPhotoEffect;
+  /** Shape, fit, background, turn and mirror of the finished frame. */
+  canvas?: StudioCanvas;
+  /**
+   * Every clip in play order when the result is made of several clips, or of a photo turned into a
+   * video. The edited media itself is the clip with id "main".
+   */
+  timeline?: StudioClip[];
+  /** The photo becomes a short video (with a gentle zoom when motion is on). */
+  photoVideo?: { seconds: number; motion: boolean };
+  voiceover?: StudioVoiceover;
+  /** Set when the editor already uploaded the main media (for the cloud preview), so it isn't sent twice. */
+  remoteUrl?: string;
+  /** The first photo already made into a video by the cloud preview (reused when sharing). */
+  photoVideoRemote?: { clipId: string; seconds: number; url: string };
 }
 
 export interface EditorSession {

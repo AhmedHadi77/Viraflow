@@ -1,13 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
+import { sizedImageUrl } from "../services/mediaUpload";
 import { Avatar } from "../components/Avatar";
-import { communityKindLabel } from "../utils/labels";
+import { communityKindLabel, fill } from "../utils/labels";
+import { rtlFlipStyle } from "../utils/layoutDirection";
+import { SOHBA_SHARE_LINK } from "../data/links";
 import { openReportSheet } from "../components/ReportSheet";
 import { CallButtons } from "../components/CallButtons";
 import { useProductPriceFormatter } from "../utils/priceFormatting";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Image, Linking, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Linking, Modal, Pressable, ScrollView, Share, Text, View } from "react-native";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { StatPill } from "../components/StatPill";
@@ -16,7 +19,7 @@ import { useAppState } from "../providers/AppProvider";
 import { Post, Product, Reel, Story, User } from "../types/models";
 import { palette, radii, spacing, createThemedStyles } from "../theme";
 import { PAYMENTS_ENABLED } from "../data/catalog";
-import { brandColor, GradientIconButton } from "../components/GradientIcon";
+import { GradientIconButton } from "../components/GradientIcon";
 
 type ProfileSection = "posts" | "reels" | "shop" | "spaces" | "saved";
 
@@ -88,7 +91,8 @@ function ProfileContent({ navigation, profileUser }: { navigation: any; profileU
   const copy = getCopy(language);
   const formatProductPrice = useProductPriceFormatter();
   const rootNavigation = navigation.getParent?.() ?? navigation;
-  const [activeSection, setActiveSection] = useState<ProfileSection>("reels");
+  const [activeSection, setActiveSection] = useState<ProfileSection>("posts");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const activeProfileUser = profileUser;
   const isOwnProfile = activeProfileUser.id === currentUser?.id;
@@ -279,6 +283,21 @@ function ProfileContent({ navigation, profileUser }: { navigation: any; profileU
     rootNavigation.navigate("DirectChat", { threadId: result.threadId });
   }
 
+  function openFromMenu(routeName: string) {
+    setMenuOpen(false);
+    rootNavigation.navigate(routeName);
+  }
+
+  async function handleShareProfile() {
+    try {
+      await Share.share({
+        message: fill(copy.shareProfileMessage, { name: activeProfileUser.name, username: activeProfileUser.username, link: SOHBA_SHARE_LINK }),
+      });
+    } catch {
+      // Closing the share sheet is not an error.
+    }
+  }
+
   async function handleOpenWebsite() {
     const website = activeProfileUser.website?.trim();
     if (!website) {
@@ -296,6 +315,22 @@ function ProfileContent({ navigation, profileUser }: { navigation: any; profileU
 
   return (
     <Screen scrollable contentContainerStyle={styles.content}>
+      {isOwnProfile ? (
+        <View style={styles.topBar}>
+          <Text numberOfLines={1} style={styles.topBarHandle}>
+            @{activeProfileUser.username}
+          </Text>
+          <View style={styles.topBarActions}>
+            <GradientIconButton accessibilityLabel={copy.shareProfile} icon="share-outline" onPress={() => void handleShareProfile()} />
+            <GradientIconButton
+              accessibilityLabel={copy.menu}
+              badge={totalDirectUnreadCount + totalMarketplaceUnreadCount > 0 ? "•" : undefined}
+              icon="menu-outline"
+              onPress={() => setMenuOpen(true)}
+            />
+          </View>
+        </View>
+      ) : null}
       <View style={styles.hero}>
         <View style={styles.heroTopRow}>
           <View style={styles.heroIdentity}>
@@ -325,15 +360,6 @@ function ProfileContent({ navigation, profileUser }: { navigation: any; profileU
             </View>
           </View>
 
-          {isOwnProfile ? (
-            <GradientIconButton
-              accessibilityLabel={copy.notifications}
-              icon="notifications-outline"
-              onPress={() => rootNavigation.navigate("Notifications")}
-              size={44}
-              style={styles.notifyButton}
-            />
-          ) : null}
         </View>
 
         <Text style={styles.bio}>{activeProfileUser.bio === DEFAULT_BIO_TEXT || activeProfileUser.bio === "New creator on Pulseora." ? copy.defaultBio : activeProfileUser.bio}</Text>
@@ -372,7 +398,7 @@ function ProfileContent({ navigation, profileUser }: { navigation: any; profileU
                 >
                   <LinearGradient colors={[palette.borderStrong, palette.borderStrong]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.highlightRing}>
                     <View style={styles.highlightRingInner}>
-                      <Image source={{ uri: story.imageUrl }} style={styles.highlightImage} />
+                      <Image source={{ uri: sizedImageUrl(story.imageUrl, 240) }} style={styles.highlightImage} />
                     </View>
                   </LinearGradient>
                   <Text numberOfLines={1} style={styles.highlightLabel}>
@@ -391,27 +417,6 @@ function ProfileContent({ navigation, profileUser }: { navigation: any; profileU
               <PrimaryButton label={copy.communities} onPress={() => rootNavigation.navigate("Communities")} style={styles.actionFlex} variant="outline" />
             </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shortcutRow}>
-              {currentUser?.role === "admin" ? (
-                <ShortcutChip icon="shield-checkmark-outline" label={copy.adminTitle} onPress={() => rootNavigation.navigate("Admin")} />
-              ) : null}
-              <ShortcutChip
-                icon="paper-plane-outline"
-                label={totalDirectUnreadCount > 0 ? `${copy.direct} ${totalDirectUnreadCount}` : copy.direct}
-                onPress={() => rootNavigation.navigate("DirectInbox")}
-              />
-              <ShortcutChip
-                icon="chatbubbles-outline"
-                label={totalMarketplaceUnreadCount > 0 ? `${copy.marketplace} ${totalMarketplaceUnreadCount}` : copy.marketplace}
-                onPress={() => rootNavigation.navigate("MarketplaceInbox")}
-              />
-              <ShortcutChip icon="sparkles-outline" label={copy.aiTools} onPress={() => rootNavigation.navigate("AITools")} />
-              <ShortcutChip icon="settings-outline" label={copy.settingsTitle} onPress={() => rootNavigation.navigate("Settings")} />
-              {PAYMENTS_ENABLED ? (
-                <ShortcutChip icon="card-outline" label={copy.subscription} onPress={() => rootNavigation.navigate("Subscription")} />
-              ) : null}
-              <ShortcutChip icon="log-out-outline" label={copy.logout} onPress={logout} />
-            </ScrollView>
           </>
         ) : (
           <View style={styles.publicActions}>
@@ -453,25 +458,25 @@ function ProfileContent({ navigation, profileUser }: { navigation: any; profileU
         )}
       </View>
 
-      <ScrollView contentContainerStyle={styles.tabRow} horizontal showsHorizontalScrollIndicator={false} style={styles.tabScroller}>
-        <SectionChip active={activeSection === "posts"} label={`${copy.posts} ${userPosts.length}`} onPress={() => setActiveSection("posts")} />
-        <SectionChip active={activeSection === "reels"} label={`${copy.reels} ${userReels.length}`} onPress={() => setActiveSection("reels")} />
-        <SectionChip active={activeSection === "shop"} label={`${copy.shop} ${userProducts.length}`} onPress={() => setActiveSection("shop")} />
-        <SectionChip active={activeSection === "spaces"} label={`${copy.spaces} ${userCommunities.length}`} onPress={() => setActiveSection("spaces")} />
+      <View accessibilityRole="tablist" style={styles.tabRow}>
+        <SectionChip active={activeSection === "posts"} label={copy.posts} onPress={() => setActiveSection("posts")} />
+        <SectionChip active={activeSection === "reels"} label={copy.reels} onPress={() => setActiveSection("reels")} />
+        <SectionChip active={activeSection === "shop"} label={copy.shop} onPress={() => setActiveSection("shop")} />
+        <SectionChip active={activeSection === "spaces"} label={copy.spaces} onPress={() => setActiveSection("spaces")} />
         {isOwnProfile ? (
           <SectionChip
             active={activeSection === "saved"}
-            label={`${copy.saved} ${savedProfilePosts.length + savedReels.length + savedProducts.length}`}
+            label={copy.saved}
             onPress={() => setActiveSection("saved")}
           />
         ) : null}
-      </ScrollView>
+      </View>
 
       <View style={styles.grid}>
         {sectionItems.length > 0 ? (
           sectionItems.map((item) => (
             <Pressable key={item.id} onPress={item.onPress} style={styles.tile}>
-              <Image source={{ uri: item.imageUrl }} style={styles.tileImage} />
+              <Image source={{ uri: sizedImageUrl(item.imageUrl, 420) }} style={styles.tileImage} />
               <View style={styles.tileBadge}>
                 <Text style={styles.tileBadgeLabel}>{item.badge}</Text>
               </View>
@@ -503,24 +508,33 @@ function ProfileContent({ navigation, profileUser }: { navigation: any; profileU
           </View>
         )}
       </View>
+      <Modal animationType="slide" onRequestClose={() => setMenuOpen(false)} transparent visible={menuOpen}>
+        <Pressable onPress={() => setMenuOpen(false)} style={styles.sheetBackdrop}>
+          <Pressable onPress={() => undefined} style={styles.sheet}>
+            <View style={styles.sheetHandle} />
+            <MenuRow icon="notifications-outline" label={copy.notifications} onPress={() => openFromMenu("Notifications")} />
+            <MenuRow count={totalDirectUnreadCount} icon="paper-plane-outline" label={copy.messages} onPress={() => openFromMenu("DirectInbox")} />
+            <MenuRow count={totalMarketplaceUnreadCount} icon="storefront-outline" label={copy.marketplaceInbox} onPress={() => openFromMenu("MarketplaceInbox")} />
+            <MenuRow icon="bookmark-outline" label={copy.saved} onPress={() => { setMenuOpen(false); setActiveSection("saved"); }} />
+            <MenuRow icon="sparkles-outline" label={copy.aiTools} onPress={() => openFromMenu("AITools")} />
+            {PAYMENTS_ENABLED ? <MenuRow icon="card-outline" label={copy.subscription} onPress={() => openFromMenu("Subscription")} /> : null}
+            {currentUser?.role === "admin" ? (
+              <MenuRow icon="shield-checkmark-outline" label={copy.adminTitle} onPress={() => openFromMenu("Admin")} />
+            ) : null}
+            <MenuRow icon="settings-outline" label={copy.settingsTitle} onPress={() => openFromMenu("Settings")} />
+            <MenuRow
+              danger
+              icon="log-out-outline"
+              label={copy.logout}
+              onPress={() => {
+                setMenuOpen(false);
+                logout();
+              }}
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Screen>
-  );
-}
-
-function ShortcutChip({
-  icon,
-  label,
-  onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={styles.shortcutChip}>
-      <Ionicons color={brandColor()} name={icon} size={16} />
-      <Text style={styles.shortcutLabel}>{label}</Text>
-    </Pressable>
   );
 }
 
@@ -534,8 +548,45 @@ function SectionChip({
   onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} style={[styles.sectionChip, active ? styles.sectionChipActive : null]}>
-      <Text style={[styles.sectionChipLabel, active ? styles.sectionChipLabelActive : null]}>{label}</Text>
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={[styles.sectionChip, active ? styles.sectionChipActive : null]}
+    >
+      <Text adjustsFontSizeToFit minimumFontScale={0.8} numberOfLines={1} style={[styles.sectionChipLabel, active ? styles.sectionChipLabelActive : null]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function MenuRow({
+  icon,
+  label,
+  onPress,
+  count,
+  danger,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+  count?: number;
+  danger?: boolean;
+}) {
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.menuRow, pressed ? styles.menuRowPressed : null]}>
+      <View style={[styles.menuIcon, danger ? styles.menuIconDanger : null]}>
+        <Ionicons color={danger ? palette.danger : palette.text} name={icon} size={19} />
+      </View>
+      <Text style={[styles.menuLabel, danger ? styles.menuLabelDanger : null]}>{label}</Text>
+      {count ? (
+        <View style={styles.menuCount}>
+          <Text style={styles.menuCountLabel}>{count}</Text>
+        </View>
+      ) : danger ? null : (
+        <Ionicons color={palette.mutedSoft} name="chevron-forward" size={18} style={rtlFlipStyle} />
+      )}
     </Pressable>
   );
 }
@@ -720,6 +771,89 @@ const styles = createThemedStyles({
     gap: spacing.sm,
     justifyContent: "space-between",
   },
+  topBar: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingTop: spacing.xs,
+  },
+  topBarHandle: {
+    color: palette.text,
+    flex: 1,
+    fontSize: 17,
+    fontWeight: "800",
+  },
+  topBarActions: {
+    flexDirection: "row",
+    gap: spacing.xs,
+  },
+  sheetBackdrop: {
+    backgroundColor: palette.overlay,
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: palette.background,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    gap: 2,
+    paddingBottom: spacing.xxl,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+  },
+  sheetHandle: {
+    alignSelf: "center",
+    backgroundColor: palette.borderStrong,
+    borderRadius: 3,
+    height: 5,
+    marginBottom: spacing.sm,
+    width: 40,
+  },
+  menuRow: {
+    alignItems: "center",
+    borderRadius: radii.md,
+    flexDirection: "row",
+    gap: spacing.sm,
+    minHeight: 54,
+    paddingHorizontal: spacing.sm,
+  },
+  menuRowPressed: {
+    backgroundColor: palette.surface,
+  },
+  menuIcon: {
+    alignItems: "center",
+    backgroundColor: palette.surfaceMuted,
+    borderRadius: 19,
+    height: 38,
+    justifyContent: "center",
+    width: 38,
+  },
+  menuIconDanger: {
+    backgroundColor: "rgba(255,92,92,0.12)",
+  },
+  menuLabel: {
+    color: palette.text,
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  menuLabelDanger: {
+    color: palette.danger,
+  },
+  menuCount: {
+    alignItems: "center",
+    backgroundColor: palette.primary,
+    borderRadius: 11,
+    height: 22,
+    justifyContent: "center",
+    minWidth: 22,
+    paddingHorizontal: 6,
+  },
+  menuCountLabel: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "800",
+  },
   notifyButton: {
     position: "absolute",
     right: 0,
@@ -760,32 +894,39 @@ const styles = createThemedStyles({
     lineHeight: 18,
   },
   tabRow: {
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingRight: spacing.sm,
+    backgroundColor: palette.surfaceMuted,
+    borderRadius: 16,
+    flexDirection: "row",
+    gap: 4,
+    padding: 4,
   },
   tabScroller: {
     flexGrow: 0,
   },
   sectionChip: {
-    backgroundColor: "#151922",
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 11,
+    alignItems: "center",
+    borderRadius: 12,
+    flex: 1,
+    height: 38,
+    justifyContent: "center",
+    paddingHorizontal: 4,
   },
   sectionChipActive: {
-    backgroundColor: palette.text,
-    borderColor: palette.text,
+    backgroundColor: palette.background,
+    elevation: 1,
+    shadowColor: "#0d1117",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
   },
   sectionChipLabel: {
-    color: palette.text,
+    color: palette.muted,
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "700",
   },
   sectionChipLabelActive: {
-    color: "#ffffff",
+    color: palette.text,
+    fontWeight: "800",
   },
   grid: {
     flexDirection: "row",

@@ -1,4 +1,6 @@
 import {
+  arrayRemove,
+  arrayUnion,
   collection,
   doc,
   getDoc,
@@ -8,6 +10,7 @@ import {
   orderBy,
   query,
   setDoc,
+  updateDoc,
   where,
   writeBatch,
 } from "firebase/firestore";
@@ -137,6 +140,15 @@ export async function createFirebaseCommunity(userId: string, payload: CreateCom
 
   await setDoc(communityRef, community);
   return community;
+}
+
+/** Joins or leaves a community (public communities can be joined by anyone). */
+export async function setFirebaseCommunityMembership(userId: string, communityId: string, join: boolean) {
+  const db = getRequiredFirestore();
+  await updateDoc(doc(db, COMMUNITIES_COLLECTION, communityId), {
+    memberIds: join ? arrayUnion(userId) : arrayRemove(userId),
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 export async function createFirebaseCommunityPost(currentUser: User, payload: CreateCommunityPostPayload) {

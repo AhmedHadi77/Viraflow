@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { sizedImageUrl } from "../services/mediaUpload";
 import { Image, Pressable, Text, View } from "react-native";
 import { Screen } from "../components/Screen";
 import { SectionTitle } from "../components/SectionTitle";
@@ -75,7 +76,7 @@ export function MarketplaceInboxScreen({ navigation }: { navigation: any }) {
                 onPress={() => navigation.navigate("MarketplaceChat", { threadId: thread.id })}
                 style={styles.threadCard}
               >
-                <Image source={{ uri: product?.imageUrl || counterpart?.profileImage }} style={styles.threadImage} />
+                <Image source={{ uri: sizedImageUrl(product?.imageUrl || counterpart?.profileImage, 200) }} style={styles.threadImage} />
                 <View style={styles.threadBody}>
                   <View style={styles.threadTop}>
                     <Text numberOfLines={1} style={styles.threadTitle}>
@@ -114,7 +115,7 @@ export function MarketplaceInboxScreen({ navigation }: { navigation: any }) {
 
             return (
               <View key={order.id} style={styles.orderCard}>
-                <Image source={{ uri: product?.imageUrl || counterparty?.profileImage }} style={styles.orderImage} />
+                <Image source={{ uri: sizedImageUrl(product?.imageUrl || counterparty?.profileImage, 200) }} style={styles.orderImage} />
                 <View style={styles.orderBody}>
                   <Text numberOfLines={1} style={styles.orderTitle}>
                     {product?.title || copy.miOrderFallback}
