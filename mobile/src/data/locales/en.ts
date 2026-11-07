@@ -1112,6 +1112,8 @@ const en = {
   edTrSlicesUp: "Slices up",
   edTrSqueeze: "Squeeze",
   edTrSqueezeUp: "Squeeze up",
+  errTryAgainBusy: "That didn't save because something changed at the same moment. Please try again.",
+  callFailedHelp: "The phones couldn't reach each other. Check that both have internet, then call again.",
 };
 
 export type CopyStrings = typeof en;

@@ -1113,6 +1113,8 @@ const ru: Partial<CopyStrings> = {
   edTrSlicesUp: "Полосы вверх",
   edTrSqueeze: "Сжатие",
   edTrSqueezeUp: "Сжатие вверх",
+  errTryAgainBusy: "Не сохранилось: в тот же момент что-то изменилось. Попробуйте ещё раз.",
+  callFailedHelp: "Телефоны не смогли соединиться. Проверьте интернет на обоих и позвоните снова.",
 };
 
 export default ru;

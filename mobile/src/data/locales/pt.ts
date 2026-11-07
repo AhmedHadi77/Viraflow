@@ -1113,6 +1113,8 @@ const pt: Partial<CopyStrings> = {
   edTrSlicesUp: "Fatias para cima",
   edTrSqueeze: "Apertar",
   edTrSqueezeUp: "Apertar para cima",
+  errTryAgainBusy: "Não foi salvo porque algo mudou no mesmo instante. Tente novamente.",
+  callFailedHelp: "Os telefones não conseguiram se conectar. Verifique se ambos têm internet e ligue de novo.",
 };
 
 export default pt;

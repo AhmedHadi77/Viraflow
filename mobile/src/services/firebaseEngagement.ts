@@ -1,17 +1,20 @@
 import { normalizeStudioData } from "../utils/studioData";
 import { repairMediaUrl } from "./mediaUpload";
 import {
+  arrayRemove,
+  arrayUnion,
   collection,
   doc,
+  getDoc,
   getDocs,
   increment,
   limit,
   onSnapshot,
   orderBy,
   query,
-  runTransaction,
   setDoc,
   updateDoc,
+  writeBatch,
 } from "firebase/firestore";
 import {
   combineUnsubscribers,
@@ -78,35 +81,28 @@ export function subscribeToFirebaseEngagement(input: {
   return combineUnsubscribers(unsubscribers);
 }
 
+/**
+ * Likes or unlikes a reel. Uses an atomic "add me / remove me" change instead of read-then-write, so two
+ * people liking at the same moment never conflict (that conflict used to fail with "stored version" errors).
+ */
 export async function toggleFirebaseReelLike(userId: string, reelId: string, fallbackReel?: Reel) {
   const db = getRequiredFirestore();
   const reelRef = doc(db, REELS_COLLECTION, reelId);
-
-  return runTransaction(db, async (transaction) => {
-    const snapshot = await transaction.get(reelRef);
-    if (!snapshot.exists() && !fallbackReel) {
+  let currentReel = fallbackReel;
+  if (!currentReel) {
+    const snapshot = await getDoc(reelRef);
+    if (!snapshot.exists()) {
       throw new Error("Reel not found.");
     }
-
-    const currentReel = snapshot.exists() ? normalizeReelDoc(reelId, snapshot.data()) : fallbackReel!;
-    const hasLiked = currentReel.likedBy.includes(userId);
-    const likedBy = hasLiked ? currentReel.likedBy.filter((item) => item !== userId) : [userId, ...currentReel.likedBy];
-    const nextReel: Reel = {
-      ...currentReel,
-      likedBy,
-    };
-
-    transaction.set(
-      reelRef,
-      {
-        likedBy,
-        updatedAt: new Date().toISOString(),
-      },
-      { merge: true }
-    );
-
-    return nextReel;
+    currentReel = normalizeReelDoc(reelId, snapshot.data());
+  }
+  const hasLiked = currentReel.likedBy.includes(userId);
+  await updateDoc(reelRef, {
+    likedBy: hasLiked ? arrayRemove(userId) : arrayUnion(userId),
+    updatedAt: new Date().toISOString(),
   });
+  const likedBy = hasLiked ? currentReel.likedBy.filter((item) => item !== userId) : [userId, ...currentReel.likedBy.filter((item) => item !== userId)];
+  return { ...currentReel, likedBy } as Reel;
 }
 
 export async function recordFirebaseReelView(reelId: string, input: { countReach: boolean }) {
@@ -120,30 +116,19 @@ export async function recordFirebaseReelView(reelId: string, input: { countReach
 export async function repostFirebaseReel(_userId: string, reelId: string, fallbackReel?: Reel) {
   const db = getRequiredFirestore();
   const reelRef = doc(db, REELS_COLLECTION, reelId);
-
-  return runTransaction(db, async (transaction) => {
-    const snapshot = await transaction.get(reelRef);
-    if (!snapshot.exists() && !fallbackReel) {
+  let currentReel = fallbackReel;
+  if (!currentReel) {
+    const snapshot = await getDoc(reelRef);
+    if (!snapshot.exists()) {
       throw new Error("Reel not found.");
     }
-
-    const currentReel = snapshot.exists() ? normalizeReelDoc(reelId, snapshot.data()) : fallbackReel!;
-    const nextReel: Reel = {
-      ...currentReel,
-      repostCount: currentReel.repostCount + 1,
-    };
-
-    transaction.set(
-      reelRef,
-      {
-        repostCount: nextReel.repostCount,
-        updatedAt: new Date().toISOString(),
-      },
-      { merge: true }
-    );
-
-    return nextReel;
+    currentReel = normalizeReelDoc(reelId, snapshot.data());
+  }
+  await updateDoc(reelRef, {
+    repostCount: increment(1),
+    updatedAt: new Date().toISOString(),
   });
+  return { ...currentReel, repostCount: currentReel.repostCount + 1 } as Reel;
 }
 
 export async function addFirebaseReelComment(reelId: string, user: User, text: string) {
@@ -163,50 +148,50 @@ export async function addFirebaseReelComment(reelId: string, user: User, text: s
   return comment;
 }
 
+/**
+ * Follows or unfollows someone. Both lists change in one atomic batch of "add me / remove me" changes, so
+ * it never fails because one of the two profiles changed at the same moment (the old read-then-write
+ * transaction failed with "the stored version does not match the required base version").
+ */
 export async function toggleFirebaseFollow(viewerInput: User, targetInput: User) {
   const db = getRequiredFirestore();
   const viewerRef = doc(db, USERS_COLLECTION, viewerInput.id);
   const targetRef = doc(db, USERS_COLLECTION, targetInput.id);
+  const isFollowing = viewerInput.following.includes(targetInput.id);
+  const now = new Date().toISOString();
 
-  return runTransaction(db, async (transaction) => {
-    const [viewerSnapshot, targetSnapshot] = await Promise.all([transaction.get(viewerRef), transaction.get(targetRef)]);
-
-    const viewer = viewerSnapshot.exists() ? normalizeUserDoc(viewerInput.id, viewerSnapshot.data()) : viewerInput;
-    const target = targetSnapshot.exists() ? normalizeUserDoc(targetInput.id, targetSnapshot.data()) : targetInput;
-    const isFollowing = viewer.following.includes(targetInput.id);
-    const nextViewer: User = {
-      ...viewer,
-      following: isFollowing ? viewer.following.filter((item) => item !== targetInput.id) : [targetInput.id, ...viewer.following],
-    };
-    const nextTarget: User = {
-      ...target,
-      followers: isFollowing ? target.followers.filter((item) => item !== viewerInput.id) : [viewerInput.id, ...target.followers],
-    };
-    const now = new Date().toISOString();
-
-    transaction.set(
-      viewerRef,
-      {
-        following: nextViewer.following,
-        updatedAt: now,
-      },
-      { merge: true }
-    );
-    transaction.set(
-      targetRef,
-      {
-        followers: nextTarget.followers,
-        updatedAt: now,
-      },
-      { merge: true }
-    );
-
-    return {
-      following: !isFollowing,
-      viewer: nextViewer,
-      target: nextTarget,
-    };
+  const batch = writeBatch(db);
+  batch.set(
+    viewerRef,
+    {
+      following: isFollowing ? arrayRemove(targetInput.id) : arrayUnion(targetInput.id),
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+  batch.update(targetRef, {
+    followers: isFollowing ? arrayRemove(viewerInput.id) : arrayUnion(viewerInput.id),
+    updatedAt: now,
   });
+  await batch.commit();
+
+  const nextViewer: User = {
+    ...viewerInput,
+    following: isFollowing
+      ? viewerInput.following.filter((item) => item !== targetInput.id)
+      : [targetInput.id, ...viewerInput.following.filter((item) => item !== targetInput.id)],
+  };
+  const nextTarget: User = {
+    ...targetInput,
+    followers: isFollowing
+      ? targetInput.followers.filter((item) => item !== viewerInput.id)
+      : [viewerInput.id, ...targetInput.followers.filter((item) => item !== viewerInput.id)],
+  };
+  return {
+    following: !isFollowing,
+    viewer: nextViewer,
+    target: nextTarget,
+  };
 }
 
 export function getFirebaseEngagementErrorMessage(error: unknown) {

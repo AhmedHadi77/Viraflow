@@ -195,6 +195,11 @@ export function friendlyFirebaseError(error: unknown) {
   if (code === "permission-denied") {
     return copy.errNoPermission;
   }
+  // Two saves to the same item at the same moment (for example "the stored version does not match the
+  // required base version"): nothing is wrong, it just needs another try.
+  if (code === "failed-precondition" || code === "aborted" || /stored version .* does not match the required base version/i.test(String((error as Error | null)?.message ?? ""))) {
+    return copy.errTryAgainBusy;
+  }
   if (isFirestoreInternalError(error)) {
     resetFirebaseClientFirestore();
     return copy.netOffline;

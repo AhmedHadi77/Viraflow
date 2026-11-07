@@ -1113,6 +1113,8 @@ const id: Partial<CopyStrings> = {
   edTrSlicesUp: "Irisan atas",
   edTrSqueeze: "Tekan",
   edTrSqueezeUp: "Tekan atas",
+  errTryAgainBusy: "Tidak tersimpan karena ada yang berubah pada saat yang sama. Coba lagi.",
+  callFailedHelp: "Ponsel tidak bisa saling terhubung. Pastikan keduanya terhubung ke internet, lalu telepon lagi.",
 };
 
 export default id;

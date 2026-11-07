@@ -19,6 +19,8 @@ import { loadWebRtcEngine } from "./webrtcEngine";
 import { setCallSpeaker, startCallAudio, startIncomingRing, stopCallAudio, stopIncomingRing } from "./callAudio";
 import { getCurrentFirebaseIdToken } from "./firebaseProfiles";
 import { getPublicApiBaseUrl } from "./publicEnv";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { hmacSha1Base64 } from "../utils/hmacSha1";
 
 type WebRtcModule = typeof import("react-native-webrtc");
 let webRtcModule: WebRtcModule | null = null;
@@ -78,6 +80,8 @@ const CALLS_COLLECTION = "calls";
 const RING_TIMEOUT_MS = 45_000;
 const STALE_RING_MS = 60_000;
 const DISCONNECT_GRACE_MS = 12_000;
+// After the call is answered the phones have this long to find a way to each other.
+const CONNECT_TIMEOUT_MS = 35_000;
 
 const idleState: CallState = {
   callId: null,
@@ -106,6 +110,7 @@ let cleanupFns: Array<() => void> = [];
 let pendingCandidates: any[] = [];
 let ringTimer: ReturnType<typeof setTimeout> | null = null;
 let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let connectTimer: ReturnType<typeof setTimeout> | null = null;
 
 function setState(next: Partial<CallState>) {
   state = { ...state, ...next };
@@ -136,39 +141,111 @@ function requireDb() {
 }
 
 type IceServer = { urls: string | string[]; username?: string; credential?: string };
-let relayServers: { servers: IceServer[]; fetchedAt: number } | null = null;
+type RelayCache = { servers: IceServer[]; fetchedAt: number };
+let relayServers: RelayCache | null = null;
+let relayStoreLoaded = false;
+let relayFetch: Promise<IceServer[]> | null = null;
 
-/** Asks the Sohba server for relay (TURN) servers. Called early so a call never waits for it. */
-export async function prefetchCallServers() {
-  if (relayServers && Date.now() - relayServers.fetchedAt < 6 * 60 * 60 * 1000) {
-    return relayServers.servers;
+const RELAY_STORE_KEY = "sohba.callRelay.v2";
+// The server's relay passwords last 24 hours; refresh well before that.
+const RELAY_FRESH_MS = 10 * 60 * 60 * 1000;
+// The free server can take up to a minute to wake up, so asking it is never allowed to block a call.
+const RELAY_FETCH_TIMEOUT_MS = 25_000;
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+async function loadStoredRelay() {
+  if (relayStoreLoaded) {
+    return;
   }
-  const base = getPublicApiBaseUrl();
-  if (!base) {
-    return [];
-  }
+  relayStoreLoaded = true;
   try {
-    const token = await getCurrentFirebaseIdToken(false).catch(() => null);
-    if (!token) {
-      return relayServers?.servers ?? [];
-    }
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(`${base}/meta/ice-servers`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal });
-    clearTimeout(timeout);
-    if (res.ok) {
-      const data = (await res.json()) as { iceServers?: IceServer[] };
-      relayServers = { servers: Array.isArray(data.iceServers) ? data.iceServers : [], fetchedAt: Date.now() };
+    const raw = await AsyncStorage.getItem(RELAY_STORE_KEY);
+    const stored = raw ? (JSON.parse(raw) as RelayCache) : null;
+    if (stored && Array.isArray(stored.servers) && typeof stored.fetchedAt === "number" && !relayServers) {
+      relayServers = stored;
     }
   } catch {
-    // Without relay servers calls still work on most Wi-Fi networks.
+    // A missing or unreadable copy just means asking the server again.
+  }
+}
+
+function hasRelay(servers: IceServer[]) {
+  return servers.some((server) => (Array.isArray(server.urls) ? server.urls : [server.urls]).some((url) => /^turns?:/.test(url)));
+}
+
+async function fetchRelayServers(): Promise<IceServer[]> {
+  const base = getPublicApiBaseUrl();
+  if (!base) {
+    return relayServers?.servers ?? [];
+  }
+  const token = await getCurrentFirebaseIdToken(false).catch(() => null);
+  if (!token) {
+    return relayServers?.servers ?? [];
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), RELAY_FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${base}/meta/ice-servers`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal });
+    if (res.ok) {
+      const data = (await res.json()) as { iceServers?: IceServer[] };
+      const servers = Array.isArray(data.iceServers) ? data.iceServers : [];
+      if (hasRelay(servers)) {
+        relayServers = { servers, fetchedAt: Date.now() };
+        void AsyncStorage.setItem(RELAY_STORE_KEY, JSON.stringify(relayServers)).catch(() => undefined);
+      }
+    }
+  } catch {
+    // Offline or the server is still waking up; the built-in relay below covers the call.
+  } finally {
+    clearTimeout(timeout);
   }
   return relayServers?.servers ?? [];
 }
 
+/**
+ * Gets relay (TURN) servers from the Sohba server, which phones on mobile data need to reach each other.
+ * Called when the app opens so a call rarely waits; `maxWaitMs` caps how long a call start waits for it.
+ */
+export async function prefetchCallServers(maxWaitMs = RELAY_FETCH_TIMEOUT_MS) {
+  await loadStoredRelay();
+  if (relayServers && Date.now() - relayServers.fetchedAt < RELAY_FRESH_MS) {
+    return relayServers.servers;
+  }
+  if (!relayFetch) {
+    relayFetch = fetchRelayServers().finally(() => {
+      relayFetch = null;
+    });
+  }
+  return Promise.race([relayFetch, sleep(maxWaitMs).then(() => relayServers?.servers ?? [])]);
+}
+
+/**
+ * Free public relay (Open Relay, "static auth"), used when the Sohba server could not be reached and
+ * no saved relay is left. The password is made the standard TURN REST way and is valid for a day.
+ */
+function builtInRelayServers(): IceServer[] {
+  const username = `${Math.floor(Date.now() / 1000) + 24 * 60 * 60}:sohba`;
+  const credential = hmacSha1Base64("openrelayprojectsecret", username);
+  return [
+    {
+      urls: [
+        "turn:staticauth.openrelay.metered.ca:80",
+        "turn:staticauth.openrelay.metered.ca:80?transport=tcp",
+        "turn:staticauth.openrelay.metered.ca:443",
+        "turns:staticauth.openrelay.metered.ca:443?transport=tcp",
+      ],
+      username,
+      credential,
+    },
+  ];
+}
+
 function buildIceServers() {
-  const servers: Array<{ urls: string | string[]; username?: string; credential?: string }> = [
-    { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:stun2.l.google.com:19302"] },
+  const servers: IceServer[] = [
+    { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:stun.cloudflare.com:3478"] },
   ];
   // Optional relay server for networks that block direct connections (set in app.json extra.publicEnv).
   const turnUrls = getPublicEnv("EXPO_PUBLIC_TURN_URLS")
@@ -182,7 +259,13 @@ function buildIceServers() {
       credential: getPublicEnv("EXPO_PUBLIC_TURN_CREDENTIAL") || undefined,
     });
   }
-  servers.push(...(relayServers?.servers ?? []));
+  // Saved server relays stay usable for a day after they were fetched.
+  if (relayServers && Date.now() - relayServers.fetchedAt < 23 * 60 * 60 * 1000) {
+    servers.push(...relayServers.servers);
+  }
+  if (!hasRelay(servers)) {
+    servers.push(...builtInRelayServers());
+  }
   return servers;
 }
 
@@ -274,27 +357,62 @@ function createPeer(callId: string, candidateCollection: "callerCandidates" | "c
     }
   });
 
+  const markConnected = () => {
+    if (disconnectTimer) {
+      clearTimeout(disconnectTimer);
+      disconnectTimer = null;
+    }
+    if (connectTimer) {
+      clearTimeout(connectTimer);
+      connectTimer = null;
+    }
+    if (state.phase !== "connected") {
+      setState({ phase: "connected", connectedAt: state.connectedAt ?? Date.now() });
+    }
+  };
+  const markDisconnected = () => {
+    // Brief network drops recover on their own; only give up after a grace period.
+    if (!disconnectTimer && state.phase === "connected") {
+      disconnectTimer = setTimeout(() => void hangUp("failed"), DISCONNECT_GRACE_MS);
+    }
+  };
+
   events.addEventListener("connectionstatechange", () => {
     const connectionState = connection.connectionState;
     if (connectionState === "connected") {
-      if (disconnectTimer) {
-        clearTimeout(disconnectTimer);
-        disconnectTimer = null;
-      }
-      if (state.phase !== "connected") {
-        setState({ phase: "connected", connectedAt: state.connectedAt ?? Date.now() });
-      }
+      markConnected();
     } else if (connectionState === "disconnected") {
-      // Brief network drops recover on their own; only give up after a grace period.
-      if (!disconnectTimer) {
-        disconnectTimer = setTimeout(() => void hangUp("failed"), DISCONNECT_GRACE_MS);
-      }
+      markDisconnected();
     } else if (connectionState === "failed") {
+      void hangUp("failed");
+    }
+  });
+  // Some Android phones only report the network (ICE) state, so both are watched.
+  events.addEventListener("iceconnectionstatechange", () => {
+    const iceState = connection.iceConnectionState;
+    if (iceState === "connected" || iceState === "completed") {
+      markConnected();
+    } else if (iceState === "disconnected") {
+      markDisconnected();
+    } else if (iceState === "failed") {
       void hangUp("failed");
     }
   });
 
   return connection;
+}
+
+/** Gives the phones a limited time to connect once the call is answered, instead of "Connecting…" forever. */
+function startConnectTimer(callId: string) {
+  if (connectTimer) {
+    clearTimeout(connectTimer);
+  }
+  connectTimer = setTimeout(() => {
+    connectTimer = null;
+    if (state.callId === callId && state.phase !== "connected" && state.phase !== "ended") {
+      void hangUp("failed");
+    }
+  }, CONNECT_TIMEOUT_MS);
 }
 
 function listenForRemoteCandidates(callId: string, remoteCollection: "callerCandidates" | "calleeCandidates") {
@@ -362,7 +480,7 @@ export async function startCall(input: { callerId: string; calleeId: string; typ
     const stream = await openLocalMedia(input.type);
     startCallAudio(input.type);
     setState({ speakerOn: input.type === "video" });
-    await prefetchCallServers();
+    await prefetchCallServers(6000);
     const connection = createPeer(callId, "callerCandidates");
     stream.getTracks().forEach((track) => connection.addTrack(track, stream));
 
@@ -384,6 +502,7 @@ export async function startCall(input: { callerId: string; calleeId: string; typ
     watchCallDoc(callId, (call) => {
       if (call.answer && connection.remoteDescription == null) {
         setState({ phase: "connecting" });
+        startConnectTimer(callId);
         void connection
           .setRemoteDescription(new (loadWebRtc().RTCSessionDescription)(call.answer))
           .then(flushPendingCandidates)
@@ -452,7 +571,8 @@ export async function acceptCall(options?: { asAudio?: boolean }) {
     stopIncomingRing();
     const stream = await openLocalMedia(type);
     startCallAudio(type);
-    await prefetchCallServers();
+    await prefetchCallServers(6000);
+    startConnectTimer(callId);
     const connection = createPeer(callId, "calleeCandidates");
     stream.getTracks().forEach((track) => connection.addTrack(track, stream));
     await connection.setRemoteDescription(new (loadWebRtc().RTCSessionDescription)(call.offer));
@@ -477,7 +597,8 @@ export async function declineCall() {
 /** Ends the call for both sides. */
 export async function hangUp(reason?: CallStatus) {
   const callId = state.callId;
-  if (!callId) {
+  // Already over (both connection reports can say "failed"): nothing more to end.
+  if (!callId || state.phase === "ended") {
     return;
   }
   const finalStatus: CallStatus =
@@ -506,6 +627,10 @@ function teardown(reason: CallStatus) {
   if (disconnectTimer) {
     clearTimeout(disconnectTimer);
     disconnectTimer = null;
+  }
+  if (connectTimer) {
+    clearTimeout(connectTimer);
+    connectTimer = null;
   }
   combineUnsubscribers(cleanupFns)();
   cleanupFns = [];

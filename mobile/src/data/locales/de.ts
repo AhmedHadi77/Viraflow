@@ -1113,6 +1113,8 @@ const de: Partial<CopyStrings> = {
   edTrSlicesUp: "Streifen hoch",
   edTrSqueeze: "Stauchen",
   edTrSqueezeUp: "Stauchen hoch",
+  errTryAgainBusy: "Das wurde nicht gespeichert, weil sich gleichzeitig etwas geändert hat. Bitte versuche es erneut.",
+  callFailedHelp: "Die Telefone konnten sich nicht erreichen. Prüfe, ob beide Internet haben, und ruf erneut an.",
 };
 
 export default de;

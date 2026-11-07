@@ -1113,6 +1113,8 @@ const ms: Partial<CopyStrings> = {
   edTrSlicesUp: "Hirisan atas",
   edTrSqueeze: "Picit",
   edTrSqueezeUp: "Picit atas",
+  errTryAgainBusy: "Tidak disimpan kerana sesuatu berubah pada masa yang sama. Sila cuba lagi.",
+  callFailedHelp: "Telefon tidak dapat berhubung antara satu sama lain. Pastikan kedua-duanya ada internet, kemudian hubungi semula.",
 };
 
 export default ms;

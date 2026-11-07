@@ -704,6 +704,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const currentUser = users.find((item) => item.id === session?.userId) ?? null;
+  const followsInFlight = useRef(new Set<string>());
   // Live Firestore listeners restart only when the account changes or Firestore had to be rebuilt,
   // not on every sign-in token refresh (restarting them all at once can break the Firestore SDK).
   const [firestoreEpoch, setFirestoreEpoch] = useState(0);
@@ -3105,6 +3106,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!targetUser) {
         return { ok: false, message: "Creator not found." };
       }
+      // A second tap while the first is still saving is ignored, so two saves never fight each other.
+      if (followsInFlight.current.has(targetUserId)) {
+        return { ok: true };
+      }
+      followsInFlight.current.add(targetUserId);
+      const wasFollowing = currentUser.following.includes(targetUserId);
+      // Show the change straight away; it is undone below if saving fails.
+      setUsers((current) => applyFollowState(current, currentUser.id, targetUserId, !wasFollowing));
 
       try {
         const response = await toggleFirebaseFollow(currentUser, targetUser);
@@ -3121,7 +3130,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         return { ok: true };
       } catch (error) {
+        setUsers((current) => applyFollowState(current, currentUser.id, targetUserId, wasFollowing));
         return { ok: false, message: getFirebaseEngagementErrorMessage(error) };
+      } finally {
+        followsInFlight.current.delete(targetUserId);
       }
     }
 

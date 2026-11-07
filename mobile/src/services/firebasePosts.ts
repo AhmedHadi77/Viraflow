@@ -1,15 +1,18 @@
 import { normalizeStudioData } from "../utils/studioData";
 import {
+  arrayRemove,
+  arrayUnion,
   collection,
   doc,
   getDoc,
   getDocs,
+  increment,
   limit,
   onSnapshot,
   orderBy,
   query,
-  runTransaction,
   setDoc,
+  updateDoc,
   where,
   writeBatch,
 } from "firebase/firestore";
@@ -126,78 +129,63 @@ function normalizePostMediaItemForWrite(item: PostMediaItem, fallbackId: string)
   };
 }
 
+/** Likes or unlikes a post with an atomic "add me / remove me" change (no read-then-write conflicts). */
 export async function toggleFirebasePostLike(userId: string, postId: string, fallbackPost?: Post) {
   const db = getRequiredFirestore();
   const postRef = doc(db, POSTS_COLLECTION, postId);
-
-  return runTransaction(db, async (transaction) => {
-    const snapshot = await transaction.get(postRef);
-    if (!snapshot.exists() && !fallbackPost) {
+  let currentPost = fallbackPost;
+  if (!currentPost) {
+    const snapshot = await getDoc(postRef);
+    if (!snapshot.exists()) {
       throw new Error("Post not found.");
     }
-
-    const currentPost = snapshot.exists() ? normalizePostDoc(postId, snapshot.data()) : fallbackPost!;
-    const hasLiked = currentPost.likedBy.includes(userId);
-    const likedBy = hasLiked ? currentPost.likedBy.filter((item) => item !== userId) : [userId, ...currentPost.likedBy];
-    const nextPost: Post = {
-      ...currentPost,
-      likedBy,
-    };
-
-    transaction.set(
-      postRef,
-      {
-        likedBy,
-        updatedAt: new Date().toISOString(),
-      },
-      { merge: true }
-    );
-
-    return nextPost;
+    currentPost = normalizePostDoc(postId, snapshot.data());
+  }
+  const hasLiked = currentPost.likedBy.includes(userId);
+  await updateDoc(postRef, {
+    likedBy: hasLiked ? arrayRemove(userId) : arrayUnion(userId),
+    updatedAt: new Date().toISOString(),
   });
+  const likedBy = hasLiked ? currentPost.likedBy.filter((item) => item !== userId) : [userId, ...currentPost.likedBy.filter((item) => item !== userId)];
+  return { ...currentPost, likedBy } as Post;
 }
 
+/** Adds a comment and bumps the post's comment count together, without a read-then-write transaction. */
 export async function addFirebasePostComment(postId: string, user: User, text: string, fallbackPost?: Post) {
   const db = getRequiredFirestore();
   const postRef = doc(db, POSTS_COLLECTION, postId);
   const commentRef = doc(collection(db, POST_COMMENTS_COLLECTION));
   const now = new Date().toISOString();
-
-  return runTransaction(db, async (transaction) => {
-    const postSnapshot = await transaction.get(postRef);
-    if (!postSnapshot.exists() && !fallbackPost) {
+  let currentPost = fallbackPost;
+  if (!currentPost) {
+    const snapshot = await getDoc(postRef);
+    if (!snapshot.exists()) {
       throw new Error("Post not found.");
     }
+    currentPost = normalizePostDoc(postId, snapshot.data());
+  }
+  const comment: PostComment = {
+    id: commentRef.id,
+    postId,
+    userId: user.id,
+    userName: user.name,
+    userAvatar: user.profileImage,
+    text: text.trim(),
+    createdAt: now,
+  };
 
-    const currentPost = postSnapshot.exists() ? normalizePostDoc(postId, postSnapshot.data()) : fallbackPost!;
-    const comment: PostComment = {
-      id: commentRef.id,
-      postId,
-      userId: user.id,
-      userName: user.name,
-      userAvatar: user.profileImage,
-      text: text.trim(),
-      createdAt: now,
-    };
+  const batch = writeBatch(db);
+  batch.set(commentRef, comment);
+  batch.update(postRef, { commentCount: increment(1), updatedAt: now });
+  await batch.commit();
 
-    transaction.set(commentRef, comment);
-    transaction.set(
-      postRef,
-      {
-        commentCount: currentPost.commentCount + 1,
-        updatedAt: now,
-      },
-      { merge: true }
-    );
-
-    return {
-      comment,
-      post: {
-        ...currentPost,
-        commentCount: currentPost.commentCount + 1,
-      },
-    };
-  });
+  return {
+    comment,
+    post: {
+      ...currentPost,
+      commentCount: currentPost.commentCount + 1,
+    },
+  };
 }
 
 export async function deleteFirebasePost(userId: string, postId: string) {

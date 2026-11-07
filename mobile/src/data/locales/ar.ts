@@ -1113,6 +1113,8 @@ const ar: Partial<CopyStrings> = {
   edTrSlicesUp: "شرائح للأعلى",
   edTrSqueeze: "ضغط",
   edTrSqueezeUp: "ضغط للأعلى",
+  errTryAgainBusy: "لم يُحفظ ذلك لأن شيئاً تغيّر في اللحظة نفسها. حاول مرة أخرى.",
+  callFailedHelp: "لم يتمكن الهاتفان من الوصول إلى بعضهما. تأكد من اتصال كليهما بالإنترنت ثم اتصل مرة أخرى.",
 };
 
 export default ar;

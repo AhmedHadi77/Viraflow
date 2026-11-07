@@ -1113,6 +1113,8 @@ const ja: Partial<CopyStrings> = {
   edTrSlicesUp: "上スライス",
   edTrSqueeze: "スクイーズ",
   edTrSqueezeUp: "上スクイーズ",
+  errTryAgainBusy: "同時に変更があったため保存できませんでした。もう一度お試しください。",
+  callFailedHelp: "電話同士がつながりませんでした。両方がインターネットに接続しているか確認して、もう一度かけてください。",
 };
 
 export default ja;

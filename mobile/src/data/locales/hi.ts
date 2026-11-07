@@ -1113,6 +1113,8 @@ const hi: Partial<CopyStrings> = {
   edTrSlicesUp: "ऊपर स्लाइस",
   edTrSqueeze: "स्क्वीज़",
   edTrSqueezeUp: "ऊपर स्क्वीज़",
+  errTryAgainBusy: "यह सेव नहीं हुआ क्योंकि उसी समय कुछ बदल गया। कृपया फिर से कोशिश करें।",
+  callFailedHelp: "फ़ोन एक-दूसरे से जुड़ नहीं पाए। दोनों में इंटरनेट है यह जांचें, फिर दोबारा कॉल करें।",
 };
 
 export default hi;

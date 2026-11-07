@@ -71,6 +71,8 @@ export function CallScreen({ navigation, route }: { navigation: any; route: { pa
 
   // Close the screen shortly after the call ends so the user sees why.
   const ended = (isThisCall && call.phase === "ended") || Boolean(loadError);
+  // A failed call stays up a little longer so the advice under it can be read.
+  const failed = isThisCall && call.phase === "ended" && call.endReason === "failed";
   useEffect(() => {
     if (!ended) {
       return;
@@ -80,9 +82,9 @@ export function CallScreen({ navigation, route }: { navigation: any; route: { pa
       if (navigation.canGoBack()) {
         navigation.goBack();
       }
-    }, 1600);
+    }, failed ? 4500 : 1600);
     return () => clearTimeout(timer);
-  }, [ended]);
+  }, [ended, failed]);
 
   const isVideo = call.type === "video";
   const statusText = (() => {
@@ -136,6 +138,9 @@ export function CallScreen({ navigation, route }: { navigation: any; route: { pa
           </Text>
           <Text style={styles.status}>{statusText}</Text>
           {call.error ? <Text style={styles.error}>{call.error}</Text> : null}
+          {isThisCall && call.phase === "ended" && call.endReason === "failed" ? (
+            <Text style={styles.error}>{copy.callFailedHelp}</Text>
+          ) : null}
         </View>
 
         {isVideo && call.localStreamUrl && !call.cameraOff && call.phase !== "ended" ? (

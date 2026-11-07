@@ -1113,6 +1113,8 @@ const zh: Partial<CopyStrings> = {
   edTrSlicesUp: "向上切片",
   edTrSqueeze: "挤压",
   edTrSqueezeUp: "向上挤压",
+  errTryAgainBusy: "由于同一时间有其他更改，未能保存。请重试。",
+  callFailedHelp: "两部手机无法互相连接。请确认双方都已联网，然后重新拨打。",
 };
 
 export default zh;

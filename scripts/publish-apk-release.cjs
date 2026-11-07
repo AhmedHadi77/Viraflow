@@ -85,7 +85,14 @@ async function main() {
       tag_name: tag,
       target_commitish: "main",
       name: `Sohba ${version}`,
-      body: `Sohba ${version} for Android. Download Sohba.apk below and open it on your phone to install.`,
+      body: [
+        `Sohba ${version} for Android. Download Sohba.apk below and open it on your phone to install.`,
+        "",
+        "What's new:",
+        "- Calls now connect on mobile data, and stop with a clear message if the phones can't reach each other",
+        "- Following, likes and comments save reliably (fixes the \"stored version\" error)",
+        "- Includes everything from 1.0.15: the video and photo editor, story polls and questions, comments off and hidden likes",
+      ].join("\n"),
       make_latest: "true",
     }), { "Content-Type": "application/json" });
   }

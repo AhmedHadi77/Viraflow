@@ -1113,6 +1113,8 @@ const tr: Partial<CopyStrings> = {
   edTrSlicesUp: "Yukarı dilimler",
   edTrSqueeze: "Sıkıştır",
   edTrSqueezeUp: "Yukarı sıkıştır",
+  errTryAgainBusy: "Aynı anda bir şey değiştiği için kaydedilmedi. Lütfen tekrar dene.",
+  callFailedHelp: "Telefonlar birbirine ulaşamadı. İkisinin de internete bağlı olduğundan emin olup tekrar ara.",
 };
 
 export default tr;

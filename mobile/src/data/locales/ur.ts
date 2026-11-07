@@ -1113,6 +1113,8 @@ const ur: Partial<CopyStrings> = {
   edTrSlicesUp: "اوپر سلائسز",
   edTrSqueeze: "دباؤ",
   edTrSqueezeUp: "اوپر دباؤ",
+  errTryAgainBusy: "یہ محفوظ نہیں ہوا کیونکہ اسی لمحے کچھ بدل گیا۔ دوبارہ کوشش کریں۔",
+  callFailedHelp: "فون ایک دوسرے سے نہیں جڑ سکے۔ دونوں میں انٹرنیٹ چیک کریں، پھر دوبارہ کال کریں۔",
 };
 
 export default ur;
