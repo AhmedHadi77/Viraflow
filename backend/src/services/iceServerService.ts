@@ -80,9 +80,9 @@ export async function getIceServers(): Promise<IceServer[]> {
     });
   }
 
-  if (servers.length === 0) {
-    servers.push(...openRelayServers());
-  }
+  // The free public relay is always offered too: it is the only relay when none is set up, and a backup
+  // otherwise. Its ports 80 and 443 also get through Wi-Fi networks that block normal call traffic.
+  servers.push(...openRelayServers());
 
   // Keep the credentials for most of their lifetime (they are valid for 24 hours).
   cached = { servers, expiresAt: Date.now() + (servers.length > 0 ? 12 * 60 * 60 * 1000 : 60 * 1000) };
