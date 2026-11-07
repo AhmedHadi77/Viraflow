@@ -9,7 +9,7 @@ if (-not (git config user.email)) { git config user.email "ahmed777hady@gmail.co
 if (-not (git config user.name)) { git config user.name "Ahmed Hadi" }
 
 git add -A -- . ':!*.apk' ':!android' ':!.vscode' ':!mobile/google-services (2).json' ':!.claude-sync' ':!sohba' ':!sohba-site.zip'
-git commit -m "Sohba 1.0.16: calls connect on mobile data (saved and built-in relay, connect timeout, clearer failure message); follow, likes and comments save without conflicts (fixes the stored version error); new download page" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -m "Claude-Session: https://claude.ai/code/session_01Y5eZbnuB2VMsVoRpWv7ru8"
+git commit -m "Stop GitHub pushes from replacing the download page on Vercel (the page is published separately)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -m "Claude-Session: https://claude.ai/code/session_01Y5eZbnuB2VMsVoRpWv7ru8"
 $commitCode = $LASTEXITCODE
 git push origin main
 $pushCode = $LASTEXITCODE
